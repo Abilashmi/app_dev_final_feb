@@ -166,9 +166,24 @@ const SAMPLE_APP_DATA = {
   },
   upsellSettings: {
     enabled: true,
+    ruleType: 'MANUAL',
+    trigger: 'ANY_CART',
     products: ['sp-2', 'sp-4', 'sp-6'],
-    displayPosition: 'bottom',
-    title: 'You might also like',
+    limit: 3,
+    manualRules: [],
+    ui: {
+      layout: 'slider',
+      buttonText: 'Add to Cart',
+      buttonColor: '#000000',
+      showPrice: true,
+      title: 'Recommended for you',
+      position: 'bottom',
+    },
+    analytics: {
+      trackViews: true,
+      trackClicks: true,
+      trackAddToCart: true,
+    },
   },
   cartData: {
     cartValue: 640,
@@ -310,6 +325,32 @@ export async function loader() {
 
 // This action function is the single endpoint for saving settings
 export async function action({ request }) {
+  const url = new URL(request.url);
+  const path = url.pathname;
+
+  // Handle upsell settings GET request
+  if (path === '/api/upsell' && request.method === 'GET') {
+    return new Response(JSON.stringify(SAMPLE_APP_DATA.upsellSettings), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  }
+
+  // Handle upsell settings POST/PUT request
+  if (path === '/api/upsell' && (request.method === 'POST' || request.method === 'PUT')) {
+    const body = await request.json();
+    SAMPLE_APP_DATA.upsellSettings = { ...SAMPLE_APP_DATA.upsellSettings, ...body };
+    return new Response(JSON.stringify({ success: true, data: SAMPLE_APP_DATA.upsellSettings }), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      },
+    });
+  }
+
+  // Default: handle form data settings
   const formData = await request.formData();
   const settings = JSON.parse(formData.get('settings'));
   // Sample data is updated in memory

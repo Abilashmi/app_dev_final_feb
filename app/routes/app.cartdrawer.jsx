@@ -91,6 +91,14 @@ const mockProducts = [
   { id: 104, title: 'Surprise Mystery Gift', price: 0, image: '🎉' },
 ];
 
+// Mock collections
+const mockCollections = [
+  { id: 'col-1', title: 'Winter Gear' },
+  { id: 'col-2', title: 'Gifts & Bundles' },
+  { id: 'col-3', title: 'Premium Accessories' },
+  { id: 'col-4', title: 'Discountable Items' },
+];
+
 // Mock shopify products for product picker
 const mockShopifyProducts = [
   { 
@@ -100,6 +108,7 @@ const mockShopifyProducts = [
     image: '🎁',
     variants: 4,
     status: 'outofstock',
+    collections: ['col-2', 'col-4'],
   },
   { 
     id: 'sp-2', 
@@ -108,6 +117,7 @@ const mockShopifyProducts = [
     image: '🏂',
     variants: 1,
     status: 'active',
+    collections: ['col-1'],
   },
   { 
     id: 'sp-3', 
@@ -116,6 +126,7 @@ const mockShopifyProducts = [
     image: '🏂',
     variants: 1,
     status: 'archived',
+    collections: ['col-1'],
   },
   { 
     id: 'sp-4', 
@@ -124,6 +135,7 @@ const mockShopifyProducts = [
     image: '🏂',
     variants: 1,
     status: 'draft',
+    collections: ['col-1', 'col-3'],
   },
   { 
     id: 'sp-5', 
@@ -132,6 +144,7 @@ const mockShopifyProducts = [
     image: '🏂',
     variants: 1,
     status: 'outofstock',
+    collections: ['col-1'],
   },
   { 
     id: 'sp-6', 
@@ -140,6 +153,7 @@ const mockShopifyProducts = [
     image: '☕',
     variants: 3,
     status: 'active',
+    collections: ['col-3'],
   },
   { 
     id: 'sp-7', 
@@ -148,6 +162,7 @@ const mockShopifyProducts = [
     image: '🏷️',
     variants: 1,
     status: 'active',
+    collections: ['col-4'],
   },
   { 
     id: 'sp-8', 
@@ -156,6 +171,7 @@ const mockShopifyProducts = [
     image: '🎉',
     variants: 1,
     status: 'active',
+    collections: ['col-2'],
   },
 ];
 
@@ -289,10 +305,43 @@ export default function CartDrawerAdmin() {
   const [isSaving, setIsSaving] = useState(false);
   const couponSliderRef = React.useRef(null);
 
+  // ==========================================
+  // UPSELL EDITOR STATE
+  // ==========================================
+  const [useAIUpsells, setUseAIUpsells] = useState(false);
+  const [showManualUpsellModal, setShowManualUpsellModal] = useState(false);
+  const [manualUpsellRules, setManualUpsellRules] = useState([]);
+  const [currentUpsellRule, setCurrentUpsellRule] = useState(null);
+  const [upsellPickerMode, setUpsellPickerMode] = useState(null); // 'trigger' or 'upsell'
+  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
+  const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState([]);
+  const [showOnlySelectedCollections, setShowOnlySelectedCollections] = useState(false);
+  const [excludeArchived, setExcludeArchived] = useState(true);
+  const [excludeDraft, setExcludeDraft] = useState(true);
+  const [excludeOutOfStock, setExcludeOutOfStock] = useState(false);
+  const [showOnlySelected, setShowOnlySelected] = useState(false);
+  const [upsellSettings, setUpsellSettings] = useState({
+    enabled: true,
+    ruleType: 'MANUAL',
+    trigger: 'ANY_CART',
+    products: ['sp-2', 'sp-4', 'sp-6'],
+    limit: 3,
+    ui: {
+      layout: 'slider',
+      buttonText: 'Add to Cart',
+      buttonColor: '#000000',
+      showPrice: true,
+      title: 'Recommended for you',
+      position: 'bottom',
+    },
+    analytics: { trackViews: true, trackClicks: true, trackAddToCart: true },
+  });
+
   // Mock cart items for preview
   const mockCartItems = [
-    { id: 1, name: 'Premium Hoodie', price: 49.99, quantity: 1, image: 'https://via.placeholder.com/80' },
-    { id: 2, name: 'Classic T-Shirt', price: 24.99, quantity: 2, image: 'https://via.placeholder.com/80' },
+    { id: 1, productId: 'sp-6', name: 'Premium Mug Set', price: 15.99, quantity: 1, image: 'https://via.placeholder.com/80' },
+    { id: 2, productId: 'sp-2', name: 'The Inventory Not Tracked Snowboard', price: 949.95, quantity: 1, image: 'https://via.placeholder.com/80' },
   ];
 
   const cartTotal = mockCartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -427,13 +476,34 @@ export default function CartDrawerAdmin() {
   };
 
   const handleSaveSelectedProducts = () => {
-    if (currentTierForProducts !== null) {
+    if (currentTierForProducts !== null && currentTierForProducts !== 'upsell' && typeof currentTierForProducts === 'number') {
+      // Saving for progress bar tier
       updateTierSetting(currentTierForProducts, 'products', selectedProductIds);
+    } else if (currentUpsellRule !== null) {
+      // Saving for manual upsell rules
+      if (upsellPickerMode === 'trigger') {
+        handleUpdateUpsellRule(currentUpsellRule, { triggerProductIds: selectedProductIds });
+      } else if (upsellPickerMode === 'upsell') {
+        handleUpdateUpsellRule(currentUpsellRule, { upsellProductIds: selectedProductIds });
+      }
     }
     setShowProductPicker(false);
     setCurrentTierForProducts(null);
+    setCurrentUpsellRule(null);
+    setUpsellPickerMode(null);
     setSelectedProductIds([]);
     setProductSearchQuery('');
+  };
+
+  const handleSaveSelectedCollections = () => {
+    if (currentUpsellRule !== null) {
+      handleUpdateUpsellRule(currentUpsellRule, { triggerCollectionIds: selectedCollectionIds });
+    }
+    setShowCollectionPicker(false);
+    setCurrentUpsellRule(null);
+    setSelectedCollectionIds([]);
+    setCollectionSearchQuery('');
+    setShowOnlySelectedCollections(false);
   };
 
   const toggleProductSelection = (productId) => {
@@ -444,9 +514,33 @@ export default function CartDrawerAdmin() {
     );
   };
 
-  const filteredProducts = shopifyProducts.filter(product =>
-    product.title.toLowerCase().includes(productSearchQuery.toLowerCase())
-  );
+  const toggleCollectionSelection = (collectionId) => {
+    setSelectedCollectionIds(prev =>
+      prev.includes(collectionId)
+        ? prev.filter(id => id !== collectionId)
+        : [...prev, collectionId]
+    );
+  };
+
+  const filteredProducts = shopifyProducts.filter(product => {
+    const matchesQuery = product.title.toLowerCase().includes(productSearchQuery.toLowerCase());
+    const isArchived = product.status === 'archived';
+    const isDraft = product.status === 'draft';
+    const isOutOfStock = product.status === 'outofstock';
+
+    if (excludeArchived && isArchived) return false;
+    if (excludeDraft && isDraft) return false;
+    if (excludeOutOfStock && isOutOfStock) return false;
+    if (showOnlySelected && !selectedProductIds.includes(product.id)) return false;
+
+    return matchesQuery;
+  });
+
+  const filteredCollections = mockCollections.filter(collection => {
+    const matchesQuery = collection.title.toLowerCase().includes(collectionSearchQuery.toLowerCase());
+    if (showOnlySelectedCollections && !selectedCollectionIds.includes(collection.id)) return false;
+    return matchesQuery;
+  });
 
   // ==========================================
   // COUPON EDITOR HANDLERS
@@ -585,6 +679,117 @@ export default function CartDrawerAdmin() {
       default:
         return null;
     }
+  };
+
+  // ==========================================
+  // UPSELL API HANDLER
+  // ==========================================
+  const handleApiUpdate = async (endpoint, data) => {
+    if (endpoint === '/api/upsell') {
+      setUpsellSettings(data);
+      setShowSaveToast(true);
+      setSaveToastMessage('Upsell settings saved');
+    }
+  };
+
+  // ==========================================
+  // MANUAL UPSELL HANDLERS
+  // ==========================================
+  const handleAddUpsellRule = () => {
+    const newRule = {
+      id: Date.now(),
+      triggerType: 'specific', // 'specific' or 'all'
+      triggerSource: 'products', // 'products' or 'collections'
+      triggerProductIds: [],
+      triggerCollectionIds: [],
+      upsellProductIds: [],
+      priority: manualUpsellRules.length,
+    };
+    setManualUpsellRules([...manualUpsellRules, newRule]);
+  };
+
+  const handleRemoveUpsellRule = (ruleId) => {
+    const remaining = manualUpsellRules.filter(rule => rule.id !== ruleId);
+    const reordered = remaining.map((rule, index) => ({ ...rule, priority: index }));
+    setManualUpsellRules(reordered);
+  };
+
+  const handleUpdateUpsellRule = (ruleId, updates) => {
+    setManualUpsellRules(manualUpsellRules.map(rule => 
+      rule.id === ruleId ? { ...rule, ...updates } : rule
+    ));
+  };
+
+  const handleOpenTriggerPicker = (ruleId) => {
+    const rule = manualUpsellRules.find(r => r.id === ruleId);
+    if (rule) {
+      setCurrentUpsellRule(ruleId);
+      setUpsellPickerMode('trigger');
+      setSelectedProductIds(rule.triggerProductIds || []);
+      setShowProductPicker(true);
+    }
+  };
+
+  const handleOpenUpsellPicker = (ruleId) => {
+    const rule = manualUpsellRules.find(r => r.id === ruleId);
+    if (rule) {
+      setCurrentUpsellRule(ruleId);
+      setUpsellPickerMode('upsell');
+      setSelectedProductIds(rule.upsellProductIds || []);
+      setShowProductPicker(true);
+    }
+  };
+
+  const handleOpenCollectionPicker = (ruleId) => {
+    const rule = manualUpsellRules.find(r => r.id === ruleId);
+    if (rule) {
+      setCurrentUpsellRule(ruleId);
+      setSelectedCollectionIds(rule.triggerCollectionIds || []);
+      setShowCollectionPicker(true);
+    }
+  };
+
+  const handleMoveRule = (ruleId, direction) => {
+    const index = manualUpsellRules.findIndex(r => r.id === ruleId);
+    if (
+      (direction === 'up' && index === 0) ||
+      (direction === 'down' && index === manualUpsellRules.length - 1)
+    ) {
+      return;
+    }
+
+    const newRules = [...manualUpsellRules];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    [newRules[index], newRules[targetIndex]] = [newRules[targetIndex], newRules[index]];
+    
+    // Update priorities
+    newRules.forEach((rule, idx) => {
+      rule.priority = idx;
+    });
+    
+    setManualUpsellRules(newRules);
+  };
+
+  const isUpsellConfigValid = () => {
+    if (manualUpsellRules.length === 0) return false;
+    
+    return manualUpsellRules.every(rule => {
+      const hasTrigger = rule.triggerType === 'all'
+        || (rule.triggerSource === 'products' && rule.triggerProductIds.length > 0)
+        || (rule.triggerSource === 'collections' && rule.triggerCollectionIds.length > 0);
+      const hasUpsells = rule.upsellProductIds.length > 0;
+      return hasTrigger && hasUpsells;
+    });
+  };
+
+  const getRuleValidation = (rule) => {
+    const triggerMissing = rule.triggerType !== 'all'
+      && !(
+        (rule.triggerSource === 'products' && rule.triggerProductIds.length > 0)
+        || (rule.triggerSource === 'collections' && rule.triggerCollectionIds.length > 0)
+      );
+    const upsellMissing = rule.upsellProductIds.length === 0;
+    return { triggerMissing, upsellMissing };
   };
 
   // ==========================================
@@ -1479,25 +1684,123 @@ export default function CartDrawerAdmin() {
               </Button>
             </InlineStack>
 
+            {/* Select Product Section */}
             <Card>
               <BlockStack gap="300">
-                <Text variant="headingSm" as="h3">Upsell Configuration</Text>
-                <Text as="p" tone="subdued">
-                  Display recommended products to increase average order value.
-                </Text>
-                <Divider />
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text variant="headingMd" as="h2">Select Product</Text>
+                  <Badge tone={useAIUpsells ? 'info' : 'success'}>
+                    {useAIUpsells ? 'AI' : 'Manual'}
+                  </Badge>
+                </InlineStack>
+
+                <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}>
+                  <BlockStack gap="200">
+                    <Checkbox
+                      label="Use AI recommended upsells"
+                      checked={useAIUpsells}
+                      onChange={setUseAIUpsells}
+                    />
+                    <Text tone="subdued" as="p" variant="bodySm">
+                      Enable AI to auto-select upsells. Turn off to configure manual rules.
+                    </Text>
+                  </BlockStack>
+                </div>
+
+                {!useAIUpsells && (
+                  <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#111827', color: '#fff' }}>
+                    <InlineStack align="space-between" blockAlign="center" gap="200">
+                      <Text as="span" fontWeight="semibold">Manual Upsell Rules</Text>
+                      <Button
+                        variant="primary"
+                        onClick={() => setShowManualUpsellModal(true)}
+                        size="large"
+                      >
+                        Configure Manual Upsells
+                      </Button>
+                    </InlineStack>
+                    {manualUpsellRules.length > 0 && (
+                      <Text as="p" variant="bodySm" tone="subdued" style={{ marginTop: '8px', color: '#d1d5db' }}>
+                        {manualUpsellRules.length} rule{manualUpsellRules.length !== 1 ? 's' : ''} configured
+                      </Text>
+                    )}
+                  </div>
+                )}
+              </BlockStack>
+            </Card>
+
+            {/* Basic Settings */}
+            <Card>
+              <BlockStack gap="300">
+                <Text variant="headingSm" as="h3">Basic Configuration</Text>
+
                 <BlockStack gap="200">
-                  <Text as="p" fontWeight="semibold">Product Selection</Text>
-                  <Text as="p" tone="subdued">Placeholder for product picker</Text>
+                  <TextField
+                    label="Section Title"
+                    value={upsellSettings.ui?.title || 'Recommended for you'}
+                    onChange={(value) => {
+                      handleApiUpdate('/api/upsell', {
+                        ...upsellSettings,
+                        ui: {
+                          ...upsellSettings.ui,
+                          title: value,
+                        },
+                      });
+                    }}
+                  />
                 </BlockStack>
+
                 <BlockStack gap="200">
-                  <Text as="p" fontWeight="semibold">Display Position</Text>
-                  <Text as="p" tone="subdued">Placeholder for position settings</Text>
+                  <Text as="label" variant="bodySm" fontWeight="semibold">Layout</Text>
+                  <Select
+                    label=""
+                    options={[
+                      { label: 'Slider (Horizontal Scroll)', value: 'slider' },
+                      { label: 'Grid (2x2)', value: 'grid' },
+                      { label: 'List (Vertical)', value: 'list' },
+                    ]}
+                    value={upsellSettings.ui?.layout || 'slider'}
+                    onChange={(value) => {
+                      handleApiUpdate('/api/upsell', {
+                        ...upsellSettings,
+                        ui: {
+                          ...upsellSettings.ui,
+                          layout: value,
+                        },
+                      });
+                    }}
+                  />
                 </BlockStack>
+
                 <BlockStack gap="200">
-                  <Text as="p" fontWeight="semibold">Heading Text</Text>
-                  <Text as="p" tone="subdued">Placeholder for heading customization</Text>
+                  <TextField
+                    label="Button Text"
+                    value={upsellSettings.ui?.buttonText || 'Add to Cart'}
+                    onChange={(value) => {
+                      handleApiUpdate('/api/upsell', {
+                        ...upsellSettings,
+                        ui: {
+                          ...upsellSettings.ui,
+                          buttonText: value,
+                        },
+                      });
+                    }}
+                  />
                 </BlockStack>
+
+                <Checkbox
+                  label="Show Product Price"
+                  checked={upsellSettings.ui?.showPrice ?? true}
+                  onChange={(value) => {
+                    handleApiUpdate('/api/upsell', {
+                      ...upsellSettings,
+                      ui: {
+                        ...upsellSettings.ui,
+                        showPrice: value,
+                      },
+                    });
+                  }}
+                />
               </BlockStack>
             </Card>
           </BlockStack>
@@ -1514,6 +1817,30 @@ export default function CartDrawerAdmin() {
 
   const renderCartPreview = () => {
     const showEmpty = previewCartState[0] === 'empty';
+    const cartProductIds = mockCartItems.map(item => item.productId).filter(Boolean);
+    const cartCollectionIds = cartProductIds.flatMap((productId) => {
+      const product = shopifyProducts.find(p => p.id === productId);
+      return product?.collections || [];
+    });
+
+    const sortedRules = [...manualUpsellRules].sort((a, b) => a.priority - b.priority);
+    const matchedRule = sortedRules.find((rule) => {
+      if (rule.triggerType === 'all') return true;
+      if (rule.triggerSource === 'products') {
+        return rule.triggerProductIds.some(id => cartProductIds.includes(id));
+      }
+      if (rule.triggerSource === 'collections') {
+        return rule.triggerCollectionIds.some(id => cartCollectionIds.includes(id));
+      }
+      return false;
+    });
+
+    const recommendedProductIds = useAIUpsells
+      ? (upsellSettings.products || [])
+      : (matchedRule?.upsellProductIds || []);
+    const recommendedProducts = recommendedProductIds
+      .map(id => shopifyProducts.find(p => p.id === id))
+      .filter(Boolean);
 
     return (
       <div style={{ position: 'relative', height: '100%', overflow: 'hidden', backgroundColor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -1636,6 +1963,57 @@ export default function CartDrawerAdmin() {
                   </div>
                 ))}
               </>
+            )}
+
+            {/* Upsell Recommendations */}
+            {featureStates.upsellEnabled && !showEmpty && recommendedProducts.length > 0 && (
+              <div style={{ padding: '12px', border: '1px solid #e5e7eb', borderRadius: '8px', backgroundColor: '#f9fafb' }}>
+                <p style={{ margin: '0 0 10px 0', fontSize: '12px', fontWeight: '700', color: '#111' }}>
+                  {upsellSettings.ui?.title || 'Recommended for you'}
+                </p>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: upsellSettings.ui?.layout === 'grid' ? 'repeat(2, 1fr)' : '1fr',
+                  gap: '8px',
+                  overflowX: upsellSettings.ui?.layout === 'slider' ? 'auto' : 'visible',
+                  whiteSpace: upsellSettings.ui?.layout === 'slider' ? 'nowrap' : 'normal',
+                }}>
+                  {recommendedProducts.map(product => (
+                    <div key={product.id} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '10px',
+                      backgroundColor: '#fff',
+                      borderRadius: '8px',
+                      border: '1px solid #e5e7eb',
+                      minWidth: upsellSettings.ui?.layout === 'slider' ? '220px' : 'auto',
+                    }}>
+                      <div style={{ fontSize: '20px' }}>{product.image}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ margin: '0 0 4px 0', fontSize: '12px', fontWeight: '600', color: '#111' }}>
+                          {product.title}
+                        </p>
+                        {upsellSettings.ui?.showPrice && (
+                          <p style={{ margin: 0, fontSize: '11px', color: '#6b7280' }}>₹{product.price}</p>
+                        )}
+                      </div>
+                      <button style={{
+                        padding: '6px 10px',
+                        fontSize: '11px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        backgroundColor: upsellSettings.ui?.buttonColor || '#111',
+                        color: '#fff',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {upsellSettings.ui?.buttonText || 'Add to Cart'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
             {/* Coupon Feature */}
@@ -2118,14 +2496,472 @@ export default function CartDrawerAdmin() {
         </Modal.Section>
       </Modal>
 
+      {/* Manual Upsell Configuration Modal */}
+      <Modal
+        open={showManualUpsellModal}
+        onClose={() => setShowManualUpsellModal(false)}
+        title="Configure Manual Upsells"
+        large
+        primaryAction={{
+          content: 'Update',
+          onAction: () => {
+            // Save the manual upsell rules
+            handleApiUpdate('/api/upsell', {
+              ...upsellSettings,
+              manualRules: manualUpsellRules,
+            });
+            setShowManualUpsellModal(false);
+          },
+          disabled: !isUpsellConfigValid(),
+        }}
+        secondaryActions={[
+          {
+            content: 'Cancel',
+            onAction: () => setShowManualUpsellModal(false),
+          },
+        ]}
+      >
+        <Modal.Section>
+          <BlockStack gap="400">
+            {/* Two Column Header */}
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: '1fr 1fr', 
+              gap: '20px',
+              paddingBottom: '12px',
+              borderBottom: '2px solid #e5e7eb',
+            }}>
+              <Text variant="headingMd" as="h3" alignment="center">Trigger Product</Text>
+              <Text variant="headingMd" as="h3" alignment="center">Upsell Product</Text>
+            </div>
+
+            {/* Add New Upsell Button */}
+            <Button
+              variant="primary"
+              size="large"
+              fullWidth
+              onClick={handleAddUpsellRule}
+            >
+              Add New Upsell
+            </Button>
+
+            {/* Upsell Rules List */}
+            {manualUpsellRules.length === 0 && (
+              <div style={{ 
+                padding: '40px 20px', 
+                textAlign: 'center', 
+                backgroundColor: '#f9fafb',
+                borderRadius: '8px',
+              }}>
+                <Text tone="subdued" as="p">
+                  No upsell rules configured yet. Click "Add New Upsell" to create your first rule.
+                </Text>
+              </div>
+            )}
+
+            {manualUpsellRules.map((rule, index) => (
+              <div
+                key={rule.id}
+                style={{
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  padding: '16px',
+                  backgroundColor: '#fff',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', fontSize: '16px' }}>
+                    <span style={{ cursor: 'grab' }}>⋮⋮</span>
+                    <Text as="span" variant="bodySm" tone="subdued">Priority #{index + 1}</Text>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveUpsellRule(rule.id)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '18px',
+                      color: '#6b7280',
+                    }}
+                    aria-label="Remove rule"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'start' }}>
+                  {/* LEFT: Trigger Product Section */}
+                  <div>
+                    <BlockStack gap="300">
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => handleUpdateUpsellRule(rule.id, { triggerType: 'specific' })}
+                          style={{
+                            flex: 1,
+                            padding: '8px 12px',
+                            border: `2px solid ${rule.triggerType === 'specific' ? '#2c6ecb' : '#e5e7eb'}`,
+                            borderRadius: '6px',
+                            backgroundColor: rule.triggerType === 'specific' ? '#f0f7ff' : '#fff',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            fontWeight: rule.triggerType === 'specific' ? '600' : '400',
+                          }}
+                        >
+                          Specific Trigger
+                        </button>
+                        <button
+                          onClick={() => handleUpdateUpsellRule(rule.id, { triggerType: 'all' })}
+                          style={{
+                            flex: 1,
+                            padding: '8px 12px',
+                            border: `2px solid ${rule.triggerType === 'all' ? '#2c6ecb' : '#e5e7eb'}`,
+                            borderRadius: '6px',
+                            backgroundColor: rule.triggerType === 'all' ? '#f0f7ff' : '#fff',
+                            cursor: 'pointer',
+                            fontSize: '13px',
+                            fontWeight: rule.triggerType === 'all' ? '600' : '400',
+                          }}
+                        >
+                          All Products
+                        </button>
+                      </div>
+
+                      {rule.triggerType === 'specific' && (
+                        <>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button
+                              onClick={() => handleUpdateUpsellRule(rule.id, { triggerSource: 'products', triggerCollectionIds: [] })}
+                              style={{
+                                flex: 1,
+                                padding: '8px 12px',
+                                border: `2px solid ${rule.triggerSource === 'products' ? '#2c6ecb' : '#e5e7eb'}`,
+                                borderRadius: '6px',
+                                backgroundColor: rule.triggerSource === 'products' ? '#f0f7ff' : '#fff',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: rule.triggerSource === 'products' ? '600' : '400',
+                              }}
+                            >
+                              Products
+                            </button>
+                            <button
+                              onClick={() => handleUpdateUpsellRule(rule.id, { triggerSource: 'collections', triggerProductIds: [] })}
+                              style={{
+                                flex: 1,
+                                padding: '8px 12px',
+                                border: `2px solid ${rule.triggerSource === 'collections' ? '#2c6ecb' : '#e5e7eb'}`,
+                                borderRadius: '6px',
+                                backgroundColor: rule.triggerSource === 'collections' ? '#f0f7ff' : '#fff',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: rule.triggerSource === 'collections' ? '600' : '400',
+                              }}
+                            >
+                              Collections
+                            </button>
+                          </div>
+
+                          {rule.triggerSource === 'products' && (
+                            <>
+                              <Button
+                                onClick={() => handleOpenTriggerPicker(rule.id)}
+                                size="medium"
+                              >
+                                {rule.triggerProductIds.length > 0
+                                  ? `${rule.triggerProductIds.length} Product${rule.triggerProductIds.length !== 1 ? 's' : ''} Selected`
+                                  : 'Select Trigger Products'}
+                              </Button>
+
+                              {rule.triggerProductIds.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                  {rule.triggerProductIds.map(productId => {
+                                    const product = shopifyProducts.find(p => p.id === productId);
+                                    if (!product) return null;
+                                    return (
+                                      <div
+                                        key={productId}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '6px',
+                                          padding: '4px 8px',
+                                          backgroundColor: '#f3f4f6',
+                                          borderRadius: '4px',
+                                          fontSize: '12px',
+                                        }}
+                                      >
+                                        <span>{product.image}</span>
+                                        <span>{product.title}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {rule.triggerSource === 'collections' && (
+                            <>
+                              <Button
+                                onClick={() => handleOpenCollectionPicker(rule.id)}
+                                size="medium"
+                              >
+                                {rule.triggerCollectionIds.length > 0
+                                  ? `${rule.triggerCollectionIds.length} Collection${rule.triggerCollectionIds.length !== 1 ? 's' : ''} Selected`
+                                  : 'Select Trigger Collections'}
+                              </Button>
+
+                              {rule.triggerCollectionIds.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                  {rule.triggerCollectionIds.map(collectionId => {
+                                    const collection = mockCollections.find(c => c.id === collectionId);
+                                    if (!collection) return null;
+                                    return (
+                                      <div
+                                        key={collectionId}
+                                        style={{
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '6px',
+                                          padding: '4px 8px',
+                                          backgroundColor: '#f3f4f6',
+                                          borderRadius: '4px',
+                                          fontSize: '12px',
+                                        }}
+                                      >
+                                        <span>🏷️</span>
+                                        <span>{collection.title}</span>
+                                        <button
+                                          onClick={() => {
+                                            const updated = rule.triggerCollectionIds.filter(id => id !== collectionId);
+                                            handleUpdateUpsellRule(rule.id, { triggerCollectionIds: updated });
+                                          }}
+                                          style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            fontSize: '14px',
+                                            color: '#6b7280',
+                                          }}
+                                        >
+                                          ×
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </>
+                      )}
+
+                      {rule.triggerType === 'all' && (
+                        <div style={{
+                          padding: '12px',
+                          backgroundColor: '#f0f7ff',
+                          borderRadius: '6px',
+                          border: '1px solid #2c6ecb',
+                        }}>
+                          <Text tone="info" as="p" variant="bodySm">
+                            This upsell will trigger for any product added to cart
+                          </Text>
+                        </div>
+                      )}
+                    </BlockStack>
+                  </div>
+
+                  {/* RIGHT: Upsell Product Section */}
+                  <div>
+                    <BlockStack gap="300">
+                      <Button
+                        onClick={() => handleOpenUpsellPicker(rule.id)}
+                        size="medium"
+                      >
+                        {rule.upsellProductIds.length > 0
+                          ? `${rule.upsellProductIds.length} Product${rule.upsellProductIds.length !== 1 ? 's' : ''} Selected`
+                          : 'Add Upsell Product'}
+                      </Button>
+
+                      {rule.upsellProductIds.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {rule.upsellProductIds.map(productId => {
+                            const product = shopifyProducts.find(p => p.id === productId);
+                            if (!product) return null;
+                            return (
+                              <div
+                                key={productId}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '4px 8px',
+                                  backgroundColor: '#f3f4f6',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                }}
+                              >
+                                <span>{product.image}</span>
+                                <span>{product.title}</span>
+                                <button
+                                  onClick={() => {
+                                    const updated = rule.upsellProductIds.filter(id => id !== productId);
+                                    handleUpdateUpsellRule(rule.id, { upsellProductIds: updated });
+                                  }}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '14px',
+                                    color: '#6b7280',
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </BlockStack>
+                  </div>
+                </div>
+
+                {(() => {
+                  const errors = getRuleValidation(rule);
+                  if (!errors.triggerMissing && !errors.upsellMissing) return null;
+                  return (
+                    <div style={{ marginTop: '12px', padding: '8px 10px', borderRadius: '6px', backgroundColor: '#fef2f2', border: '1px solid #fecaca' }}>
+                      {errors.triggerMissing && (
+                        <Text tone="critical" as="p" variant="bodySm">Select a trigger product or collection.</Text>
+                      )}
+                      {errors.upsellMissing && (
+                        <Text tone="critical" as="p" variant="bodySm">Select at least one upsell product.</Text>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Row Actions */}
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '8px', 
+                  marginTop: '16px', 
+                  paddingTop: '16px',
+                  borderTop: '1px solid #e5e7eb',
+                  justifyContent: 'space-between',
+                }}>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <Button
+                      size="slim"
+                      onClick={() => handleMoveRule(rule.id, 'up')}
+                      disabled={index === 0}
+                    >
+                      ↑ Move Up
+                    </Button>
+                    <Button
+                      size="slim"
+                      onClick={() => handleMoveRule(rule.id, 'down')}
+                      disabled={index === manualUpsellRules.length - 1}
+                    >
+                      ↓ Move Down
+                    </Button>
+                  </div>
+                  <Button
+                    size="slim"
+                    tone="critical"
+                    onClick={() => handleRemoveUpsellRule(rule.id)}
+                  >
+                    Remove Rule
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+
+      {/* Collection Picker Modal */}
+      <Modal
+        open={showCollectionPicker}
+        onClose={() => {
+          setShowCollectionPicker(false);
+          setCurrentUpsellRule(null);
+          setSelectedCollectionIds([]);
+          setCollectionSearchQuery('');
+          setShowOnlySelectedCollections(false);
+        }}
+        title="Select Collections"
+        primaryAction={{
+          content: 'Save',
+          onAction: handleSaveSelectedCollections,
+        }}
+        secondaryActions={[
+          {
+            content: 'Close',
+            onAction: () => {
+              setShowCollectionPicker(false);
+              setCurrentUpsellRule(null);
+              setSelectedCollectionIds([]);
+              setCollectionSearchQuery('');
+              setShowOnlySelectedCollections(false);
+            },
+          },
+        ]}
+      >
+        <Modal.Section>
+          <BlockStack gap="400">
+            <TextField
+              label=""
+              placeholder="Search Collections..."
+              value={collectionSearchQuery}
+              onChange={setCollectionSearchQuery}
+              autoComplete="off"
+            />
+
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="span" tone="subdued">{selectedCollectionIds.length} collection selected</Text>
+              <Checkbox
+                label="Show only selected"
+                checked={showOnlySelectedCollections}
+                onChange={setShowOnlySelectedCollections}
+              />
+            </InlineStack>
+
+            <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
+              {filteredCollections.map((collection) => (
+                <div
+                  key={collection.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '12px',
+                    borderBottom: '1px solid #e5e7eb',
+                    backgroundColor: selectedCollectionIds.includes(collection.id) ? '#f0f9ff' : '#fff',
+                  }}
+                >
+                  <Checkbox
+                    checked={selectedCollectionIds.includes(collection.id)}
+                    onChange={() => toggleCollectionSelection(collection.id)}
+                    label={collection.title}
+                  />
+                </div>
+              ))}
+            </div>
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+
       {/* Product Picker Modal */}
       <Modal
         open={showProductPicker}
         onClose={() => {
           setShowProductPicker(false);
           setCurrentTierForProducts(null);
+          setCurrentUpsellRule(null);
+          setUpsellPickerMode(null);
           setSelectedProductIds([]);
           setProductSearchQuery('');
+          setShowOnlySelected(false);
         }}
         title="Select Product"
         primaryAction={{
@@ -2138,8 +2974,11 @@ export default function CartDrawerAdmin() {
             onAction: () => {
               setShowProductPicker(false);
               setCurrentTierForProducts(null);
+              setCurrentUpsellRule(null);
+              setUpsellPickerMode(null);
               setSelectedProductIds([]);
               setProductSearchQuery('');
+              setShowOnlySelected(false);
             },
           },
         ]}
@@ -2155,13 +2994,31 @@ export default function CartDrawerAdmin() {
               autoComplete="off"
             />
 
+            <InlineStack gap="300" blockAlign="center" wrap={false}>
+              <Checkbox
+                label="Exclude archived"
+                checked={excludeArchived}
+                onChange={setExcludeArchived}
+              />
+              <Checkbox
+                label="Exclude draft"
+                checked={excludeDraft}
+                onChange={setExcludeDraft}
+              />
+              <Checkbox
+                label="Exclude out of stock"
+                checked={excludeOutOfStock}
+                onChange={setExcludeOutOfStock}
+              />
+            </InlineStack>
+
             {/* Selection Info */}
             <InlineStack align="space-between" blockAlign="center">
               <Text as="span" tone="subdued">{selectedProductIds.length} item selected</Text>
               <Checkbox
                 label="Show only selected"
-                checked={false}
-                onChange={() => {}}
+                checked={showOnlySelected}
+                onChange={setShowOnlySelected}
               />
             </InlineStack>
 
