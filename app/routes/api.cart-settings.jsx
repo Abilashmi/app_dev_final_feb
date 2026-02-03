@@ -1,5 +1,5 @@
 // app/routes/api.cart-settings.jsx
-import { fakeApi } from '../services/settings.server.js';
+import { sampleCoupons } from '../services/api.cart-settings';
 
 // Sample complete app data structure
 const SAMPLE_APP_DATA = {
@@ -38,10 +38,130 @@ const SAMPLE_APP_DATA = {
   },
   couponSliderSettings: {
     enabled: true,
-    coupons: [
-      { code: 'SAVE10', discount: '10%', description: '10% off your order' },
-      { code: 'SAVE20', discount: '20%', description: '20% off orders over ₹1000' },
-      { code: 'FREESHIP', discount: 'Free', description: 'Free Shipping' },
+    sectionSettings: {
+      section_title: 'Available offers',
+      section_title_color: '#111827',
+      section_title_font_size: 14,
+      section_title_font_weight: 700,
+      section_background_color: '#fef3c7',
+      section_padding: 12,
+      section_border_radius: 10,
+    },
+    cardStyleSettings: {
+      card_background_color: '#ffffff',
+      card_border_color: '#fcd34d',
+      card_border_width: 1,
+      card_border_radius: 8,
+      card_shadow: true,
+      card_padding: 10,
+      card_gap_between_cards: 8,
+    },
+    offers: [
+      {
+        id: 'co-1',
+        coupon_code_text: 'SAVE10',
+        coupon_code_color: '#111827',
+        coupon_code_font_size: 14,
+        coupon_code_font_weight: 700,
+        coupon_code_letter_spacing: 1,
+        description_text: 'Save 10% on orders over ₹500',
+        description_color: '#4b5563',
+        description_font_size: 12,
+        description_font_weight: 500,
+        description_line_height: 1.4,
+        button_text: 'Copy code',
+        button_text_color: '#ffffff',
+        button_background_color: '#111827',
+        button_font_size: 12,
+        button_font_weight: 600,
+        button_padding_top_bottom: 6,
+        button_padding_left_right: 12,
+        button_border_radius: 6,
+        button_border_color: '#111827',
+        button_border_width: 1,
+        show_button: true,
+        icon_image_url: 'https://via.placeholder.com/40',
+        icon_width: 32,
+        icon_height: 32,
+        icon_border_radius: 8,
+        icon_background_color: '#fef3c7',
+        icon_alignment: 'left',
+        show_icon: true,
+        discount_type: 'percentage',
+        discount_value: 10,
+        minimum_order_value: 500,
+        is_enabled: true,
+      },
+      {
+        id: 'co-2',
+        coupon_code_text: 'FLAT75',
+        coupon_code_color: '#111827',
+        coupon_code_font_size: 14,
+        coupon_code_font_weight: 700,
+        coupon_code_letter_spacing: 1,
+        description_text: 'Flat ₹75 off on your first order',
+        description_color: '#4b5563',
+        description_font_size: 12,
+        description_font_weight: 500,
+        description_line_height: 1.4,
+        button_text: 'Apply now',
+        button_text_color: '#ffffff',
+        button_background_color: '#0f172a',
+        button_font_size: 12,
+        button_font_weight: 600,
+        button_padding_top_bottom: 6,
+        button_padding_left_right: 12,
+        button_border_radius: 6,
+        button_border_color: '#0f172a',
+        button_border_width: 1,
+        show_button: true,
+        icon_image_url: 'https://via.placeholder.com/40',
+        icon_width: 32,
+        icon_height: 32,
+        icon_border_radius: 8,
+        icon_background_color: '#e0f2fe',
+        icon_alignment: 'left',
+        show_icon: true,
+        discount_type: 'flat',
+        discount_value: 75,
+        minimum_order_value: 0,
+        is_enabled: true,
+      },
+      {
+        id: 'co-3',
+        coupon_code_text: 'SHIPFREE',
+        coupon_code_color: '#111827',
+        coupon_code_font_size: 14,
+        coupon_code_font_weight: 700,
+        coupon_code_letter_spacing: 1,
+        description_text: 'Free shipping above ₹900',
+        description_color: '#4b5563',
+        description_font_size: 12,
+        description_font_weight: 500,
+        description_line_height: 1.4,
+        button_text: 'Reveal code',
+        button_text_color: '#0f172a',
+        button_background_color: '#ffffff',
+        button_font_size: 12,
+        button_font_weight: 600,
+        button_padding_top_bottom: 6,
+        button_padding_left_right: 12,
+        button_border_radius: 6,
+        button_border_color: '#0f172a',
+        button_border_width: 1,
+        show_button: false,
+        icon_image_url: 'https://via.placeholder.com/40',
+        icon_width: 32,
+        icon_height: 32,
+        icon_border_radius: 8,
+        icon_background_color: '#dcfce7',
+        icon_alignment: 'top',
+        show_icon: true,
+        discount_type: 'flat',
+        discount_value: 0,
+        minimum_order_value: 900,
+        is_enabled: false,
+      },
     ],
   },
   upsellSettings: {
@@ -178,8 +298,8 @@ const SAMPLE_APP_DATA = {
 
 // This loader function acts as our GET endpoint for the cart drawer
 export async function loader() {
-  const settings = await fakeApi.getSettings();
-  return new Response(JSON.stringify(settings), {
+  // Return sample coupons data
+  return new Response(JSON.stringify({ coupons: sampleCoupons }), {
     headers: {
       'Content-Type': 'application/json',
       // Add CORS headers to allow the storefront to fetch this
@@ -192,8 +312,8 @@ export async function loader() {
 export async function action({ request }) {
   const formData = await request.formData();
   const settings = JSON.parse(formData.get('settings'));
-  const result = await fakeApi.saveSettings(settings);
-  return new Response(JSON.stringify(result), {
+  // Sample data is updated in memory
+  return new Response(JSON.stringify({ success: true }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }

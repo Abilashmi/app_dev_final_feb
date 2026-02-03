@@ -15,24 +15,31 @@ import {
   Checkbox,
   TextField,
   Select,
+  Toast,
+  Frame,
   Tabs,
   ProgressBar,
   ResourceList,
   ResourceItem,
   Thumbnail,
 } from '@shopify/polaris';
+import { sampleCoupons, COUPON_STYLES, COUPON_STYLE_METADATA, globalCouponStyle } from '../services/api.cart-settings';
 
 // ==========================================
 // MOCK API FUNCTIONS
 // ==========================================
 
+// Get shop ID - use original when live, mock when in development
+const isProduction = import.meta.env.MODE === 'production' || import.meta.env.PROD === true;
+const SHOP_ID = isProduction ? (window.__SHOPIFY_SHOP_ID__ || 'gid://shopify/Shop/production') : 'gid://shopify/Shop/123456789';
+
 // Mock cart data
 const mockCartData = {
-  cartValue: 640,
+  cartValue: 100,
   totalQuantity: 3,
   items: [
-    { id: 1, title: 'Premium T-Shirt', price: 320, qty: 2 },
-    { id: 2, title: 'Classic Cap', price: 0, qty: 1 },
+    { id: 1, title: 'Premium Hoodie', price: 50, qty: 1 },
+    { id: 2, title: 'Classic T-Shirt', price: 25, qty: 2 },
   ],
 };
 
@@ -155,22 +162,36 @@ const mockShopifyProducts = [
 // Mock API functions
 const mockApi = {
   getCartData: async () => {
-    return new Promise(resolve => setTimeout(() => resolve(mockCartData), 100));
+    return fetch('/api/cart-settings/cart-data', {
+      headers: {
+        'X-Shop-ID': SHOP_ID,
+      },
+    }).then(() => mockCartData).catch(() => mockCartData);
   },
   getMilestones: async (mode = 'amount') => {
-    return new Promise(resolve => 
-      setTimeout(() => resolve(mode === 'amount' ? mockMilestones : mockQuantityMilestones), 100)
-    );
+    return fetch('/api/cart-settings/milestones', {
+      headers: {
+        'X-Shop-ID': SHOP_ID,
+        'X-Mode': mode,
+      },
+    }).then(() => mode === 'amount' ? mockMilestones : mockQuantityMilestones).catch(() => mode === 'amount' ? mockMilestones : mockQuantityMilestones);
   },
   getProducts: async (productIds) => {
-    return new Promise(resolve => 
-      setTimeout(() => resolve(mockProducts.filter(p => productIds.includes(p.id))), 100)
-    );
+    return fetch('/api/cart-settings/products', {
+      method: 'POST',
+      headers: {
+        'X-Shop-ID': SHOP_ID,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ productIds }),
+    }).then(() => mockProducts.filter(p => productIds.includes(p.id))).catch(() => mockProducts.filter(p => productIds.includes(p.id)));
   },
   getShopifyProducts: async () => {
-    return new Promise(resolve => 
-      setTimeout(() => resolve(mockShopifyProducts), 100)
-    );
+    return fetch('/api/cart-settings/shopify-products', {
+      headers: {
+        'X-Shop-ID': SHOP_ID,
+      },
+    }).then(() => mockShopifyProducts).catch(() => mockShopifyProducts);
   },
 };
 
@@ -252,6 +273,21 @@ export default function CartDrawerAdmin() {
   const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [currentTierForProducts, setCurrentTierForProducts] = useState(null);
   const [shopifyProducts, setShopifyProducts] = useState([]);
+
+  // ==========================================
+  // COUPON EDITOR STATE
+  // ==========================================
+  const [selectedCouponStyle, setSelectedCouponStyle] = useState(COUPON_STYLES.STYLE_2);
+  const [allCoupons, setAllCoupons] = useState([]);
+  const [activeCouponTab, setActiveCouponTab] = useState(null);
+  const [editingCoupon, setEditingCoupon] = useState(null);
+  const [originalCoupon, setOriginalCoupon] = useState(null);
+  const [appliedCouponIds, setAppliedCouponIds] = useState([]);
+  const [couponSubTab, setCouponSubTab] = useState('global-style'); // 'global-style' or 'manage-coupons'
+  const [showSaveToast, setShowSaveToast] = useState(false);
+  const [saveToastMessage, setSaveToastMessage] = useState('Saved');
+  const [isSaving, setIsSaving] = useState(false);
+  const couponSliderRef = React.useRef(null);
 
   // Mock cart items for preview
   const mockCartItems = [
@@ -350,6 +386,23 @@ export default function CartDrawerAdmin() {
     loadShopifyProducts();
   }, []);
 
+  React.useEffect(() => {
+    if (!featureStates.couponSliderEnabled && appliedCouponIds.length > 0) {
+      setAppliedCouponIds([]);
+    }
+  }, [featureStates.couponSliderEnabled, appliedCouponIds.length]);
+
+  // Load Sample Coupons
+  React.useEffect(() => {
+    const coupons = JSON.parse(JSON.stringify(sampleCoupons));
+    setAllCoupons(coupons);
+    if (coupons.length > 0) {
+      setActiveCouponTab(coupons[0].id);
+      setEditingCoupon(JSON.parse(JSON.stringify(coupons[0])));
+      setOriginalCoupon(JSON.parse(JSON.stringify(coupons[0])));
+    }
+  }, []);
+
   const handleAddToCart = async (product) => {
     // Update mock cart data
     setCartData(prev => ({
@@ -394,6 +447,132 @@ export default function CartDrawerAdmin() {
   const filteredProducts = shopifyProducts.filter(product =>
     product.title.toLowerCase().includes(productSearchQuery.toLowerCase())
   );
+
+  // ==========================================
+  // COUPON EDITOR HANDLERS
+  // ==========================================
+  const handleStyleSelect = (style) => {
+    setSelectedCouponStyle(style);
+  };
+
+  const handleCouponTabClick = (couponId) => {
+    const coupon = allCoupons.find(c => c.id === couponId);
+    if (coupon) {
+      setActiveCouponTab(couponId);
+      setEditingCoupon(JSON.parse(JSON.stringify(coupon)));
+      setOriginalCoupon(JSON.parse(JSON.stringify(coupon)));
+    }
+  };
+
+  const handleToggleCouponEnabled = (checked) => {
+    if (editingCoupon) {
+      setEditingCoupon({ ...editingCoupon, enabled: checked });
+    }
+  };
+
+  const updateCouponField = (path, value) => {
+    if (!editingCoupon) return;
+    
+    const updateNestedField = (obj, keys, val) => {
+      const lastKey = keys.pop();
+      const target = keys.reduce((o, k) => o[k], obj);
+      target[lastKey] = val;
+    };
+
+    const keys = path.split('.');
+    const updatedCoupon = JSON.parse(JSON.stringify(editingCoupon));
+    updateNestedField(updatedCoupon, keys, value);
+    setEditingCoupon(updatedCoupon);
+    
+    // Also update in allCoupons immediately for live preview
+    setAllCoupons(prev => prev.map(c => 
+      c.id === updatedCoupon.id ? JSON.parse(JSON.stringify(updatedCoupon)) : c
+    ));
+  };
+
+  const handleSaveCoupon = async () => {
+    if (editingCoupon) {
+      setIsSaving(true);
+
+      // Update in allCoupons state
+      const updated = allCoupons.map(c =>
+        c.id === editingCoupon.id ? JSON.parse(JSON.stringify(editingCoupon)) : c
+      );
+      setAllCoupons(updated);
+      
+      // Update in sample data
+      const index = sampleCoupons.findIndex(c => c.id === editingCoupon.id);
+      if (index !== -1) {
+        sampleCoupons[index] = JSON.parse(JSON.stringify(editingCoupon));
+      }
+      
+      setOriginalCoupon(JSON.parse(JSON.stringify(editingCoupon)));
+
+      const messageByTab = {
+        'progress-bar': 'Progress bar saved',
+        coupon: 'Coupon saved',
+        upsell: 'Upsell saved',
+      };
+
+      await new Promise(resolve => setTimeout(resolve, 600));
+      setSaveToastMessage(messageByTab[selectedTab] || 'Saved');
+      setShowSaveToast(true);
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelCoupon = () => {
+    if (originalCoupon) {
+      setEditingCoupon(JSON.parse(JSON.stringify(originalCoupon)));
+    }
+  };
+
+  const handleCopyCouponCode = (code, couponId) => {
+    if (!featureStates.couponSliderEnabled) return;
+    const coupon = allCoupons.find(c => c.id === couponId);
+    if (!coupon || !coupon.enabled) return;
+    // Only allow one coupon at a time
+    setAppliedCouponIds(prev => 
+      prev.includes(couponId) 
+        ? [] // Remove if already applied
+        : [couponId] // Replace any existing coupon with this one
+    );
+  };
+
+  // Calculate discount for a specific coupon
+  const calculateCouponDiscount = (coupon, subtotal) => {
+    if (coupon.discountType === 'percentage') {
+      return (subtotal * coupon.discountValue) / 100;
+    } else if (coupon.discountType === 'fixed') {
+      return Math.min(coupon.discountValue, subtotal);
+    }
+    return 0;
+  };
+
+  // Calculate total discount from all applied coupons
+  const calculateTotalDiscount = () => {
+    if (!featureStates.couponSliderEnabled) return 0;
+    return appliedCouponIds.reduce((total, couponId) => {
+      const coupon = allCoupons.find(c => c.id === couponId);
+      if (coupon) {
+        return total + calculateCouponDiscount(coupon, cartTotal);
+      }
+      return total;
+    }, 0);
+  };
+
+  const totalDiscount = calculateTotalDiscount();
+  const finalTotal = Math.max(0, cartTotal - totalDiscount);
+
+  const handleScrollCoupons = (direction) => {
+    if (couponSliderRef.current) {
+      const scrollAmount = 290; // Slightly more than card width (280px + gap)
+      couponSliderRef.current.scrollBy({
+        left: direction === 'left' ? -scrollAmount : scrollAmount,
+        behavior: 'smooth'
+      });
+    }
+  };
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -535,7 +714,7 @@ export default function CartDrawerAdmin() {
                 <Text variant="headingMd" as="h2">General settings</Text>
                 
                 <Checkbox
-                  label="Show rewards on empty cart"
+                  label="Show reward like the progress bar on empty cart"
                   checked={progressBarSettings.showOnEmpty}
                   onChange={(value) => updateProgressBarSetting('showOnEmpty', value)}
                 />
@@ -875,23 +1054,411 @@ export default function CartDrawerAdmin() {
               </Button>
             </InlineStack>
 
+            {/* Horizontal Legacy Tabs */}
+            <div style={{ 
+              display: 'flex', 
+              gap: '4px',
+              borderBottom: '2px solid #e5e7eb',
+              marginBottom: '16px',
+            }}>
+              <button
+                onClick={() => setCouponSubTab('global-style')}
+                style={{
+                  padding: '12px 20px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  border: 'none',
+                  background: 'transparent',
+                  borderBottom: couponSubTab === 'global-style' ? '3px solid #2c6ecb' : '3px solid transparent',
+                  color: couponSubTab === 'global-style' ? '#2c6ecb' : '#6b7280',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  marginBottom: '-2px',
+                }}
+              >
+                Global Coupon Style
+              </button>
+              <button
+                onClick={() => setCouponSubTab('manage-coupons')}
+                style={{
+                  padding: '12px 20px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  border: 'none',
+                  background: 'transparent',
+                  borderBottom: couponSubTab === 'manage-coupons' ? '3px solid #2c6ecb' : '3px solid transparent',
+                  color: couponSubTab === 'manage-coupons' ? '#2c6ecb' : '#6b7280',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  marginBottom: '-2px',
+                }}
+              >
+                Manage Coupons
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            {couponSubTab === 'global-style' && (
+              <BlockStack gap="400">
+                <Card>
+                  <BlockStack gap="300">
+                    <Text variant="headingMd" as="h2">Global Coupon Style</Text>
+                    <Text tone="subdued" as="p">Select one style that applies to all coupons</Text>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                      {Object.entries(COUPON_STYLE_METADATA).map(([styleKey, metadata]) => (
+                        <div
+                          key={styleKey}
+                          onClick={() => handleStyleSelect(styleKey)}
+                          style={{
+                            border: `2px solid ${selectedCouponStyle === styleKey ? '#2c6ecb' : '#e5e7eb'}`,
+                            borderRadius: '8px',
+                            padding: '12px',
+                            cursor: 'pointer',
+                            backgroundColor: selectedCouponStyle === styleKey ? '#f0f7ff' : '#fff',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          <BlockStack gap="200">
+                            <img 
+                              src={metadata.previewImage} 
+                              alt={metadata.name}
+                              style={{ width: '100%', borderRadius: '4px', border: '1px solid #e5e7eb' }}
+                            />
+                            <InlineStack align="space-between" blockAlign="center">
+                              <BlockStack gap="100">
+                                <Text variant="bodyMd" fontWeight="semibold">{metadata.name}</Text>
+                                <Text variant="bodySm" tone="subdued">{metadata.description}</Text>
+                              </BlockStack>
+                              {selectedCouponStyle === styleKey && (
+                                <div style={{ 
+                                  width: '20px', 
+                                  height: '20px', 
+                                  borderRadius: '50%', 
+                                  backgroundColor: '#2c6ecb',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: '#fff',
+                                  fontSize: '12px',
+                                  fontWeight: 'bold',
+                                }}>
+                                  ✓
+                                </div>
+                              )}
+                            </InlineStack>
+                          </BlockStack>
+                        </div>
+                      ))}
+                    </div>
+                  </BlockStack>
+                </Card>
+
+                {/* Active Coupons Selector */}
+                <Card>
+                  <BlockStack gap="300">
+                    <Text variant="headingMd" as="h2">Active Coupons</Text>
+                    <Text tone="subdued" as="p">Enable or disable coupons for display</Text>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '12px' }}>
+                      {allCoupons.map(coupon => (
+                        <div 
+                          key={coupon.id}
+                          onClick={() => {
+                            handleCouponTabClick(coupon.id);
+                            setCouponSubTab('manage-coupons');
+                          }}
+                          style={{
+                            padding: '12px 16px',
+                            backgroundColor: '#f9fafb',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '8px',
+                            transition: 'all 0.2s',
+                            cursor: 'pointer',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#f3f4f6';
+                            e.currentTarget.style.borderColor = '#2c6ecb';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#f9fafb';
+                            e.currentTarget.style.borderColor = '#e5e7eb';
+                          }}
+                        >
+                          <InlineStack align="space-between" blockAlign="center" gap="200">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                              <span style={{ fontSize: '20px' }}>{coupon.iconUrl}</span>
+                              <BlockStack gap="100">
+                                <Text variant="bodyMd" fontWeight="semibold" truncate>{coupon.code}</Text>
+                                <Text variant="bodySm" tone="subdued" truncate>{coupon.label}</Text>
+                              </BlockStack>
+                            </div>
+                            <Checkbox
+                              checked={coupon.enabled}
+                              onChange={(checked) => {
+                                const updated = allCoupons.map(c =>
+                                  c.id === coupon.id ? { ...c, enabled: checked } : c
+                                );
+                                setAllCoupons(updated);
+                                const idx = sampleCoupons.findIndex(c => c.id === coupon.id);
+                                if (idx !== -1) sampleCoupons[idx].enabled = checked;
+                                if (editingCoupon && editingCoupon.id === coupon.id) {
+                                  setEditingCoupon({ ...editingCoupon, enabled: checked });
+                                }
+                              }}
+                            />
+                          </InlineStack>
+                        </div>
+                      ))}
+                    </div>
+                  </BlockStack>
+                </Card>
+              </BlockStack>
+            )}
+
+            {couponSubTab === 'manage-coupons' && (
+              <BlockStack gap="400">
             <Card>
-              <BlockStack gap="300">
-                <Text variant="headingSm" as="h3">Coupon Field Configuration</Text>
-                <Text as="p" tone="subdued">
-                  Allow customers to apply discount codes directly in the cart drawer.
-                </Text>
+              <BlockStack gap="400">
+                <BlockStack gap="200">
+                  <Text variant="headingMd" as="h2">Manage Coupons</Text>
+                  <Text tone="subdued" as="p">Select an enabled coupon to edit</Text>
+                </BlockStack>
+
+                {/* Compact Coupon Selector - Only Enabled Coupons */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  {allCoupons.filter(c => c.enabled).map(coupon => (
+                    <button
+                      key={coupon.id}
+                      onClick={() => handleCouponTabClick(coupon.id)}
+                      style={{
+                        padding: '8px 12px',
+                        fontSize: '13px',
+                        fontWeight: '600',
+                        border: `2px solid ${activeCouponTab === coupon.id ? '#2c6ecb' : '#d1d5db'}`,
+                        borderRadius: '6px',
+                        backgroundColor: activeCouponTab === coupon.id ? '#f0f7ff' : '#fff',
+                        color: activeCouponTab === coupon.id ? '#2c6ecb' : '#374151',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                      }}
+                    >
+                      <span style={{ fontSize: '14px' }}>{coupon.iconUrl}</span>
+                      {coupon.code}
+                    </button>
+                  ))}
+                </div>
+
                 <Divider />
-                <BlockStack gap="200">
-                  <Text as="p" fontWeight="semibold">Placeholder Text</Text>
-                  <Text as="p" tone="subdued">Placeholder for input field settings</Text>
-                </BlockStack>
-                <BlockStack gap="200">
-                  <Text as="p" fontWeight="semibold">Button Text</Text>
-                  <Text as="p" tone="subdued">Placeholder for button customization</Text>
-                </BlockStack>
+
+                {/* Editor Panel */}
+                {editingCoupon ? (
+                    <div style={{ padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                      <BlockStack gap="400">
+                        <InlineStack align="space-between" blockAlign="center">
+                          <BlockStack gap="100">
+                            <Text variant="headingSm" as="h3">Edit: {editingCoupon.code}</Text>
+                            <Text tone="subdued" variant="bodySm">Configure display and discount settings</Text>
+                          </BlockStack>
+                        </InlineStack>
+
+                      <Divider />
+                
+                      {/* Compact Single Column Layout */}
+                      <BlockStack gap="300">
+                        <InlineStack gap="300" blockAlign="start">
+                          <div style={{ flex: 1 }}>
+                            <TextField
+                              label="Coupon Code"
+                              value={editingCoupon.code}
+                              disabled
+                              autoComplete="off"
+                            />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <TextField
+                              label="Label Text"
+                              value={editingCoupon.label}
+                              onChange={(value) => updateCouponField('label', value)}
+                              autoComplete="off"
+                            />
+                          </div>
+                        </InlineStack>
+
+                        <TextField
+                          label="Description"
+                          value={editingCoupon.description}
+                          onChange={(value) => updateCouponField('description', value)}
+                          autoComplete="off"
+                        />
+
+                        <InlineStack gap="300">
+                          <div style={{ flex: 1 }}>
+                            <Select
+                              label="Discount Type"
+                              options={[
+                                { label: 'Percentage Off', value: 'percentage' },
+                                { label: 'Fixed Amount Off', value: 'fixed' },
+                              ]}
+                              value={editingCoupon.discountType || 'percentage'}
+                              onChange={(value) => updateCouponField('discountType', value)}
+                            />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <TextField
+                              label="Discount Value"
+                              type="number"
+                              value={String(editingCoupon.discountValue || 0)}
+                              onChange={(value) => updateCouponField('discountValue', Number(value))}
+                              autoComplete="off"
+                              suffix={editingCoupon.discountType === 'percentage' ? '%' : '₹'}
+                            />
+                          </div>
+                        </InlineStack>
+
+                        <TextField
+                          label="Expiry Date (Optional)"
+                          type="date"
+                          value={editingCoupon.expiryDate || ''}
+                          onChange={(value) => updateCouponField('expiryDate', value)}
+                          autoComplete="off"
+                          helpText="Leave empty for no expiry"
+                        />
+
+                        <Divider />
+                        <Text variant="headingSm" as="h4">Appearance</Text>
+
+                        <InlineStack gap="300">
+                          <div style={{ flex: 1 }}>
+                            <TextField
+                              label="Background Color"
+                              value={editingCoupon.backgroundColor}
+                              onChange={(value) => updateCouponField('backgroundColor', value)}
+                              type="text"
+                              autoComplete="off"
+                              connectedRight={
+                                <div style={{ 
+                                  width: '36px', 
+                                  height: '36px', 
+                                  backgroundColor: editingCoupon.backgroundColor, 
+                                  border: '1px solid #c9cccf',
+                                  borderRadius: '4px',
+                                }} />
+                              }
+                            />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <TextField
+                              label="Text Color"
+                              value={editingCoupon.textColor}
+                              onChange={(value) => updateCouponField('textColor', value)}
+                              type="text"
+                              autoComplete="off"
+                              connectedRight={
+                                <div style={{ 
+                                  width: '36px', 
+                                  height: '36px', 
+                                  backgroundColor: editingCoupon.textColor, 
+                                  border: '1px solid #c9cccf',
+                                  borderRadius: '4px',
+                                }} />
+                              }
+                            />
+                          </div>
+                        </InlineStack>
+
+                        <InlineStack gap="300">
+                          <div style={{ flex: 1 }}>
+                            <TextField
+                              label="Icon (emoji)"
+                              value={editingCoupon.iconUrl}
+                              onChange={(value) => updateCouponField('iconUrl', value)}
+                              autoComplete="off"
+                            />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <TextField
+                              label="Border Radius"
+                              type="number"
+                              value={String(editingCoupon.borderRadius)}
+                              onChange={(value) => updateCouponField('borderRadius', Number(value))}
+                              autoComplete="off"
+                              suffix="px"
+                            />
+                          </div>
+                        </InlineStack>
+
+                        <Divider />
+                        <Text variant="headingSm" as="h4">Button Settings</Text>
+
+                        <TextField
+                          label="Button Text"
+                          value={editingCoupon.button.text}
+                          onChange={(value) => updateCouponField('button.text', value)}
+                          autoComplete="off"
+                        />
+
+                        <InlineStack gap="300">
+                          <div style={{ flex: 1 }}>
+                            <TextField
+                              label="Button Background"
+                              value={editingCoupon.button.backgroundColor}
+                              onChange={(value) => updateCouponField('button.backgroundColor', value)}
+                              type="text"
+                              autoComplete="off"
+                              connectedRight={
+                                <div style={{ 
+                                  width: '36px', 
+                                  height: '36px', 
+                                  backgroundColor: editingCoupon.button.backgroundColor, 
+                                  border: '1px solid #c9cccf',
+                                  borderRadius: '4px',
+                                }} />
+                              }
+                            />
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <TextField
+                              label="Button Text Color"
+                              value={editingCoupon.button.textColor}
+                              onChange={(value) => updateCouponField('button.textColor', value)}
+                              type="text"
+                              autoComplete="off"
+                              connectedRight={
+                                <div style={{ 
+                                  width: '36px', 
+                                  height: '36px', 
+                                  backgroundColor: editingCoupon.button.textColor, 
+                                  border: '1px solid #c9cccf',
+                                  borderRadius: '4px',
+                                }} />
+                              }
+                            />
+                          </div>
+                        </InlineStack>
+
+                      {/* Save/Cancel Actions */}
+                        <Divider />
+                        <InlineStack align="end" gap="200">
+                          <Button onClick={handleCancelCoupon} disabled={isSaving}>Cancel</Button>
+                          <Button variant="primary" onClick={handleSaveCoupon} loading={isSaving} disabled={isSaving}>Save Changes</Button>
+                        </InlineStack>
+                      </BlockStack>
+                    </BlockStack>
+                    </div>
+                ) : (
+                  <div style={{ padding: '40px 20px', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                    <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#374151' }}>← Select a coupon to edit</p>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>Click on any coupon from the Active Coupons section in the Global Coupon Style tab</p>
+                  </div>
+                )}
               </BlockStack>
             </Card>
+              </BlockStack>
+            )}
           </BlockStack>
         </div>
       );
@@ -975,7 +1542,7 @@ export default function CartDrawerAdmin() {
           {/* Body */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* Progress Bar Feature */}
-            {featureStates.progressBarEnabled && (progressBarSettings.showOnEmpty || !showEmpty) && (
+            {featureStates.progressBarEnabled && (progressBarSettings.showOnEmpty || !showEmpty) && selectedTab !== 'coupon' && (
               <div style={{ padding: '12px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <p style={{ margin: 0, fontSize: '12px', fontWeight: '600', color: '#1f2937' }}>
@@ -1053,31 +1620,377 @@ export default function CartDrawerAdmin() {
             ) : (
               <>
                 {/* Cart Items */}
-                {cartData.items.map((item, idx) => (
+                {mockCartItems.map((item, idx) => (
                   <div key={idx} style={{ display: 'flex', gap: '12px', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
                     <div style={{ width: '60px', height: '60px', backgroundColor: '#d1d5db', borderRadius: '6px', flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: '600', color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</p>
+                      <p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: '600', color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
                       <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#6b7280' }}>₹{item.price.toFixed(0)}</p>
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                         <button style={{ padding: '2px 8px', fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', cursor: 'pointer' }}>−</button>
-                        <span style={{ fontSize: '13px', fontWeight: '500', minWidth: '20px', textAlign: 'center' }}>{item.qty}</span>
+                        <span style={{ fontSize: '13px', fontWeight: '500', minWidth: '20px', textAlign: 'center' }}>{item.quantity}</span>
                         <button style={{ padding: '2px 8px', fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', cursor: 'pointer' }}>+</button>
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right', fontWeight: '600', fontSize: '13px', color: '#111' }}>₹{(item.price * item.qty).toFixed(0)}</div>
+                    <div style={{ textAlign: 'right', fontWeight: '600', fontSize: '13px', color: '#111' }}>₹{(item.price * item.quantity).toFixed(0)}</div>
                   </div>
                 ))}
               </>
             )}
 
             {/* Coupon Feature */}
-            {featureStates.couponSliderEnabled && (
-              <div style={{ padding: '12px', backgroundColor: '#fef3c7', borderRadius: '8px', border: '1px solid #fcd34d' }}>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#92400e', marginBottom: '6px' }}>🎫 Have a coupon code?</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <input type="text" placeholder="Enter code" style={{ flex: 1, padding: '6px 8px', fontSize: '12px', border: '1px solid #fbbf24', borderRadius: '4px', outline: 'none' }} />
-                  <button style={{ padding: '6px 12px', fontSize: '12px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}>Apply</button>
+            {featureStates.couponSliderEnabled && allCoupons.length > 0 && (
+              <div style={{ padding: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <p style={{ margin: 0, fontSize: '12px', fontWeight: '600', color: '#1f2937' }}>
+                    🎟️ Available Coupons ({allCoupons.filter(c => c.enabled).length})
+                  </p>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      onClick={() => handleScrollCoupons('left')}
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        border: '1px solid #d1d5db',
+                        backgroundColor: '#fff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '18px',
+                        fontWeight: '700',
+                        color: '#111',
+                        transition: 'all 0.2s',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f3f4f6';
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#fff';
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }}
+                    >
+                      ←
+                    </button>
+                    <button
+                      onClick={() => handleScrollCoupons('right')}
+                      style={{
+                        width: '32px',
+                        height: '32px',
+                        borderRadius: '6px',
+                        border: '1px solid #d1d5db',
+                        backgroundColor: '#fff',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '18px',
+                        fontWeight: '700',
+                        color: '#111',
+                        transition: 'all 0.2s',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f3f4f6';
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = '#fff';
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }}
+                    >
+                      →
+                    </button>
+                  </div>
+                </div>
+                <div ref={couponSliderRef} style={{ display: 'flex', gap: '8px', paddingBottom: '4px', scrollBehavior: 'smooth', overflowX: 'hidden' }}>
+                {allCoupons.filter(c => c.enabled).map((coupon, idx) => {
+                  // Use editingCoupon if this is the currently editing coupon for live preview
+                  const displayCoupon = editingCoupon && editingCoupon.id === coupon.id ? editingCoupon : coupon;
+                  
+                  // Style 1: Blue Banner (like Sam's CLUB image)
+                  if (selectedCouponStyle === COUPON_STYLES.STYLE_1) {
+                    const isApplied = appliedCouponIds.includes(coupon.id);
+                    return (
+                      <div 
+                        key={coupon.id}
+                        onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
+                        style={{ 
+                          minWidth: '280px',
+                          padding: '10px 14px',
+                          backgroundColor: displayCoupon.backgroundColor,
+                          borderRadius: `${displayCoupon.borderRadius}px`,
+                          cursor: 'pointer',
+                          transition: 'transform 0.15s',
+                          position: 'relative',
+                          border: isApplied ? '2px solid #10b981' : '2px solid transparent',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.01)'}
+                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                        {/* Applied Badge */}
+                        {isApplied && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            backgroundColor: '#10b981',
+                            color: '#ffffff',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            zIndex: 5,
+                          }}>
+                            <span>✓</span>
+                            <span>Applied</span>
+                          </div>
+                        )}
+                        {/* Top label */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                          <span style={{ fontSize: '14px' }}>{displayCoupon.iconUrl}</span>
+                          <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: displayCoupon.textColor, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            {displayCoupon.label}
+                          </p>
+                        </div>
+                        
+                        {/* Main content - horizontal layout */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                          <div style={{ flex: 1 }}>
+                            <p style={{ margin: '0 0 4px 0', fontSize: '22px', fontWeight: '800', color: displayCoupon.textColor, lineHeight: '1' }}>
+                              {displayCoupon.code}
+                            </p>
+                            <p style={{ margin: 0, fontSize: '10px', color: displayCoupon.textColor, opacity: 0.85 }}>
+                              {displayCoupon.discountType === 'percentage' 
+                                ? `${displayCoupon.discountValue}% off your order` 
+                                : `₹${displayCoupon.discountValue} off your order`}
+                            </p>
+                          </div>
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleCopyCouponCode(coupon.code, coupon.id); }}
+                            style={{ 
+                              padding: '10px 20px',
+                              fontSize: '12px',
+                              backgroundColor: isApplied ? '#ef4444' : displayCoupon.button.backgroundColor,
+                              color: displayCoupon.button.textColor,
+                              border: 'none',
+                              borderRadius: `${displayCoupon.button.borderRadius}px`,
+                              cursor: 'pointer',
+                              fontWeight: '700',
+                              whiteSpace: 'nowrap',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                            }}
+                          >
+                            {isApplied ? 'Remove Coupon' : displayCoupon.button.text}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Style 2: Pink Baby Card (like BAWSE5 image)
+                  if (selectedCouponStyle === COUPON_STYLES.STYLE_2) {
+                    const isApplied = appliedCouponIds.includes(coupon.id);
+                    return (
+                      <div 
+                        key={coupon.id}
+                        onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
+                        style={{ 
+                          minWidth: '280px',
+                          padding: '14px 16px',
+                          backgroundColor: displayCoupon.backgroundColor,
+                          borderRadius: `${displayCoupon.borderRadius}px`,
+                          cursor: 'pointer',
+                          border: isApplied ? '2px solid #10b981' : `1px solid ${displayCoupon.textColor}15`,
+                          transition: 'transform 0.15s, box-shadow 0.15s',
+                          position: 'relative',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      >
+                        {/* Applied Badge */}
+                        {isApplied && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '10px',
+                            right: '10px',
+                            backgroundColor: '#10b981',
+                            color: '#ffffff',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            zIndex: 5,
+                          }}>
+                            <span>✓</span>
+                            <span>Applied</span>
+                          </div>
+                        )}
+                        {/* Icon + Code Header */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
+                          <span style={{ fontSize: '20px', lineHeight: '1' }}>{displayCoupon.iconUrl}</span>
+                          <p style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: displayCoupon.textColor, letterSpacing: '0.5px', lineHeight: '1' }}>
+                            {displayCoupon.code}
+                          </p>
+                        </div>
+                        
+                        {/* Description */}
+                        <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: displayCoupon.textColor, lineHeight: '1.4', opacity: 0.9 }}>
+                          {displayCoupon.discountType === 'percentage' 
+                            ? `${displayCoupon.discountValue}% off your order` 
+                            : `₹${displayCoupon.discountValue} off your order`}
+                        </p>
+                        
+                        {/* Rounded button */}
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleCopyCouponCode(coupon.code, coupon.id); }}
+                          style={{ 
+                            padding: '9px 20px',
+                            fontSize: '12px',
+                            backgroundColor: isApplied ? '#ef4444' : displayCoupon.button.backgroundColor,
+                            color: displayCoupon.button.textColor,
+                            border: 'none',
+                            borderRadius: `${displayCoupon.button.borderRadius}px`,
+                            cursor: 'pointer',
+                            fontWeight: '600',
+                            display: 'inline-block',
+                            transition: 'opacity 0.2s',
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                        >
+                          {isApplied ? 'Remove Coupon' : displayCoupon.button.text}
+                        </button>
+                      </div>
+                    );
+                  }
+                  
+                  // Style 3: Ticket Design (like yellow ticket image)
+                  if (selectedCouponStyle === COUPON_STYLES.STYLE_3) {
+                    const isApplied = appliedCouponIds.includes(coupon.id);
+                    return (
+                      <div 
+                        key={coupon.id}
+                        onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
+                        style={{ 
+                          minWidth: '280px',
+                          display: 'flex',
+                          backgroundColor: displayCoupon.backgroundColor,
+                          borderRadius: `${displayCoupon.borderRadius}px`,
+                          overflow: 'hidden',
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                          transition: 'transform 0.15s',
+                          position: 'relative',
+                          border: isApplied ? '2px solid #10b981' : '2px solid transparent',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.01)'}
+                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                      >
+                        {/* Applied Badge */}
+                        {isApplied && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '8px',
+                            right: '8px',
+                            backgroundColor: '#10b981',
+                            color: '#ffffff',
+                            padding: '4px 10px',
+                            borderRadius: '12px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            zIndex: 5,
+                          }}>
+                            <span>✓</span>
+                            <span>Applied</span>
+                          </div>
+                        )}
+                        {/* Yellow/Gold Side Banner */}
+                        <div style={{ 
+                          width: '32px',
+                          backgroundColor: displayCoupon.button.backgroundColor,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '12px 6px',
+                        }}>
+                          <div style={{
+                            writingMode: 'vertical-rl',
+                            textOrientation: 'mixed',
+                            transform: 'rotate(180deg)',
+                            fontSize: '10px',
+                            fontWeight: '700',
+                            color: displayCoupon.button.textColor,
+                            letterSpacing: '1px',
+                          }}>
+                            {displayCoupon.label.split(' ')[0]}
+                          </div>
+                        </div>
+                        
+                        {/* Main Ticket Content */}
+                        <div style={{ flex: 1, padding: '12px 14px' }}>
+                          {/* Ticket header */}
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '4px' }}>
+                            <div style={{ flex: 1 }}>
+                              <p style={{ margin: '0 0 2px 0', fontSize: '11px', fontWeight: '600', color: displayCoupon.textColor }}>
+                                {displayCoupon.label}
+                              </p>
+                              <p style={{ margin: 0, fontSize: '10px', color: displayCoupon.textColor, opacity: 0.7 }}>
+                                {displayCoupon.code}
+                              </p>
+                            </div>
+                            <span style={{ fontSize: '20px' }}>{displayCoupon.iconUrl}</span>
+                          </div>
+                          
+                          <p style={{ margin: '0 0 10px 0', fontSize: '10px', color: displayCoupon.textColor, opacity: 0.7 }}>
+                            {displayCoupon.discountType === 'percentage' 
+                              ? `${displayCoupon.discountValue}% off your order` 
+                              : `₹${displayCoupon.discountValue} off your order`}
+                          </p>
+                          
+                          {/* Buy button */}
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); handleCopyCouponCode(coupon.code, coupon.id); }}
+                            style={{ 
+                              padding: '8px 18px',
+                              fontSize: '11px',
+                              backgroundColor: isApplied ? '#ef4444' : displayCoupon.button.backgroundColor,
+                              color: displayCoupon.button.textColor,
+                              border: 'none',
+                              borderRadius: `${displayCoupon.button.borderRadius}px`,
+                              cursor: 'pointer',
+                              fontWeight: '700',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px',
+                            }}
+                          >
+                            {isApplied ? 'Remove Coupon' : displayCoupon.button.text}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  return null;
+                })}
                 </div>
               </div>
             )}
@@ -1101,12 +2014,38 @@ export default function CartDrawerAdmin() {
           {/* Footer */}
           {!showEmpty && (
             <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb', backgroundColor: '#f9fafb', flexShrink: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', fontSize: '14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '14px' }}>
                 <span style={{ color: '#6b7280', fontWeight: '500' }}>Subtotal</span>
-                <span style={{ fontWeight: '700', color: '#111', fontSize: '16px' }}>₹{cartData.cartValue.toFixed(0)}</span>
+                <span style={{ fontWeight: '600', color: '#111' }}>₹{cartTotal.toFixed(0)}</span>
               </div>
+              
+              {/* Show applied discounts */}
+              {appliedCouponIds.length > 0 && appliedCouponIds.map(couponId => {
+                const coupon = allCoupons.find(c => c.id === couponId);
+                if (!coupon) return null;
+                const discount = calculateCouponDiscount(coupon, cartTotal);
+                return (
+                  <div key={couponId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '13px' }}>
+                    <span style={{ color: '#10b981', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <span>✓</span>
+                      <span>{coupon.code} ({coupon.discountType === 'percentage' ? `${coupon.discountValue}%` : `₹${coupon.discountValue}`})</span>
+                    </span>
+                    <span style={{ fontWeight: '600', color: '#10b981' }}>-₹{discount.toFixed(0)}</span>
+                  </div>
+                );
+              })}
+              
+              {totalDiscount > 0 && (
+                <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '8px', marginBottom: '8px' }} />
+              )}
+              
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', fontSize: '15px' }}>
+                <span style={{ color: '#111', fontWeight: '700' }}>Total</span>
+                <span style={{ fontWeight: '700', color: '#111', fontSize: '18px' }}>₹{finalTotal.toFixed(0)}</span>
+              </div>
+              
               <button style={{ width: '100%', padding: '12px', backgroundColor: '#000', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
-                Checkout • ₹{cartData.cartValue.toFixed(0)}
+                Checkout • ₹{finalTotal.toFixed(0)}
               </button>
             </div>
           )}
@@ -1119,8 +2058,14 @@ export default function CartDrawerAdmin() {
   // MAIN RENDER
   // ==========================================
 
+  const saveToastMarkup = showSaveToast ? (
+    <Toast content={saveToastMessage} onDismiss={() => setShowSaveToast(false)} />
+  ) : null;
+
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+    <Frame>
+      {saveToastMarkup}
+      <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       {/* Deactivate Confirmation Modal */}
       <Modal
         open={showDeactivateModal}
@@ -1277,6 +2222,7 @@ export default function CartDrawerAdmin() {
           {renderCartPreview()}
         </div>
       </div>
-    </div>
+      </div>
+    </Frame>
   );
 }

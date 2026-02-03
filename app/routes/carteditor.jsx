@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { useLoaderData, useFetcher } from 'react-router-dom';
 import classNames from 'classnames';
-import { fakeApi } from '../services/settings.server.js';
+import { sampleCoupons } from '../services/api.cart-settings';
 
-// The loader now gets the initial settings for the editor page
+// The loader now gets the initial sample coupons
 export async function loader() {
-  const settings = await fakeApi.getSettings();
-  return new Response(JSON.stringify(settings), {
+  return new Response(JSON.stringify({ coupons: sampleCoupons }), {
     headers: { 'Content-Type': 'application/json' },
   });
 }
