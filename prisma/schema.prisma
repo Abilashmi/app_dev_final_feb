@@ -32,3 +32,41 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model UpsellRule {
+  id                String   @id @default(uuid())
+  shop              String
+  name              String?
+  enabled           Boolean  @default(true)
+  ruleType          String   // GLOBAL, TRIGGERED, GLOBAL_EXCEPT
+  priority          Int      @default(0)
+  
+  // Trigger configuration (for TRIGGERED rule)
+  triggerProducts   String?  // JSON array of product IDs
+  triggerCollections String? // JSON array of collection IDs
+  
+  // Upsell configuration
+  upsellProducts    String?  // JSON array of product IDs
+  upsellCollections String?  // JSON array of collection IDs
+  
+  // Exclusion configuration (for GLOBAL_EXCEPT rule)
+  excludedProducts  String?  // JSON array of product IDs
+  excludedCollections String? // JSON array of collection IDs
+  
+  // UI Configuration
+  displayLimit      Int      @default(3)
+  layout            String   @default("slider") // slider, vertical
+  buttonText        String   @default("Add to Cart")
+  showPrice         Boolean  @default(true)
+  title             String   @default("Recommended for you")
+  
+  // Analytics
+  trackViews        Boolean  @default(true)
+  trackClicks       Boolean  @default(true)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@index([shop])
+  @@index([ruleType])
+}

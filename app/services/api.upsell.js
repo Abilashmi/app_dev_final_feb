@@ -4,6 +4,39 @@
  */
 
 /**
+ * Rule Types for Upsell System
+ */
+export const RULE_TYPES = {
+  GLOBAL: 'GLOBAL',               // Show for all products (Rule 1)
+  TRIGGERED: 'TRIGGERED',         // Show when specific products present (Rule 2)
+  GLOBAL_EXCEPT: 'GLOBAL_EXCEPT', // Show for all except specific products (Rule 3)
+};
+
+/**
+ * Rule Type Labels and Descriptions
+ */
+export const RULE_TYPE_OPTIONS = [
+  {
+    value: RULE_TYPES.GLOBAL,
+    label: 'Show upsell for all products',
+    description: 'Display upsell products for any item in the cart',
+    helpText: 'Acts as a default fallback rule',
+  },
+  {
+    value: RULE_TYPES.TRIGGERED,
+    label: 'Show upsell for specific products or collections',
+    description: 'Display upsells only when specific trigger products are in cart',
+    helpText: 'This rule has the highest priority',
+  },
+  {
+    value: RULE_TYPES.GLOBAL_EXCEPT,
+    label: 'Show upsell for all products except selected ones',
+    description: 'Display upsells for everything except excluded products',
+    helpText: 'Show for all products except when excluded items are in cart',
+  },
+];
+
+/**
  * Sample Shopify products for upsell
  * In production, these would be fetched from Shopify GraphQL API
  */
@@ -87,9 +120,20 @@ export const SAMPLE_UPSELL_PRODUCTS = [
  */
 export const DEFAULT_UPSELL_CONFIG = {
   enabled: true,
-  trigger: 'ANY_CART',
-  ruleType: 'MANUAL',
-  products: ['sp-1', 'sp-2'],
+  ruleType: RULE_TYPES.GLOBAL,
+  
+  // Trigger configuration (for TRIGGERED rule)
+  triggerProducts: [],
+  triggerCollections: [],
+  
+  // Upsell products to show
+  upsellProducts: ['sp-1', 'sp-2'],
+  upsellCollections: [],
+  
+  // Exclusion configuration (for GLOBAL_EXCEPT rule)
+  excludedProducts: [],
+  excludedCollections: [],
+  
   limit: 3,
   ui: {
     layout: 'slider',
@@ -105,6 +149,172 @@ export const DEFAULT_UPSELL_CONFIG = {
     trackAddToCart: true,
   },
 };
+
+/**
+ * Validate upsell rule configuration
+ * @param {Object} config - Configuration to validate
+ * @param {Object[]} allRules - All existing rules (for conflict checking)
+ * @returns {Object} { valid: boolean, error: string }
+ */
+export function validateUpsellRule(config, allRules = []) {
+  console.log('🔍 VALIDATING CONFIG:', {
+    enabled: config.enabled,
+    ruleType: config.ruleType,
+    triggerProducts: config.triggerProducts,
+    upsellProducts: config.upsellProducts,
+    excludedProducts: config.excludedProducts,
+    limit: config.limit
+  });
+
+  // Check if both GLOBAL and GLOBAL_EXCEPT are active
+  const hasGlobalRule = allRules.some(
+    (rule) => rule.enabled && rule.ruleType === RULE_TYPES.GLOBAL && rule.id !== config.id
+  );
+  const hasGlobalExceptRule = allRules.some(
+    (rule) => rule.enabled && rule.ruleType === RULE_TYPES.GLOBAL_EXCEPT && rule.id !== config.id
+  );
+
+  // Current rule type
+  const currentRuleType = config.ruleType;
+
+  // CRITICAL: Rule 1 (GLOBAL) and Rule 3 (GLOBAL_EXCEPT) cannot coexist
+  if (currentRuleType === RULE_TYPES.GLOBAL && hasGlobalExceptRule) {
+    return {
+      valid: false,
+      error: 'You can either apply upsells to all products or all products except selected ones — not both.',
+    };
+  }
+
+  if (currentRuleType === RULE_TYPES.GLOBAL_EXCEPT && hasGlobalRule) {
+    return {
+      valid: false,
+      error: 'You can either apply upsells to all products or all products except selected ones — not both.',
+    };
+  }
+
+  // Validate based on rule type
+  if (currentRuleType === RULE_TYPES.TRIGGERED) {
+    if (
+      (!config.triggerProducts || config.triggerProducts.length === 0) &&
+      (!config.triggerCollections || config.triggerCollections.length === 0)
+    ) {
+      return {
+        valid: false,
+        error: 'Triggered rule requires at least one trigger product or collection',
+      };
+    }
+  }
+
+  if (currentRuleType === RULE_TYPES.GLOBAL_EXCEPT) {
+    if (
+      (!config.excludedProducts || config.excludedProducts.length === 0) &&
+      (!config.excludedCollections || config.excludedCollections.length === 0)
+    ) {
+      return {
+        valid: false,
+        error: 'Global-except rule requires at least one excluded product or collection',
+      };
+    }
+  }
+
+  // Validate upsell products exist (unless disabled)
+  if (config.enabled && 
+    (!config.upsellProducts || config.upsellProducts.length === 0) &&
+    (!config.upsellCollections || config.upsellCollections.length === 0)
+  ) {
+    return {
+      valid: false,
+      error: 'At least one upsell product or collection must be selected',
+    };
+  }
+
+  // Validate limit
+  if (config.limit < 1 || config.limit > 4) {
+    return {
+      valid: false,
+      error: 'Upsell limit must be between 1 and 4',
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Evaluate which upsell rule applies to a cart
+ * Priority: TRIGGERED > GLOBAL_EXCEPT > GLOBAL
+ * @param {Object[]} rules - All active rules
+ * @param {string[]} cartProductIds - Product IDs currently in cart
+ * @returns {Object|null} The matching rule or null
+ */
+export function evaluateUpsellRules(rules, cartProductIds = []) {
+  if (!rules || rules.length === 0) {
+    return null;
+  }
+
+  // Filter only enabled rules
+  const activeRules = rules.filter((rule) => rule.enabled);
+
+  // Priority 1: Check TRIGGERED rules first
+  for (const rule of activeRules) {
+    if (rule.ruleType === RULE_TYPES.TRIGGERED) {
+      const triggers = [...(rule.triggerProducts || []), ...(rule.triggerCollections || [])];
+      const hasMatch = triggers.some((triggerId) => cartProductIds.includes(triggerId));
+      
+      if (hasMatch) {
+        return rule; // First matching triggered rule wins
+      }
+    }
+  }
+
+  // Priority 2: Check GLOBAL_EXCEPT rules
+  for (const rule of activeRules) {
+    if (rule.ruleType === RULE_TYPES.GLOBAL_EXCEPT) {
+      const exclusions = [...(rule.excludedProducts || []), ...(rule.excludedCollections || [])];
+      const hasExcluded = exclusions.some((excludedId) => cartProductIds.includes(excludedId));
+      
+      if (!hasExcluded) {
+        return rule; // Cart doesn't contain excluded items, rule applies
+      }
+    }
+  }
+
+  // Priority 3: Check GLOBAL rules (fallback)
+  const globalRule = activeRules.find((rule) => rule.ruleType === RULE_TYPES.GLOBAL);
+  return globalRule || null;
+}
+
+/**
+ * Check if a rule type can be enabled given existing rules
+ * @param {string} ruleType - Rule type to check
+ * @param {Object[]} existingRules - Currently enabled rules
+ * @returns {Object} { canEnable: boolean, reason: string }
+ */
+export function canEnableRuleType(ruleType, existingRules = []) {
+  const activeRules = existingRules.filter((rule) => rule.enabled);
+
+  if (ruleType === RULE_TYPES.GLOBAL) {
+    const hasGlobalExcept = activeRules.some((rule) => rule.ruleType === RULE_TYPES.GLOBAL_EXCEPT);
+    if (hasGlobalExcept) {
+      return {
+        canEnable: false,
+        reason: 'Global upsell and global-except upsell cannot be used together.',
+      };
+    }
+  }
+
+  if (ruleType === RULE_TYPES.GLOBAL_EXCEPT) {
+    const hasGlobal = activeRules.some((rule) => rule.ruleType === RULE_TYPES.GLOBAL);
+    if (hasGlobal) {
+      return {
+        canEnable: false,
+        reason: 'Global upsell and global-except upsell cannot be used together.',
+      };
+    }
+  }
+
+  // TRIGGERED rules are always allowed
+  return { canEnable: true };
+}
 
 /**
  * Get upsell configuration
@@ -129,16 +339,22 @@ export async function saveUpsellConfig(config) {
   // Simulate API delay
   await new Promise((resolve) => setTimeout(resolve, 300));
 
-  // Validate configuration
-  if (config.limit < 1 || config.limit > 4) {
-    throw new Error('Upsell limit must be between 1 and 4');
+  console.log('💾 Attempting to save config:', config);
+
+  // Get all existing rules (simulated - in production, fetch from DB)
+  const existingRules = []; // Would be fetched from database
+
+  // Validate configuration with rule compatibility checks
+  const validation = validateUpsellRule(config, existingRules);
+  
+  console.log('🔍 Validation result:', validation);
+  
+  if (!validation.valid) {
+    console.error('❌ Validation failed:', validation.error);
+    throw new Error(validation.error);
   }
 
-  if (config.products.length === 0 && config.enabled) {
-    throw new Error('At least one product must be selected');
-  }
-
-  console.log('Upsell config saved:', config);
+  console.log('✅ Validation passed, saving config');
 
   return {
     success: true,
@@ -179,14 +395,16 @@ export function trackUpsellEvent(event, data = {}) {
     ...data,
   });
 
-  // Store in sessionStorage for demo purposes
-  const events = JSON.parse(sessionStorage.getItem('upsell_events') || '[]');
-  events.push({
-    event,
-    data,
-    timestamp: new Date().toISOString(),
-  });
-  sessionStorage.setItem('upsell_events', JSON.stringify(events));
+  // Store in sessionStorage for demo purposes (guarded)
+  if (typeof sessionStorage !== 'undefined') {
+    const events = JSON.parse(sessionStorage.getItem('upsell_events') || '[]');
+    events.push({
+      event,
+      data,
+      timestamp: new Date().toISOString(),
+    });
+    sessionStorage.setItem('upsell_events', JSON.stringify(events));
+  }
 }
 
 /**

@@ -20,12 +20,16 @@ import {
   Divider,
   Checkbox,
   Grid,
+  Banner,
+  RadioButton,
 } from '@shopify/polaris';
 import {
   getUpsellConfig,
   saveUpsellConfig,
   SAMPLE_UPSELL_PRODUCTS,
   trackUpsellEvent,
+  RULE_TYPES,
+  RULE_TYPE_OPTIONS,
 } from '../services/api.upsell';
 
 /**
@@ -125,12 +129,39 @@ function UpsellPreview({ config, selectedProducts }) {
     );
   }
 
+  // Get rule type info for display
+  const ruleTypeInfo = RULE_TYPE_OPTIONS.find((opt) => opt.value === config.ruleType);
+
   return (
     <Card>
       <BlockStack gap="400">
-        <Text as="h2" variant="headingMd">
-          Live Preview
-        </Text>
+        <InlineStack align="space-between" blockAlign="center">
+          <Text as="h2" variant="headingMd">
+            Live Preview
+          </Text>
+          <Badge tone="info">{ruleTypeInfo?.label || config.ruleType}</Badge>
+        </InlineStack>
+
+        {/* Rule Context Banner */}
+        <Banner>
+          <BlockStack gap="100">
+            <Text fontWeight="semibold">Rule Behavior:</Text>
+            <Text>{ruleTypeInfo?.description}</Text>
+            
+            {config.ruleType === RULE_TYPES.TRIGGERED && (
+              <Text tone="subdued" variant="bodySmall">
+                Trigger Products: {(config.triggerProducts || []).length} selected
+              </Text>
+            )}
+            
+            {config.ruleType === RULE_TYPES.GLOBAL_EXCEPT && (
+              <Text tone="subdued" variant="bodySmall">
+                Excluded Products: {(config.excludedProducts || []).length} selected
+              </Text>
+            )}
+          </BlockStack>
+        </Banner>
+
         <div
           style={{
             padding: '20px',
@@ -316,6 +347,7 @@ function UpsellPreview({ config, selectedProducts }) {
  */
 export default function UpsellPage() {
   const [config, setConfig] = useState(null);
+  const [initialConfig, setInitialConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -330,7 +362,21 @@ export default function UpsellPage() {
     try {
       setLoading(true);
       const data = await getUpsellConfig();
-      setConfig(data.config);
+      
+      // Ensure all arrays are initialized
+      const loadedConfig = {
+        ...data.config,
+        triggerProducts: data.config.triggerProducts || [],
+        triggerCollections: data.config.triggerCollections || [],
+        upsellProducts: data.config.upsellProducts || [],
+        upsellCollections: data.config.upsellCollections || [],
+        excludedProducts: data.config.excludedProducts || [],
+        excludedCollections: data.config.excludedCollections || [],
+      };
+      
+      console.log('✅ Config loaded:', loadedConfig);
+      setConfig(loadedConfig);
+      setInitialConfig(loadedConfig);
     } catch (error) {
       setToastError(true);
       setToastMessage('Failed to load upsell configuration');
@@ -340,21 +386,102 @@ export default function UpsellPage() {
     }
   }
 
+  function normalizeConfig(value) {
+    if (!value) return value;
+    return {
+      ...value,
+      triggerProducts: value.triggerProducts || [],
+      triggerCollections: value.triggerCollections || [],
+      upsellProducts: value.upsellProducts || [],
+      upsellCollections: value.upsellCollections || [],
+      excludedProducts: value.excludedProducts || [],
+      excludedCollections: value.excludedCollections || [],
+      ui: {
+        ...value.ui,
+      },
+      analytics: {
+        ...value.analytics,
+      },
+    };
+  }
+
+  function getLocalValidationError(value) {
+    if (!value || !value.enabled) return '';
+
+    if (value.ruleType === RULE_TYPES.TRIGGERED) {
+      const triggerCount =
+        (value.triggerProducts || []).length +
+        (value.triggerCollections || []).length;
+      if (triggerCount === 0) {
+        return 'Triggered rule requires at least one trigger product or collection';
+      }
+    }
+
+    if (value.ruleType === RULE_TYPES.GLOBAL_EXCEPT) {
+      const excludedCount =
+        (value.excludedProducts || []).length +
+        (value.excludedCollections || []).length;
+      if (excludedCount === 0) {
+        return 'Global-except rule requires at least one excluded product or collection';
+      }
+    }
+
+    const upsellCount =
+      (value.upsellProducts || []).length +
+      (value.upsellCollections || []).length;
+    if (upsellCount === 0) {
+      return 'At least one upsell product or collection must be selected';
+    }
+
+    if (value.limit < 1 || value.limit > 4) {
+      return 'Upsell limit must be between 1 and 4';
+    }
+
+    return '';
+  }
+
+  const isDirty =
+    JSON.stringify(normalizeConfig(config)) !==
+    JSON.stringify(normalizeConfig(initialConfig));
+
+  const validationError = getLocalValidationError(config);
+
   async function handleSave() {
     try {
+      if (!isDirty) {
+        setToastError(false);
+        setToastMessage('No changes to save');
+        return;
+      }
+
+      if (validationError) {
+        setToastError(true);
+        setToastMessage(validationError);
+        return;
+      }
       setSaving(true);
+      
+      console.log('📤 Saving config:', config);
+      
       await saveUpsellConfig(config);
+      
       setToastError(false);
       setToastMessage('Upsell configuration saved successfully!');
-      trackUpsellEvent('upsell_config_saved', {
-        enabled: config.enabled,
-        productCount: config.products.length,
-        layout: config.ui.layout,
-      });
+      setInitialConfig(config);
+      try {
+        trackUpsellEvent('upsell_config_saved', {
+          enabled: config.enabled,
+          productCount: (config.upsellProducts || []).length,
+          layout: config.ui.layout,
+        });
+      } catch (trackingError) {
+        console.warn('Analytics tracking failed:', trackingError);
+      }
     } catch (error) {
       setToastError(true);
       setToastMessage(error.message || 'Failed to save configuration');
-      console.error('Error saving config:', error);
+      console.error('❌ Error saving config:', error);
+      console.error('Config that failed:', config);
     } finally {
       setSaving(false);
     }
@@ -390,7 +517,7 @@ export default function UpsellPage() {
     );
   }
 
-  const selectedProducts = config.products
+  const selectedProducts = (config.upsellProducts || [])
     .map((id) => SAMPLE_UPSELL_PRODUCTS.find((p) => p.id === id))
     .filter((p) => p !== undefined);
 
@@ -421,27 +548,174 @@ export default function UpsellPage() {
 
             {config.enabled && (
               <>
-                {/* Rule Type */}
+                {validationError && (
+                  <Card>
+                    <Banner tone="critical">{validationError}</Banner>
+                  </Card>
+                )}
+                {/* Rule Type Selection */}
                 <Card>
-                  <BlockStack gap="300">
+                  <BlockStack gap="400">
                     <Text as="h2" variant="headingMd">
                       Rule Type
                     </Text>
                     <Text as="p" tone="subdued" variant="bodySmall">
-                      Currently supporting Manual upsell selection
+                      Choose when to show upsell products
                     </Text>
-                    <Badge>{config.ruleType}</Badge>
+                    
+                    <BlockStack gap="300">
+                      {RULE_TYPE_OPTIONS.map((option) => {
+                        const isSelected = config.ruleType === option.value;
+                        const isDisabled = 
+                          (option.value === RULE_TYPES.GLOBAL && config.ruleType === RULE_TYPES.GLOBAL_EXCEPT) ||
+                          (option.value === RULE_TYPES.GLOBAL_EXCEPT && config.ruleType === RULE_TYPES.GLOBAL);
+                        
+                        return (
+                          <div
+                            key={option.value}
+                            style={{
+                              padding: '12px',
+                              border: isSelected ? '2px solid #0070f3' : '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              backgroundColor: isSelected ? '#f0f7ff' : (isDisabled ? '#f9fafb' : '#ffffff'),
+                              opacity: isDisabled ? 0.5 : 1,
+                              cursor: isDisabled ? 'not-allowed' : 'pointer',
+                            }}
+                            onClick={() => {
+                              if (!isDisabled) {
+                                setConfig({ ...config, ruleType: option.value });
+                              }
+                            }}
+                          >
+                            <BlockStack gap="200">
+                              <InlineStack gap="200" align="start">
+                                <RadioButton
+                                  label=""
+                                  checked={isSelected}
+                                  disabled={isDisabled}
+                                  onChange={() => {
+                                    if (!isDisabled) {
+                                      setConfig({ ...config, ruleType: option.value });
+                                    }
+                                  }}
+                                />
+                                <BlockStack gap="100">
+                                  <Text fontWeight="semibold">{option.label}</Text>
+                                  <Text tone="subdued" variant="bodySmall">
+                                    {option.description}
+                                  </Text>
+                                  <Text tone="subdued" variant="bodySm">
+                                    {option.helpText}
+                                  </Text>
+                                </BlockStack>
+                              </InlineStack>
+                            </BlockStack>
+                          </div>
+                        );
+                      })}
+                    </BlockStack>
+                    
+                    {/* Compatibility Warning */}
+                    {(config.ruleType === RULE_TYPES.GLOBAL || config.ruleType === RULE_TYPES.GLOBAL_EXCEPT) && (
+                      <Banner tone="info">
+                        Global upsell and global-except upsell cannot be used together.
+                      </Banner>
+                    )}
                   </BlockStack>
                 </Card>
+
+                {/* Trigger Products Selection (TRIGGERED rule only) */}
+                {config.ruleType === RULE_TYPES.TRIGGERED && (
+                  <Card>
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingMd">
+                        Trigger Products
+                      </Text>
+                      <Text as="p" tone="subdued" variant="bodySmall">
+                        Select products that will trigger this upsell
+                      </Text>
+                      <BlockStack gap="200">
+                        {SAMPLE_UPSELL_PRODUCTS.map((product) => (
+                          <Checkbox
+                            key={product.id}
+                            label={
+                              <InlineStack gap="200" align="center">
+                                <span>{product.title}</span>
+                                <Badge>₹{product.price}</Badge>
+                              </InlineStack>
+                            }
+                            checked={(config.triggerProducts || []).includes(product.id)}
+                            onChange={(checked) => {
+                              const triggers = config.triggerProducts || [];
+                              if (checked) {
+                                setConfig({
+                                  ...config,
+                                  triggerProducts: [...triggers, product.id],
+                                });
+                              } else {
+                                setConfig({
+                                  ...config,
+                                  triggerProducts: triggers.filter((id) => id !== product.id),
+                                });
+                              }
+                            }}
+                          />
+                        ))}
+                      </BlockStack>
+                    </BlockStack>
+                  </Card>
+                )}
+
+                {/* Excluded Products Selection (GLOBAL_EXCEPT rule only) */}
+                {config.ruleType === RULE_TYPES.GLOBAL_EXCEPT && (
+                  <Card>
+                    <BlockStack gap="300">
+                      <Text as="h2" variant="headingMd">
+                        Excluded Products
+                      </Text>
+                      <Text as="p" tone="subdued" variant="bodySmall">
+                        Select products that will NOT trigger this upsell
+                      </Text>
+                      <BlockStack gap="200">
+                        {SAMPLE_UPSELL_PRODUCTS.map((product) => (
+                          <Checkbox
+                            key={product.id}
+                            label={
+                              <InlineStack gap="200" align="center">
+                                <span>{product.title}</span>
+                                <Badge>₹{product.price}</Badge>
+                              </InlineStack>
+                            }
+                            checked={(config.excludedProducts || []).includes(product.id)}
+                            onChange={(checked) => {
+                              const excluded = config.excludedProducts || [];
+                              if (checked) {
+                                setConfig({
+                                  ...config,
+                                  excludedProducts: [...excluded, product.id],
+                                });
+                              } else {
+                                setConfig({
+                                  ...config,
+                                  excludedProducts: excluded.filter((id) => id !== product.id),
+                                });
+                              }
+                            }}
+                          />
+                        ))}
+                      </BlockStack>
+                    </BlockStack>
+                  </Card>
+                )}
 
                 {/* Product Selection */}
                 <Card>
                   <BlockStack gap="300">
                     <Text as="h2" variant="headingMd">
-                      Select Products
+                      Upsell Products
                     </Text>
                     <Text as="p" tone="subdued" variant="bodySmall">
-                      Choose {config.limit} products for upsell (max 4)
+                      Choose products to show as upsells (max {config.limit})
                     </Text>
                     <BlockStack gap="200">
                       {SAMPLE_UPSELL_PRODUCTS.map((product) => (
@@ -453,21 +727,20 @@ export default function UpsellPage() {
                               <Badge>₹{product.price}</Badge>
                             </InlineStack>
                           }
-                          checked={config.products.includes(product.id)}
+                          checked={(config.upsellProducts || []).includes(product.id)}
                           onChange={(checked) => {
+                            const upsells = config.upsellProducts || [];
                             if (checked) {
-                              if (config.products.length < config.limit) {
+                              if (upsells.length < config.limit) {
                                 setConfig({
                                   ...config,
-                                  products: [...config.products, product.id],
+                                  upsellProducts: [...upsells, product.id],
                                 });
                               }
                             } else {
                               setConfig({
                                 ...config,
-                                products: config.products.filter(
-                                  (id) => id !== product.id
-                                ),
+                                upsellProducts: upsells.filter((id) => id !== product.id),
                               });
                             }
                           }}
@@ -576,6 +849,7 @@ export default function UpsellPage() {
                   variant="primary"
                   onClick={handleSave}
                   loading={saving}
+                  disabled={!isDirty || !!validationError}
                   fullWidth
                 >
                   Save Settings

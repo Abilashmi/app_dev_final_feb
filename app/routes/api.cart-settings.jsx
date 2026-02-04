@@ -166,6 +166,22 @@ const SAMPLE_APP_DATA = {
   },
   upsellSettings: {
     enabled: true,
+    showOnEmptyCart: false,
+    useAIRecommendation: false,
+    aiRecommendationType: 'related',
+    useManualUpsell: true,
+    manualTriggerMode: 'all',
+    triggeredProducts: [],
+    triggeredCollections: [],
+    upsellProducts: ['sp-2', 'sp-6', 'sp-8'],
+    title: 'Recommended for you',
+    titleFormatting: { bold: false, italic: false, underline: false },
+    buttonStyle: 'box',
+    position: 'bottom',
+    layout: 'grid',
+    alignment: 'horizontal',
+    showNavigationArrows: true,
+    showProductReviews: false,
     ruleType: 'MANUAL',
     trigger: 'ANY_CART',
     products: ['sp-2', 'sp-4', 'sp-6'],
@@ -309,6 +325,13 @@ const SAMPLE_APP_DATA = {
       status: 'active',
     },
   ],
+  mockCollections: [
+    { id: 'col-1', title: 'Winter Gear', productCount: 15 },
+    { id: 'col-2', title: 'Gifts & Bundles', productCount: 8 },
+    { id: 'col-3', title: 'Premium Accessories', productCount: 12 },
+    { id: 'col-4', title: 'Discountable Items', productCount: 20 },
+    { id: 'col-5', title: 'New Arrivals', productCount: 10 },
+  ],
 };
 
 // This loader function acts as our GET endpoint for the cart drawer
@@ -327,25 +350,81 @@ export async function loader() {
 export async function action({ request }) {
   const url = new URL(request.url);
   const path = url.pathname;
+  const shopId = request.headers.get('X-Shop-ID') || 'gid://shopify/Shop/default';
 
   // Handle upsell settings GET request
-  if (path === '/api/upsell' && request.method === 'GET') {
+  if (path.includes('/upsell') && request.method === 'GET') {
+    console.log(`[API] GET upsell settings for shop: ${shopId}`);
     return new Response(JSON.stringify(SAMPLE_APP_DATA.upsellSettings), {
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
+        'X-Shop-ID': shopId,
       },
     });
   }
 
   // Handle upsell settings POST/PUT request
-  if (path === '/api/upsell' && (request.method === 'POST' || request.method === 'PUT')) {
+  if (path.includes('/upsell') && (request.method === 'POST' || request.method === 'PUT')) {
     const body = await request.json();
+    console.log(`[API] ${request.method} upsell settings for shop: ${shopId}`, body);
     SAMPLE_APP_DATA.upsellSettings = { ...SAMPLE_APP_DATA.upsellSettings, ...body };
     return new Response(JSON.stringify({ success: true, data: SAMPLE_APP_DATA.upsellSettings }), {
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
+        'X-Shop-ID': shopId,
+      },
+    });
+  }
+
+  // Handle products GET request
+  if (path.includes('/products') && request.method === 'GET') {
+    console.log(`[API] GET products for shop: ${shopId}`);
+    return new Response(JSON.stringify(SAMPLE_APP_DATA.shopifyProducts), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Shop-ID': shopId,
+      },
+    });
+  }
+
+  // Handle collections GET request
+  if (path.includes('/collections') && request.method === 'GET') {
+    console.log(`[API] GET collections for shop: ${shopId}`);
+    return new Response(JSON.stringify(SAMPLE_APP_DATA.mockCollections), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Shop-ID': shopId,
+      },
+    });
+  }
+
+  // Handle cart data GET request
+  if (path.includes('/cart-data') && request.method === 'GET') {
+    console.log(`[API] GET cart data for shop: ${shopId}`);
+    return new Response(JSON.stringify(SAMPLE_APP_DATA.cartData), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Shop-ID': shopId,
+      },
+    });
+  }
+
+  // Handle milestones GET request
+  if (path.includes('/milestones') && request.method === 'GET') {
+    const mode = request.headers.get('X-Mode') || 'amount';
+    console.log(`[API] GET milestones (${mode}) for shop: ${shopId}`);
+    const milestones = mode === 'amount' ? SAMPLE_APP_DATA.milestones.amount : SAMPLE_APP_DATA.milestones.quantity;
+    return new Response(JSON.stringify(milestones), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'X-Shop-ID': shopId,
+        'X-Mode': mode,
       },
     });
   }
@@ -353,9 +432,13 @@ export async function action({ request }) {
   // Default: handle form data settings
   const formData = await request.formData();
   const settings = JSON.parse(formData.get('settings'));
+  console.log(`[API] Default handler for shop: ${shopId}`, settings);
   // Sample data is updated in memory
   return new Response(JSON.stringify({ success: true }), {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      'X-Shop-ID': shopId,
+    },
   });
 }
 

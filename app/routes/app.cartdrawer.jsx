@@ -29,9 +29,19 @@ import { sampleCoupons, COUPON_STYLES, COUPON_STYLE_METADATA, globalCouponStyle 
 // MOCK API FUNCTIONS
 // ==========================================
 
-// Get shop ID - use original when live, mock when in development
-const isProduction = import.meta.env.MODE === 'production' || import.meta.env.PROD === true;
-const SHOP_ID = isProduction ? (window.__SHOPIFY_SHOP_ID__ || 'gid://shopify/Shop/production') : 'gid://shopify/Shop/123456789';
+// ==========================================
+// SHOP ID FROM URL QUERY PARAMETER
+// ==========================================
+const getShopIdFromUrl = () => {
+  if (typeof window !== 'undefined') {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get('shop') || urlParams.get('shopId') || 'demo-shop.myshopify.com';
+  }
+  return 'demo-shop.myshopify.com';
+};
+
+const SHOP_ID = getShopIdFromUrl();
+console.log('[Upsell] Using shopId:', SHOP_ID);
 
 // Mock cart data
 const mockCartData = {
@@ -308,19 +318,45 @@ export default function CartDrawerAdmin() {
   // ==========================================
   // UPSELL EDITOR STATE
   // ==========================================
-  const [useAIUpsells, setUseAIUpsells] = useState(false);
-  const [showManualUpsellModal, setShowManualUpsellModal] = useState(false);
-  const [manualUpsellRules, setManualUpsellRules] = useState([]);
-  const [currentUpsellRule, setCurrentUpsellRule] = useState(null);
-  const [upsellPickerMode, setUpsellPickerMode] = useState(null); // 'trigger' or 'upsell'
-  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
-  const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
+  const [upsellConfig, setUpsellConfig] = useState({
+    enabled: true,
+    showOnEmptyCart: false,
+    upsellMode: 'manual', // 'ai' or 'manual' - MUTUALLY EXCLUSIVE
+    aiRecommendationType: 'related', // 'related' or 'complementary'
+    manualRules: [], // Array of independent rules
+    upsellTitle: {
+      text: 'Recommended for you',
+      formatting: { bold: false, italic: false, underline: false },
+    },
+    titleStyle: {
+      color: '#1A1A1A',
+      size: 'medium', // 'small', 'medium', 'large'
+      align: 'left', // 'left', 'center', 'right'
+    },
+    buttonStyle: 'box', // 'box' or 'circle'
+    position: 'bottom', // 'top' or 'bottom'
+    layout: 'grid', // 'grid' or 'carousel'
+    alignment: 'horizontal', // 'horizontal' or 'vertical'
+    showProductReviews: false,
+  });
+  const [carouselScrollPosition, setCarouselScrollPosition] = useState(0);
+  const carouselRef = React.useRef(null);
+  const [showTriggeredProductsModal, setShowTriggeredProductsModal] = useState(false);
+  const [showUpsellProductsModal, setShowUpsellProductsModal] = useState(false);
+  const [modalActiveTab, setModalActiveTab] = useState('products'); // 'products' or 'collections'
   const [selectedCollectionIds, setSelectedCollectionIds] = useState([]);
+  const [collectionSearchQuery, setCollectionSearchQuery] = useState('');
   const [showOnlySelectedCollections, setShowOnlySelectedCollections] = useState(false);
   const [excludeArchived, setExcludeArchived] = useState(true);
   const [excludeDraft, setExcludeDraft] = useState(true);
   const [excludeOutOfStock, setExcludeOutOfStock] = useState(false);
   const [showOnlySelected, setShowOnlySelected] = useState(false);
+  const [manualUpsellRules, setManualUpsellRules] = useState([]);
+  const [currentUpsellRule, setCurrentUpsellRule] = useState(null);
+  const [upsellPickerMode, setUpsellPickerMode] = useState(null);
+  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
+  const [showManualUpsellModal, setShowManualUpsellModal] = useState(false);
+  const [useAIUpsells, setUseAIUpsells] = useState(false);
   const [upsellSettings, setUpsellSettings] = useState({
     enabled: true,
     ruleType: 'MANUAL',
@@ -678,6 +714,210 @@ export default function CartDrawerAdmin() {
         return <Badge tone="info">DRAFT</Badge>;
       default:
         return null;
+    }
+  };
+
+  // ==========================================
+  // UPSELL HANDLERS
+  // ==========================================
+  const updateUpsellConfig = (key, value) => {
+    setUpsellConfig(prev => ({ ...prev, [key]: value }));
+  };
+
+  const updateUpsellTitleText = (text) => {
+    setUpsellConfig(prev => ({
+      ...prev,
+      upsellTitle: { ...prev.upsellTitle, text },
+    }));
+  };
+
+  const updateUpsellTitleFormatting = (formatType) => {
+    setUpsellConfig(prev => ({
+      ...prev,
+      upsellTitle: {
+        ...prev.upsellTitle,
+        formatting: {
+          ...prev.upsellTitle.formatting,
+          [formatType]: !prev.upsellTitle.formatting[formatType],
+        },
+      },
+    }));
+  };
+
+  const updateTitleStyle = (key, value) => {
+    setUpsellConfig(prev => ({
+      ...prev,
+      titleStyle: { ...prev.titleStyle, [key]: value },
+    }));
+  };
+
+  // Handle mode change - mutually exclusive
+  const handleModeChange = (mode) => {
+    console.log('[Upsell] Mode changed to:', mode, '| shopId:', SHOP_ID);
+    setUpsellConfig(prev => ({ ...prev, upsellMode: mode }));
+  };
+
+  // Manual Rules Management
+  const addManualRule = () => {
+    const newRule = {
+      ruleId: `rule-${Date.now()}`,
+      triggerType: 'all_products', // 'all_products' or 'triggered_products'
+      triggerItems: { products: [], collections: [] },
+      upsellItems: { products: [], collections: [] },
+    };
+    setUpsellConfig(prev => ({
+      ...prev,
+      manualRules: [...prev.manualRules, newRule],
+    }));
+  };
+
+  const updateManualRule = (ruleId, updates) => {
+    setUpsellConfig(prev => ({
+      ...prev,
+      manualRules: prev.manualRules.map(rule =>
+        rule.ruleId === ruleId ? { ...rule, ...updates } : rule
+      ),
+    }));
+  };
+
+  const deleteManualRule = (ruleId) => {
+    setUpsellConfig(prev => ({
+      ...prev,
+      manualRules: prev.manualRules.filter(rule => rule.ruleId !== ruleId),
+    }));
+  };
+
+  // Carousel navigation
+  const handleCarouselScroll = (direction) => {
+    if (carouselRef.current) {
+      const scrollAmount = 250;
+      const newPosition = direction === 'left' 
+        ? carouselRef.current.scrollLeft - scrollAmount
+        : carouselRef.current.scrollLeft + scrollAmount;
+      carouselRef.current.scrollTo({ left: newPosition, behavior: 'smooth' });
+    }
+  };
+
+  const handleOpenTriggeredProductsModal = (ruleId) => {
+    const rule = upsellConfig.manualRules?.find(r => r.ruleId === ruleId);
+    if (rule) {
+      setCurrentUpsellRule(ruleId);
+      setModalActiveTab('products');
+      setSelectedProductIds(rule.triggerItems?.products || []);
+      setSelectedCollectionIds(rule.triggerItems?.collections || []);
+      setShowTriggeredProductsModal(true);
+    }
+  };
+
+  const handleOpenUpsellProductsModal = (ruleId) => {
+    const rule = upsellConfig.manualRules?.find(r => r.ruleId === ruleId);
+    if (rule) {
+      setCurrentUpsellRule(ruleId);
+      setModalActiveTab('products');
+      setSelectedProductIds(rule.upsellItems?.products || []);
+      setSelectedCollectionIds(rule.upsellItems?.collections || []);
+      setShowUpsellProductsModal(true);
+    }
+  };
+
+  const handleSaveTriggeredProducts = () => {
+    if (currentUpsellRule) {
+      updateManualRule(currentUpsellRule, {
+        triggerItems: {
+          products: selectedProductIds,
+          collections: selectedCollectionIds,
+        },
+      });
+    }
+    setShowTriggeredProductsModal(false);
+    setCurrentUpsellRule(null);
+    setSelectedProductIds([]);
+    setSelectedCollectionIds([]);
+    setProductSearchQuery('');
+    setCollectionSearchQuery('');
+  };
+
+  const handleSaveUpsellProducts = () => {
+    if (currentUpsellRule) {
+      updateManualRule(currentUpsellRule, {
+        upsellItems: {
+          products: selectedProductIds,
+          collections: selectedCollectionIds,
+        },
+      });
+    }
+    setShowUpsellProductsModal(false);
+    setCurrentUpsellRule(null);
+    setSelectedProductIds([]);
+    setSelectedCollectionIds([]);
+    setProductSearchQuery('');
+    setCollectionSearchQuery('');
+  };
+
+  const handleSaveUpsellConfig = async () => {
+    setIsSaving(true);
+    
+    console.log('[Upsell] Saving config for shopId:', SHOP_ID, upsellConfig);
+    
+    try {
+      const response = await fetch(`/api/cart-settings/upsell?shopId=${encodeURIComponent(SHOP_ID)}`, {
+        method: 'POST',
+        headers: {
+          'X-Shop-ID': SHOP_ID,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(upsellConfig),
+      });
+      
+      const result = await response.json();
+      console.log('[Upsell] Save response:', result, '| shopId:', result.shopId);
+      
+      await new Promise(resolve => setTimeout(resolve, 600));
+      setSaveToastMessage(`Upsell settings saved for ${SHOP_ID}`);
+      setShowSaveToast(true);
+    } catch (error) {
+      console.error('[Upsell] Save failed:', error);
+      setSaveToastMessage('Save failed');
+      setShowSaveToast(true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelUpsellConfig = async () => {
+    // Fetch last saved config from API
+    console.log('[Upsell] Canceling, fetching last saved config for shopId:', SHOP_ID);
+    try {
+      const response = await fetch(`/api/cart-settings/upsell?shopId=${encodeURIComponent(SHOP_ID)}`, {
+        headers: {
+          'X-Shop-ID': SHOP_ID,
+        },
+      });
+      const data = await response.json();
+      console.log('[Upsell] Restored config:', data, '| shopId:', data.shopId);
+      setUpsellConfig(data.config || {
+        enabled: true,
+        showOnEmptyCart: false,
+        upsellMode: 'manual',
+        aiRecommendationType: 'related',
+        manualRules: [],
+        upsellTitle: {
+          text: 'Recommended for you',
+          formatting: { bold: false, italic: false, underline: false },
+        },
+        titleStyle: {
+          color: '#1A1A1A',
+          size: 'medium',
+          align: 'left',
+        },
+        buttonStyle: 'box',
+        position: 'bottom',
+        layout: 'grid',
+        alignment: 'horizontal',
+        showProductReviews: false,
+      });
+    } catch (error) {
+      console.error('[Upsell] Cancel/restore failed:', error);
     }
   };
 
@@ -1671,137 +1911,468 @@ export default function CartDrawerAdmin() {
 
     // Upsell Products Editor
     if (selectedTab === 'upsell') {
+      // Helper to apply title formatting dynamically
+      const getTitleStyle = () => {
+        const styles = {};
+        if (upsellConfig.upsellTitle?.formatting?.bold) styles.fontWeight = 'bold';
+        if (upsellConfig.upsellTitle?.formatting?.italic) styles.fontStyle = 'italic';
+        if (upsellConfig.upsellTitle?.formatting?.underline) styles.textDecoration = 'underline';
+        return styles;
+      };
+
+      // Helper to get font size
+      const getFontSize = () => {
+        const sizes = { small: '12px', medium: '14px', large: '16px' };
+        return sizes[upsellConfig.titleStyle?.size] || '14px';
+      };
+
       return (
         <div style={{ padding: '20px', height: '100%', overflowY: 'auto' }}>
           <BlockStack gap="400">
+            {/* Header with shopId indicator */}
             <InlineStack align="space-between" blockAlign="center">
-              <Text variant="headingLg" as="h1">Upsell Products Settings</Text>
+              <div>
+                <Text variant="headingLg" as="h1">Upsell Settings</Text>
+                <Text variant="bodySm" tone="subdued">Shop: {SHOP_ID}</Text>
+              </div>
               <Button
-                variant={featureStates.upsellEnabled ? 'primary' : 'secondary'}
-                onClick={() => toggleFeature('upsellEnabled')}
+                variant={upsellConfig.enabled ? 'primary' : 'secondary'}
+                onClick={() => updateUpsellConfig('enabled', !upsellConfig.enabled)}
               >
-                {featureStates.upsellEnabled ? 'Enabled' : 'Disabled'}
+                {upsellConfig.enabled ? 'Enabled' : 'Disabled'}
               </Button>
             </InlineStack>
 
-            {/* Select Product Section */}
+            {/* Top Controls */}
             <Card>
               <BlockStack gap="300">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text variant="headingMd" as="h2">Select Product</Text>
-                  <Badge tone={useAIUpsells ? 'info' : 'success'}>
-                    {useAIUpsells ? 'AI' : 'Manual'}
-                  </Badge>
-                </InlineStack>
+                <Text variant="headingMd" as="h2">Top Controls</Text>
+                
+                <Checkbox
+                  label="Show upsell on empty cart"
+                  checked={upsellConfig.showOnEmptyCart}
+                  onChange={(value) => updateUpsellConfig('showOnEmptyCart', value)}
+                  helpText="Display upsell recommendations even when cart is empty"
+                />
+              </BlockStack>
+            </Card>
 
-                <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}>
-                  <BlockStack gap="200">
-                    <Checkbox
-                      label="Use AI recommended upsells"
-                      checked={useAIUpsells}
-                      onChange={setUseAIUpsells}
-                    />
-                    <Text tone="subdued" as="p" variant="bodySm">
-                      Enable AI to auto-select upsells. Turn off to configure manual rules.
-                    </Text>
-                  </BlockStack>
+            {/* Recommendation Type - MUTUALLY EXCLUSIVE */}
+            <Card>
+              <BlockStack gap="300">
+                <Text variant="headingMd" as="h2">Recommendation Type (Choose One)</Text>
+                <Text variant="bodySm" tone="subdued">Only one mode can be active at a time</Text>
+                
+                <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                  <ChoiceList
+                    title=""
+                    choices={[
+                      { 
+                        label: 'AI Recommendation', 
+                        value: 'ai',
+                        helpText: 'Automatically recommend related or complementary products',
+                      },
+                      { 
+                        label: 'Manual Upsell', 
+                        value: 'manual',
+                        helpText: 'Create custom rules to control which products to upsell',
+                      },
+                    ]}
+                    selected={[upsellConfig.upsellMode]}
+                    onChange={(value) => handleModeChange(value[0])}
+                  />
                 </div>
-
-                {!useAIUpsells && (
-                  <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#111827', color: '#fff' }}>
-                    <InlineStack align="space-between" blockAlign="center" gap="200">
-                      <Text as="span" fontWeight="semibold">Manual Upsell Rules</Text>
-                      <Button
-                        variant="primary"
-                        onClick={() => setShowManualUpsellModal(true)}
-                        size="large"
-                      >
-                        Configure Manual Upsells
-                      </Button>
-                    </InlineStack>
-                    {manualUpsellRules.length > 0 && (
-                      <Text as="p" variant="bodySm" tone="subdued" style={{ marginTop: '8px', color: '#d1d5db' }}>
-                        {manualUpsellRules.length} rule{manualUpsellRules.length !== 1 ? 's' : ''} configured
-                      </Text>
-                    )}
+                
+                {/* AI Options - Only shown when AI mode is active */}
+                {upsellConfig.upsellMode === 'ai' && (
+                  <div style={{ padding: '16px', backgroundColor: '#f0f7ff', borderRadius: '8px', border: '1px solid #2c6ecb' }}>
+                    <BlockStack gap="300">
+                      <Text variant="bodyMd" fontWeight="semibold">AI Recommendation Type</Text>
+                      <ChoiceList
+                        title=""
+                        choices={[
+                          { label: 'Related Products', value: 'related', helpText: 'Similar products in same category' },
+                          { label: 'Complementary Products', value: 'complementary', helpText: 'Products that go well together' },
+                        ]}
+                        selected={[upsellConfig.aiRecommendationType]}
+                        onChange={(value) => updateUpsellConfig('aiRecommendationType', value[0])}
+                      />
+                    </BlockStack>
                   </div>
                 )}
               </BlockStack>
             </Card>
 
-            {/* Basic Settings */}
+            {/* Manual Upsell Configuration - Rules Based */}
+            {upsellConfig.upsellMode === 'manual' && (
+              <Card>
+                <BlockStack gap="400">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text variant="headingMd" as="h2">Manual Upsell Rules</Text>
+                    <Button onClick={addManualRule} variant="primary">
+                      + Add Rule
+                    </Button>
+                  </InlineStack>
+                  
+                  <div style={{ padding: '12px', backgroundColor: '#fef3c7', borderRadius: '6px', border: '1px solid #f59e0b' }}>
+                    <Text variant="bodySm" fontWeight="semibold" as="p" tone="caution">Rule Priority System:</Text>
+                    <Text variant="bodySm" as="p" tone="subdued">
+                      • <strong>Triggered Product</strong> rules are evaluated first (higher priority)<br/>
+                      • <strong>All Products</strong> rules act as fallback when no Triggered rules match<br/>
+                      • If any Triggered rule matches cart items, only those upsells are shown<br/>
+                      • All Products upsells are shown only when no Triggered rules match
+                    </Text>
+                  </div>
+
+                  {/* Display existing rules */}
+                  {upsellConfig.manualRules && upsellConfig.manualRules.length > 0 ? (
+                    <BlockStack gap="300">
+                      {upsellConfig.manualRules.map((rule, index) => (
+                        <div
+                          key={rule.ruleId}
+                          style={{
+                            padding: '16px',
+                            backgroundColor: '#f9fafb',
+                            borderRadius: '8px',
+                            border: '1px solid #e5e7eb',
+                          }}
+                        >
+                          <BlockStack gap="300">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Text variant="bodyMd" fontWeight="semibold">Rule #{index + 1}</Text>
+                                {rule.triggerType === 'all_products' ? (
+                                  <Badge tone="attention">All Products</Badge>
+                                ) : (
+                                  <Badge tone="info">Triggered Products</Badge>
+                                )}
+                              </div>
+                              <Button
+                                onClick={() => deleteManualRule(rule.ruleId)}
+                                tone="critical"
+                                size="slim"
+                              >
+                                Delete
+                              </Button>
+                            </InlineStack>
+
+                            {/* Trigger Type Selection */}
+                            <div>
+                              <Text as="label" variant="bodySm" fontWeight="semibold">Trigger Type</Text>
+                              <div style={{ marginTop: '8px' }}>
+                                <ChoiceList
+                                  title=""
+                                  choices={[
+                                    { label: 'All Products', value: 'all_products', helpText: 'Fallback rule - Shows upsells only when no Triggered rules match' },
+                                    { label: 'Triggered Products', value: 'triggered_products', helpText: 'Higher priority - Shows upsells when specific products are in cart' },
+                                  ]}
+                                  selected={[rule.triggerType]}
+                                  onChange={(value) => updateManualRule(rule.ruleId, { triggerType: value[0] })}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Triggered Products/Collections Section */}
+                            {rule.triggerType === 'triggered_products' && (
+                              <div style={{ padding: '12px', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #d1d5db' }}>
+                                <BlockStack gap="200">
+                                  <InlineStack align="space-between" blockAlign="center">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                      <Badge tone="info">Trigger</Badge>
+                                      <Text variant="bodySm" fontWeight="semibold">When these items are in cart</Text>
+                                    </div>
+                                      <Button onClick={() => handleOpenTriggeredProductsModal(rule.ruleId)} size="slim">
+                                      {((rule.triggerItems?.products?.length || 0) + (rule.triggerItems?.collections?.length || 0)) > 0
+                                        ? `${(rule.triggerItems?.products?.length || 0) + (rule.triggerItems?.collections?.length || 0)} Selected`
+                                        : 'Select Trigger Items'}
+                                    </Button>
+                                  </InlineStack>
+
+                                  {/* Display selected trigger products */}
+                                  {rule.triggerItems?.products && rule.triggerItems.products.length > 0 && (
+                                    <div>
+                                      <Text variant="bodySm" tone="subdued">Trigger Products:</Text>
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                                        {rule.triggerItems.products.map(productId => {
+                                          const product = shopifyProducts.find(p => p.id === productId);
+                                          if (!product) return null;
+                                          return (
+                                            <div
+                                              key={productId}
+                                              style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                padding: '4px 8px',
+                                                backgroundColor: '#eff6ff',
+                                                borderRadius: '4px',
+                                                border: '1px solid #3b82f6',
+                                                fontSize: '11px',
+                                              }}
+                                            >
+                                              <span>{product.image}</span>
+                                              <span>{product.title}</span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Display selected trigger collections */}
+                                  {rule.triggerItems?.collections && rule.triggerItems.collections.length > 0 && (
+                                    <div>
+                                      <Text variant="bodySm" tone="subdued">Trigger Collections:</Text>
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                                        {rule.triggerItems.collections.map(collectionId => {
+                                          const collection = mockCollections.find(c => c.id === collectionId);
+                                          if (!collection) return null;
+                                          return (
+                                            <div
+                                              key={collectionId}
+                                              style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                padding: '4px 8px',
+                                                backgroundColor: '#eff6ff',
+                                                borderRadius: '4px',
+                                                border: '1px solid #3b82f6',
+                                                fontSize: '11px',
+                                              }}
+                                            >
+                                              <span>🏷️</span>
+                                              <span>{collection.title}</span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+                                </BlockStack>
+                              </div>
+                            )}
+
+                            {/* Upsell Products Section for this Rule */}
+                            <div style={{ padding: '12px', backgroundColor: '#f0fdf4', borderRadius: '6px', border: '1px solid #10b981' }}>
+                              <BlockStack gap="200">
+                                <InlineStack align="space-between" blockAlign="center">
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <Badge tone="success">Upsell</Badge>
+                                    <Text variant="bodySm" fontWeight="semibold">Show these products</Text>
+                                  </div>
+                                  <Button onClick={() => handleOpenUpsellProductsModal(rule.ruleId)} variant="primary" size="slim">
+                                    {(rule.upsellItems?.products?.length || 0) > 0
+                                      ? `${rule.upsellItems.products.length} Selected`
+                                      : 'Add Upsell Products'}
+                                  </Button>
+                                </InlineStack>
+
+                                {rule.upsellItems?.products && rule.upsellItems.products.length > 0 ? (
+                                  <div>
+                                    <Text variant="bodySm" tone="subdued">Upsell Products:</Text>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                                      {rule.upsellItems.products.map(productId => {
+                                        const product = shopifyProducts.find(p => p.id === productId);
+                                        if (!product) return null;
+                                        return (
+                                          <div
+                                            key={productId}
+                                            style={{
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              padding: '4px 8px',
+                                              backgroundColor: '#fff',
+                                              borderRadius: '4px',
+                                              border: '1px solid #10b981',
+                                              fontSize: '11px',
+                                            }}
+                                          >
+                                            <span>{product.image}</span>
+                                            <span style={{ fontWeight: '500' }}>{product.title}</span>
+                                            <span style={{ color: '#6b7280' }}>₹{product.price}</span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <Text variant="bodySm" tone="subdued">No upsell products selected yet</Text>
+                                )}
+                              </BlockStack>
+                            </div>
+                          </BlockStack>
+                        </div>
+                      ))}
+                    </BlockStack>
+                  ) : (
+                    <div style={{ padding: '40px', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px dashed #d1d5db' }}>
+                      <Text variant="bodyMd" tone="subdued">
+                        No rules created yet. Click "Add Rule" to create your first upsell rule.
+                      </Text>
+                    </div>
+                  )}
+                </BlockStack>
+              </Card>
+            )}
+
+            {/* Upsell Content & Design */}
             <Card>
-              <BlockStack gap="300">
-                <Text variant="headingSm" as="h3">Basic Configuration</Text>
-
+              <BlockStack gap="400">
+                <Text variant="headingMd" as="h2">Upsell Content & Design</Text>
+                
+                {/* Rich Text Title */}
                 <BlockStack gap="200">
+                  <InlineStack align="space-between" blockAlign="center">
+                    <Text as="label" variant="bodyMd" fontWeight="semibold">Upsell Title</Text>
+                    <InlineStack gap="100">
+                      <button
+                        onClick={() => updateUpsellTitleFormatting('bold')}
+                        style={{
+                          padding: '6px 10px',
+                          border: `2px solid ${upsellConfig.upsellTitle?.formatting?.bold ? '#2c6ecb' : '#d1d5db'}`,
+                          borderRadius: '4px',
+                          backgroundColor: upsellConfig.upsellTitle?.formatting?.bold ? '#f0f7ff' : '#fff',
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '13px',
+                        }}
+                      >
+                        B
+                      </button>
+                      <button
+                        onClick={() => updateUpsellTitleFormatting('italic')}
+                        style={{
+                          padding: '6px 10px',
+                          border: `2px solid ${upsellConfig.upsellTitle?.formatting?.italic ? '#2c6ecb' : '#d1d5db'}`,
+                          borderRadius: '4px',
+                          backgroundColor: upsellConfig.upsellTitle?.formatting?.italic ? '#f0f7ff' : '#fff',
+                          cursor: 'pointer',
+                          fontStyle: 'italic',
+                          fontSize: '13px',
+                        }}
+                      >
+                        I
+                      </button>
+                      <button
+                        onClick={() => updateUpsellTitleFormatting('underline')}
+                        style={{
+                          padding: '6px 10px',
+                          border: `2px solid ${upsellConfig.upsellTitle?.formatting?.underline ? '#2c6ecb' : '#d1d5db'}`,
+                          borderRadius: '4px',
+                          backgroundColor: upsellConfig.upsellTitle?.formatting?.underline ? '#f0f7ff' : '#fff',
+                          cursor: 'pointer',
+                          textDecoration: 'underline',
+                          fontSize: '13px',
+                        }}
+                      >
+                        U
+                      </button>
+                    </InlineStack>
+                  </InlineStack>
                   <TextField
-                    label="Section Title"
-                    value={upsellSettings.ui?.title || 'Recommended for you'}
-                    onChange={(value) => {
-                      handleApiUpdate('/api/upsell', {
-                        ...upsellSettings,
-                        ui: {
-                          ...upsellSettings.ui,
-                          title: value,
-                        },
-                      });
-                    }}
+                    value={upsellConfig.upsellTitle?.text || ''}
+                    onChange={(value) => updateUpsellTitleText(value)}
+                    autoComplete="off"
                   />
+                  <div style={{ padding: '8px 12px', backgroundColor: '#f9fafb', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
+                    <Text as="p" variant="bodySm" style={getTitleStyle()}>
+                      Preview: {upsellConfig.upsellTitle?.text || 'Recommended for you'}
+                    </Text>
+                  </div>
                 </BlockStack>
 
+                {/* Button Style */}
                 <BlockStack gap="200">
-                  <Text as="label" variant="bodySm" fontWeight="semibold">Layout</Text>
-                  <Select
-                    label=""
-                    options={[
-                      { label: 'Slider (Horizontal Scroll)', value: 'slider' },
-                      { label: 'Grid (2x2)', value: 'grid' },
-                      { label: 'List (Vertical)', value: 'list' },
+                  <Text as="label" variant="bodyMd" fontWeight="semibold">Add to cart button style</Text>
+                  <ChoiceList
+                    title=""
+                    choices={[
+                      { label: 'Box', value: 'box' },
+                      { label: 'Circle', value: 'circle' },
                     ]}
-                    value={upsellSettings.ui?.layout || 'slider'}
-                    onChange={(value) => {
-                      handleApiUpdate('/api/upsell', {
-                        ...upsellSettings,
-                        ui: {
-                          ...upsellSettings.ui,
-                          layout: value,
-                        },
-                      });
-                    }}
+                    selected={[upsellConfig.buttonStyle]}
+                    onChange={(value) => updateUpsellConfig('buttonStyle', value[0])}
                   />
                 </BlockStack>
 
+                {/* Position */}
                 <BlockStack gap="200">
-                  <TextField
-                    label="Button Text"
-                    value={upsellSettings.ui?.buttonText || 'Add to Cart'}
+                  <Text as="label" variant="bodyMd" fontWeight="semibold">Position</Text>
+                  <ChoiceList
+                    title=""
+                    choices={[
+                      { label: 'Top of cart items', value: 'top' },
+                      { label: 'Bottom of cart items', value: 'bottom' },
+                    ]}
+                    selected={[upsellConfig.position]}
+                    onChange={(value) => updateUpsellConfig('position', value[0])}
+                  />
+                </BlockStack>
+
+                {/* Layout */}
+                <BlockStack gap="200">
+                  <Text as="label" variant="bodyMd" fontWeight="semibold">Layout</Text>
+                  <ChoiceList
+                    title=""
+                    choices={[
+                      { label: 'Grid', value: 'grid' },
+                      { label: 'Carousel', value: 'carousel' },
+                    ]}
+                    selected={[upsellConfig.layout]}
+                    onChange={(value) => updateUpsellConfig('layout', value[0])}
+                  />
+                </BlockStack>
+
+                {/* Alignment */}
+                <BlockStack gap="200">
+                  <Text as="label" variant="bodyMd" fontWeight="semibold">Alignment</Text>
+                  <ChoiceList
+                    title=""
+                    choices={[
+                      { label: 'Horizontal', value: 'horizontal' },
+                      { label: 'Vertical', value: 'vertical' },
+                    ]}
+                    selected={[upsellConfig.alignment]}
                     onChange={(value) => {
-                      handleApiUpdate('/api/upsell', {
-                        ...upsellSettings,
-                        ui: {
-                          ...upsellSettings.ui,
-                          buttonText: value,
-                        },
-                      });
+                      updateUpsellConfig('alignment', value[0]);
+                      // Show navigation arrows only for horizontal
+                      if (value[0] === 'vertical') {
+                        updateUpsellConfig('showNavigationArrows', false);
+                      } else {
+                        updateUpsellConfig('showNavigationArrows', true);
+                      }
                     }}
                   />
                 </BlockStack>
 
+                {/* Navigation Arrows (only for horizontal) */}
+                {upsellConfig.alignment === 'horizontal' && (
+                  <Checkbox
+                    label="Show left/right navigation arrows"
+                    checked={upsellConfig.showNavigationArrows}
+                    onChange={(value) => updateUpsellConfig('showNavigationArrows', value)}
+                  />
+                )}
+
+                {/* Product Reviews */}
                 <Checkbox
-                  label="Show Product Price"
-                  checked={upsellSettings.ui?.showPrice ?? true}
-                  onChange={(value) => {
-                    handleApiUpdate('/api/upsell', {
-                      ...upsellSettings,
-                      ui: {
-                        ...upsellSettings.ui,
-                        showPrice: value,
-                      },
-                    });
-                  }}
+                  label="Show product reviews"
+                  checked={upsellConfig.showProductReviews}
+                  onChange={(value) => updateUpsellConfig('showProductReviews', value)}
                 />
               </BlockStack>
+            </Card>
+
+            {/* Actions */}
+            <Card>
+              <InlineStack align="end" gap="200">
+                <Button onClick={handleCancelUpsellConfig} disabled={isSaving}>Cancel</Button>
+                <Button variant="primary" onClick={handleSaveUpsellConfig} loading={isSaving} disabled={isSaving}>
+                  Save Configuration
+                </Button>
+              </InlineStack>
             </Card>
           </BlockStack>
         </div>
@@ -1966,55 +2537,179 @@ export default function CartDrawerAdmin() {
             )}
 
             {/* Upsell Recommendations */}
-            {featureStates.upsellEnabled && !showEmpty && recommendedProducts.length > 0 && (
-              <div style={{ padding: '12px', border: '1px solid #e5e7eb', borderRadius: '8px', backgroundColor: '#f9fafb' }}>
-                <p style={{ margin: '0 0 10px 0', fontSize: '12px', fontWeight: '700', color: '#111' }}>
-                  {upsellSettings.ui?.title || 'Recommended for you'}
-                </p>
+            {upsellConfig.enabled && (!showEmpty || upsellConfig.showOnEmptyCart) && (() => {
+              // Get upsell products based on mode with priority system
+              let productsToShow = [];
+              
+              if (upsellConfig.upsellMode === 'manual' && upsellConfig.manualRules && upsellConfig.manualRules.length > 0) {
+                const cartProductIds = mockCartItems.map(item => item.productId).filter(Boolean);
+                console.log('[Upsell Preview] Cart Product IDs:', cartProductIds);
+                
+                // PRIORITY 1: Check Triggered Product rules first
+                const triggeredUpsells = new Set();
+                const allProductsUpsells = new Set();
+                
+                for (const rule of upsellConfig.manualRules) {
+                  if (rule.triggerType === 'triggered_products') {
+                    // Check if any cart product matches trigger products
+                    const hasMatch = rule.triggerItems?.products?.some(pid => cartProductIds.includes(pid));
+                    console.log('[Upsell Preview] Triggered Rule Check:', {
+                      ruleId: rule.ruleId,
+                      triggerProducts: rule.triggerItems?.products,
+                      hasMatch,
+                      upsellProducts: rule.upsellItems?.products
+                    });
+                    if (hasMatch && rule.upsellItems?.products) {
+                      rule.upsellItems.products.forEach(pid => triggeredUpsells.add(pid));
+                    }
+                  } else if (rule.triggerType === 'all_products') {
+                    // Collect All Products upsells as fallback
+                    console.log('[Upsell Preview] All Products Rule:', {
+                      ruleId: rule.ruleId,
+                      upsellProducts: rule.upsellItems?.products
+                    });
+                    if (rule.upsellItems?.products) {
+                      rule.upsellItems.products.forEach(pid => allProductsUpsells.add(pid));
+                    }
+                  }
+                }
+                
+                console.log('[Upsell Preview] Results:', {
+                  triggeredUpsellsCount: triggeredUpsells.size,
+                  allProductsUpsellsCount: allProductsUpsells.size,
+                  triggeredUpsells: Array.from(triggeredUpsells),
+                  allProductsUpsells: Array.from(allProductsUpsells)
+                });
+                
+                // PRIORITY 2: Use Triggered upsells if any matched, otherwise use All Products as fallback
+                if (triggeredUpsells.size > 0) {
+                  productsToShow = Array.from(triggeredUpsells);
+                  console.log('[Upsell Preview] Showing TRIGGERED upsells:', productsToShow);
+                } else {
+                  productsToShow = Array.from(allProductsUpsells);
+                  console.log('[Upsell Preview] Showing ALL PRODUCTS upsells (fallback):', productsToShow);
+                }
+              } else if (upsellConfig.upsellMode === 'ai') {
+                // For AI mode, show some default products
+                productsToShow = ['sp-2', 'sp-6', 'sp-8'];
+              }
+              
+              if (productsToShow.length === 0) return null;
+              
+              return (
                 <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: upsellSettings.ui?.layout === 'grid' ? 'repeat(2, 1fr)' : '1fr',
-                  gap: '8px',
-                  overflowX: upsellSettings.ui?.layout === 'slider' ? 'auto' : 'visible',
-                  whiteSpace: upsellSettings.ui?.layout === 'slider' ? 'nowrap' : 'normal',
+                  padding: '12px',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  backgroundColor: '#f9fafb',
+                  order: upsellConfig.position === 'top' ? -1 : 999,
                 }}>
-                  {recommendedProducts.map(product => (
-                    <div key={product.id} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '10px',
-                      backgroundColor: '#fff',
-                      borderRadius: '8px',
-                      border: '1px solid #e5e7eb',
-                      minWidth: upsellSettings.ui?.layout === 'slider' ? '220px' : 'auto',
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <p style={{
+                      margin: 0,
+                      fontSize: '12px',
+                      fontWeight: '700',
+                      color: upsellConfig.titleStyle?.color || '#111',
+                      textAlign: upsellConfig.titleStyle?.align || 'left',
+                      fontSize: (() => {
+                        const sizes = { small: '11px', medium: '12px', large: '14px' };
+                        return sizes[upsellConfig.titleStyle?.size] || '12px';
+                      })(),
+                      ...(() => {
+                        const styles = {};
+                        if (upsellConfig.upsellTitle?.formatting?.bold) styles.fontWeight = '700';
+                        if (upsellConfig.upsellTitle?.formatting?.italic) styles.fontStyle = 'italic';
+                        if (upsellConfig.upsellTitle?.formatting?.underline) styles.textDecoration = 'underline';
+                        return styles;
+                      })(),
                     }}>
-                      <div style={{ fontSize: '20px' }}>{product.image}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ margin: '0 0 4px 0', fontSize: '12px', fontWeight: '600', color: '#111' }}>
-                          {product.title}
-                        </p>
-                        {upsellSettings.ui?.showPrice && (
-                          <p style={{ margin: 0, fontSize: '11px', color: '#6b7280' }}>₹{product.price}</p>
-                        )}
+                      {upsellConfig.upsellTitle?.text || 'Recommended for you'}
+                    </p>
+                    {upsellConfig.layout === 'carousel' && upsellConfig.alignment === 'horizontal' && (
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button 
+                          onClick={() => handleCarouselScroll('left')}
+                          style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '4px',
+                            border: '1px solid #d1d5db',
+                            backgroundColor: '#fff',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                          }}>←</button>
+                        <button 
+                          onClick={() => handleCarouselScroll('right')}
+                          style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '4px',
+                            border: '1px solid #d1d5db',
+                            backgroundColor: '#fff',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                          }}>→</button>
                       </div>
-                      <button style={{
-                        padding: '6px 10px',
-                        fontSize: '11px',
-                        borderRadius: '6px',
-                        border: 'none',
-                        backgroundColor: upsellSettings.ui?.buttonColor || '#111',
-                        color: '#fff',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {upsellSettings.ui?.buttonText || 'Add to Cart'}
-                      </button>
-                    </div>
-                  ))}
+                    )}
+                  </div>
+                  <div 
+                    ref={carouselRef}
+                    style={{
+                      display: upsellConfig.layout === 'grid' ? 'grid' : 'flex',
+                      gridTemplateColumns: upsellConfig.layout === 'grid' ? (upsellConfig.alignment === 'horizontal' ? 'repeat(2, 1fr)' : '1fr') : undefined,
+                      flexDirection: upsellConfig.layout === 'carousel' ? (upsellConfig.alignment === 'horizontal' ? 'row' : 'column') : undefined,
+                      gap: '8px',
+                      overflowX: upsellConfig.layout === 'carousel' && upsellConfig.alignment === 'horizontal' ? 'auto' : 'visible',
+                      scrollBehavior: 'smooth',
+                    }}>
+                    {productsToShow.slice(0, 6).map(productId => {
+                      const product = shopifyProducts.find(p => p.id === productId);
+                      if (!product) return null;
+                      return (
+                        <div key={product.id} style={{
+                          display: 'flex',
+                          flexDirection: upsellConfig.alignment === 'horizontal' ? 'row' : 'column',
+                          alignItems: upsellConfig.alignment === 'horizontal' ? 'center' : 'flex-start',
+                          gap: '8px',
+                          padding: '10px',
+                          backgroundColor: '#fff',
+                          borderRadius: '8px',
+                          border: '1px solid #e5e7eb',
+                          minWidth: upsellConfig.layout === 'carousel' && upsellConfig.alignment === 'horizontal' ? '200px' : 'auto',
+                        }}>
+                          <div style={{ fontSize: '24px', flexShrink: 0 }}>{product.image}</div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ margin: '0 0 4px 0', fontSize: '12px', fontWeight: '600', color: '#111' }}>
+                              {product.title}
+                            </p>
+                            <p style={{ margin: 0, fontSize: '11px', color: '#6b7280' }}>₹{product.price}</p>
+                            {upsellConfig.showProductReviews && (
+                              <div style={{ display: 'flex', gap: '2px', marginTop: '4px', fontSize: '10px' }}>
+                                <span style={{ color: '#fbbf24' }}>★★★★☆</span>
+                                <span style={{ color: '#6b7280', fontSize: '10px' }}>(4.0)</span>
+                              </div>
+                            )}
+                          </div>
+                          <button style={{
+                            padding: upsellConfig.buttonStyle === 'circle' ? '8px' : '6px 10px',
+                            fontSize: '11px',
+                            borderRadius: upsellConfig.buttonStyle === 'circle' ? '50%' : '6px',
+                            border: 'none',
+                            backgroundColor: '#111',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                          }}>
+                            {upsellConfig.buttonStyle === 'circle' ? '+' : 'Add'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Coupon Feature */}
             {featureStates.couponSliderEnabled && allCoupons.length > 0 && (
@@ -2492,6 +3187,351 @@ export default function CartDrawerAdmin() {
                 </InlineStack>
               </Card>
             ))}
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+
+      {/* Triggered Products Modal */}
+      <Modal
+        open={showTriggeredProductsModal}
+        onClose={() => {
+          setShowTriggeredProductsModal(false);
+          setSelectedProductIds([]);
+          setSelectedCollectionIds([]);
+          setProductSearchQuery('');
+          setCollectionSearchQuery('');
+          setModalActiveTab('products');
+        }}
+        title="Select Triggered Products / Collections"
+        large
+        primaryAction={{
+          content: 'Save',
+          onAction: handleSaveTriggeredProducts,
+        }}
+        secondaryActions={[
+          {
+            content: 'Cancel',
+            onAction: () => {
+              setShowTriggeredProductsModal(false);
+              setSelectedProductIds([]);
+              setSelectedCollectionIds([]);
+              setProductSearchQuery('');
+              setCollectionSearchQuery('');
+              setModalActiveTab('products');
+            },
+          },
+        ]}
+      >
+        <Modal.Section>
+          <BlockStack gap="400">
+            {/* Tabs */}
+            <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid #e5e7eb' }}>
+              <button
+                onClick={() => setModalActiveTab('products')}
+                style={{
+                  padding: '10px 16px',
+                  border: 'none',
+                  background: 'transparent',
+                  borderBottom: modalActiveTab === 'products' ? '3px solid #2c6ecb' : '3px solid transparent',
+                  color: modalActiveTab === 'products' ? '#2c6ecb' : '#6b7280',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  marginBottom: '-2px',
+                }}
+              >
+                Select Product
+              </button>
+              <button
+                onClick={() => setModalActiveTab('collections')}
+                style={{
+                  padding: '10px 16px',
+                  border: 'none',
+                  background: 'transparent',
+                  borderBottom: modalActiveTab === 'collections' ? '3px solid #2c6ecb' : '3px solid transparent',
+                  color: modalActiveTab === 'collections' ? '#2c6ecb' : '#6b7280',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  fontSize: '14px',
+                  marginBottom: '-2px',
+                }}
+              >
+                Select Collection
+              </button>
+            </div>
+
+            {/* Products Tab */}
+            {modalActiveTab === 'products' && (
+              <BlockStack gap="300">
+                <TextField
+                  label=""
+                  placeholder="Search Products..."
+                  value={productSearchQuery}
+                  onChange={setProductSearchQuery}
+                  autoComplete="off"
+                />
+
+                <InlineStack gap="300" blockAlign="center" wrap={false}>
+                  <Checkbox
+                    label="Exclude archived"
+                    checked={excludeArchived}
+                    onChange={setExcludeArchived}
+                  />
+                  <Checkbox
+                    label="Exclude draft"
+                    checked={excludeDraft}
+                    onChange={setExcludeDraft}
+                  />
+                  <Checkbox
+                    label="Exclude out of stock"
+                    checked={excludeOutOfStock}
+                    onChange={setExcludeOutOfStock}
+                  />
+                </InlineStack>
+
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="span" tone="subdued">{selectedProductIds.length} product{selectedProductIds.length !== 1 ? 's' : ''} selected</Text>
+                  <Checkbox
+                    label="Show only selected"
+                    checked={showOnlySelected}
+                    onChange={setShowOnlySelected}
+                  />
+                </InlineStack>
+
+                <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
+                  {filteredProducts.map((product) => (
+                    <div
+                      key={product.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '12px',
+                        borderBottom: '1px solid #e5e7eb',
+                        backgroundColor: selectedProductIds.includes(product.id) ? '#f0f9ff' : '#fff',
+                      }}
+                    >
+                      <Checkbox
+                        checked={selectedProductIds.includes(product.id)}
+                        onChange={() => toggleProductSelection(product.id)}
+                      />
+                      <div style={{ marginLeft: '12px', flex: 1 }}>
+                        <InlineStack align="space-between" blockAlign="start">
+                          <BlockStack gap="100">
+                            <Text variant="bodyMd" fontWeight="semibold">{product.image} {product.title}</Text>
+                            <Text as="span" tone="subdued" variant="bodySm">{product.variants} variant{product.variants !== 1 ? 's' : ''}</Text>
+                          </BlockStack>
+                          <InlineStack gap="200" blockAlign="center">
+                            {getStatusBadge(product.status)}
+                            <Text variant="bodyMd" fontWeight="semibold">${product.price}</Text>
+                          </InlineStack>
+                        </InlineStack>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {filteredProducts.length === 0 && (
+                  <Text as="p" tone="subdued" alignment="center">No products found</Text>
+                )}
+              </BlockStack>
+            )}
+
+            {/* Collections Tab */}
+            {modalActiveTab === 'collections' && (
+              <BlockStack gap="300">
+                <TextField
+                  label=""
+                  placeholder="Search Collections..."
+                  value={collectionSearchQuery}
+                  onChange={setCollectionSearchQuery}
+                  autoComplete="off"
+                />
+
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text as="span" tone="subdued">{selectedCollectionIds.length} collection{selectedCollectionIds.length !== 1 ? 's' : ''} selected</Text>
+                  <Checkbox
+                    label="Show only selected"
+                    checked={showOnlySelectedCollections}
+                    onChange={setShowOnlySelectedCollections}
+                  />
+                </InlineStack>
+
+                <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
+                  {filteredCollections.map((collection) => (
+                    <div
+                      key={collection.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '12px',
+                        borderBottom: '1px solid #e5e7eb',
+                        backgroundColor: selectedCollectionIds.includes(collection.id) ? '#f0f9ff' : '#fff',
+                      }}
+                    >
+                      <Checkbox
+                        checked={selectedCollectionIds.includes(collection.id)}
+                        onChange={() => toggleCollectionSelection(collection.id)}
+                        label={`🏷️ ${collection.title}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </BlockStack>
+            )}
+
+            {/* Common Selected Items Box */}
+            {(selectedProductIds.length > 0 || selectedCollectionIds.length > 0) && (
+              <div style={{ padding: '12px', backgroundColor: '#f0f7ff', borderRadius: '6px', border: '1px solid #2c6ecb' }}>
+                <Text variant="bodyMd" fontWeight="semibold">Selected Items ({selectedProductIds.length + selectedCollectionIds.length})</Text>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                  {selectedProductIds.map(productId => {
+                    const product = shopifyProducts.find(p => p.id === productId);
+                    if (!product) return null;
+                    return (
+                      <div
+                        key={productId}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '4px 8px',
+                          backgroundColor: '#fff',
+                          borderRadius: '4px',
+                          border: '1px solid #2c6ecb',
+                          fontSize: '12px',
+                        }}
+                      >
+                        <span>{product.image}</span>
+                        <span>{product.title}</span>
+                      </div>
+                    );
+                  })}
+                  {selectedCollectionIds.map(collectionId => {
+                    const collection = mockCollections.find(c => c.id === collectionId);
+                    if (!collection) return null;
+                    return (
+                      <div
+                        key={collectionId}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '4px 8px',
+                          backgroundColor: '#fff',
+                          borderRadius: '4px',
+                          border: '1px solid #2c6ecb',
+                          fontSize: '12px',
+                        }}
+                      >
+                        <span>🏷️</span>
+                        <span>{collection.title}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </BlockStack>
+        </Modal.Section>
+      </Modal>
+
+      {/* Upsell Products Modal */}
+      <Modal
+        open={showUpsellProductsModal}
+        onClose={() => {
+          setShowUpsellProductsModal(false);
+          setSelectedProductIds([]);
+          setProductSearchQuery('');
+        }}
+        title="Select Upsell Products"
+        large
+        primaryAction={{
+          content: 'Save',
+          onAction: handleSaveUpsellProducts,
+        }}
+        secondaryActions={[
+          {
+            content: 'Cancel',
+            onAction: () => {
+              setShowUpsellProductsModal(false);
+              setSelectedProductIds([]);
+              setProductSearchQuery('');
+            },
+          },
+        ]}
+      >
+        <Modal.Section>
+          <BlockStack gap="400">
+            <TextField
+              label=""
+              placeholder="Search Products..."
+              value={productSearchQuery}
+              onChange={setProductSearchQuery}
+              autoComplete="off"
+            />
+
+            <InlineStack gap="300" blockAlign="center" wrap={false}>
+              <Checkbox
+                label="Exclude archived"
+                checked={excludeArchived}
+                onChange={setExcludeArchived}
+              />
+              <Checkbox
+                label="Exclude draft"
+                checked={excludeDraft}
+                onChange={setExcludeDraft}
+              />
+              <Checkbox
+                label="Exclude out of stock"
+                checked={excludeOutOfStock}
+                onChange={setExcludeOutOfStock}
+              />
+            </InlineStack>
+
+            <InlineStack align="space-between" blockAlign="center">
+              <Text as="span" tone="subdued">{selectedProductIds.length} product{selectedProductIds.length !== 1 ? 's' : ''} selected</Text>
+              <Checkbox
+                label="Show only selected"
+                checked={showOnlySelected}
+                onChange={setShowOnlySelected}
+              />
+            </InlineStack>
+
+            <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
+              {filteredProducts.map((product) => (
+                <div
+                  key={product.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '12px',
+                    borderBottom: '1px solid #e5e7eb',
+                    backgroundColor: selectedProductIds.includes(product.id) ? '#f0f9ff' : '#fff',
+                  }}
+                >
+                  <Checkbox
+                    checked={selectedProductIds.includes(product.id)}
+                    onChange={() => toggleProductSelection(product.id)}
+                  />
+                  <div style={{ marginLeft: '12px', flex: 1 }}>
+                    <InlineStack align="space-between" blockAlign="start">
+                      <BlockStack gap="100">
+                        <Text variant="bodyMd" fontWeight="semibold">{product.image} {product.title}</Text>
+                        <Text as="span" tone="subdued" variant="bodySm">{product.variants} variant{product.variants !== 1 ? 's' : ''}</Text>
+                      </BlockStack>
+                      <InlineStack gap="200" blockAlign="center">
+                        {getStatusBadge(product.status)}
+                        <Text variant="bodyMd" fontWeight="semibold">${product.price}</Text>
+                      </InlineStack>
+                    </InlineStack>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {filteredProducts.length === 0 && (
+              <Text as="p" tone="subdued" alignment="center">No products found</Text>
+            )}
           </BlockStack>
         </Modal.Section>
       </Modal>
