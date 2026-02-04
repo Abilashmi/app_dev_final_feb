@@ -10,6 +10,7 @@ export const RULE_TYPES = {
   GLOBAL: 'GLOBAL',               // Show for all products (Rule 1)
   TRIGGERED: 'TRIGGERED',         // Show when specific products present (Rule 2)
   GLOBAL_EXCEPT: 'GLOBAL_EXCEPT', // Show for all except specific products (Rule 3)
+  CART_CONDITIONS: 'CART_CONDITIONS', // Show when cart value meets threshold (Rule 3)
 };
 
 /**
@@ -33,6 +34,12 @@ export const RULE_TYPE_OPTIONS = [
     label: 'Show upsell for all products except selected ones',
     description: 'Display upsells for everything except excluded products',
     helpText: 'Show for all products except when excluded items are in cart',
+  },
+  {
+    value: RULE_TYPES.CART_CONDITIONS,
+    label: 'Show upsell based on cart value',
+    description: 'Display upsells when cart total meets a threshold',
+    helpText: 'This rule has higher priority than the global fallback',
   },
 ];
 
@@ -119,36 +126,66 @@ export const SAMPLE_UPSELL_PRODUCTS = [
  * Default upsell configuration
  */
 export const DEFAULT_UPSELL_CONFIG = {
-  enabled: true,
-  ruleType: RULE_TYPES.GLOBAL,
-  
-  // Trigger configuration (for TRIGGERED rule)
-  triggerProducts: [],
-  triggerCollections: [],
-  
-  // Upsell products to show
-  upsellProducts: ['sp-1', 'sp-2'],
-  upsellCollections: [],
-  
-  // Exclusion configuration (for GLOBAL_EXCEPT rule)
-  excludedProducts: [],
-  excludedCollections: [],
-  
-  limit: 3,
-  ui: {
-    layout: 'slider',
-    buttonText: 'Add to Cart',
-    buttonColor: '#000000',
-    showPrice: true,
-    title: 'Recommended for you',
-    position: 'bottom',
+  rule1: {
+    enabled: true,
+    upsellProducts: ['sp-1', 'sp-2'],
   },
-  analytics: {
-    trackViews: true,
-    trackClicks: true,
-    trackAddToCart: true,
+  rule2: {
+    enabled: false,
+    triggerProducts: [],
+    upsellProducts: [],
+  },
+  rule3: {
+    enabled: false,
+    cartValueThreshold: 1000,
+    upsellProducts: [],
   },
 };
+
+/**
+ * Validate the 3-rule upsell configuration
+ * @param {Object} config - Full config with rule1/rule2/rule3
+ * @returns {Object} { valid: boolean, error?: string }
+ */
+export function validateUpsellRulesConfig(config) {
+  if (!config) {
+    return { valid: false, error: 'Configuration is required' };
+  }
+
+  const enabledRules = [
+    config.rule1?.enabled,
+    config.rule2?.enabled,
+    config.rule3?.enabled,
+  ].filter(Boolean).length;
+
+  if (enabledRules === 0) {
+    return { valid: false, error: 'Please enable at least one rule' };
+  }
+
+  if (config.rule1?.enabled && (!config.rule1.upsellProducts || config.rule1.upsellProducts.length === 0)) {
+    return { valid: false, error: 'Rule #1: Select at least one upsell product' };
+  }
+
+  if (config.rule2?.enabled) {
+    if (!config.rule2.triggerProducts || config.rule2.triggerProducts.length === 0) {
+      return { valid: false, error: 'Rule #2: Select at least one trigger product' };
+    }
+    if (!config.rule2.upsellProducts || config.rule2.upsellProducts.length === 0) {
+      return { valid: false, error: 'Rule #2: Select at least one upsell product' };
+    }
+  }
+
+  if (config.rule3?.enabled) {
+    if (!config.rule3.cartValueThreshold || config.rule3.cartValueThreshold <= 0) {
+      return { valid: false, error: 'Rule #3: Set a valid cart value threshold' };
+    }
+    if (!config.rule3.upsellProducts || config.rule3.upsellProducts.length === 0) {
+      return { valid: false, error: 'Rule #3: Select at least one upsell product' };
+    }
+  }
+
+  return { valid: true };
+}
 
 /**
  * Validate upsell rule configuration
@@ -246,7 +283,7 @@ export function validateUpsellRule(config, allRules = []) {
  * @param {string[]} cartProductIds - Product IDs currently in cart
  * @returns {Object|null} The matching rule or null
  */
-export function evaluateUpsellRules(rules, cartProductIds = []) {
+export function evaluateUpsellRules(rules, cartProductIds = [], cartTotal = 0) {
   if (!rules || rules.length === 0) {
     return null;
   }
@@ -266,7 +303,17 @@ export function evaluateUpsellRules(rules, cartProductIds = []) {
     }
   }
 
-  // Priority 2: Check GLOBAL_EXCEPT rules
+  // Priority 2: Check CART_CONDITIONS rules
+  for (const rule of activeRules) {
+    if (rule.ruleType === RULE_TYPES.CART_CONDITIONS) {
+      const threshold = Number(rule.cartValueThreshold || 0);
+      if (threshold > 0 && cartTotal >= threshold) {
+        return rule;
+      }
+    }
+  }
+
+  // Priority 3: Check GLOBAL_EXCEPT rules
   for (const rule of activeRules) {
     if (rule.ruleType === RULE_TYPES.GLOBAL_EXCEPT) {
       const exclusions = [...(rule.excludedProducts || []), ...(rule.excludedCollections || [])];
@@ -278,7 +325,7 @@ export function evaluateUpsellRules(rules, cartProductIds = []) {
     }
   }
 
-  // Priority 3: Check GLOBAL rules (fallback)
+  // Priority 4: Check GLOBAL rules (fallback)
   const globalRule = activeRules.find((rule) => rule.ruleType === RULE_TYPES.GLOBAL);
   return globalRule || null;
 }
@@ -321,9 +368,24 @@ export function canEnableRuleType(ruleType, existingRules = []) {
  * @returns {Object} Upsell configuration
  */
 export async function getUpsellConfig() {
-  // Simulate API delay
-  await new Promise((resolve) => setTimeout(resolve, 300));
-
+  try {
+    // Try to fetch from API endpoint first
+    const response = await fetch('/api/upsell');
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ Fetched from API:', data);
+      return {
+        config: data.data.config,
+        products: data.data.products || SAMPLE_UPSELL_PRODUCTS,
+      };
+    }
+  } catch (error) {
+    console.warn('⚠️ API fetch failed, using mock data:', error);
+  }
+  
+  // Fallback to mock data
+  console.log('📦 Using mock data');
   return {
     config: DEFAULT_UPSELL_CONFIG,
     products: SAMPLE_UPSELL_PRODUCTS,
@@ -341,14 +403,10 @@ export async function saveUpsellConfig(config) {
 
   console.log('💾 Attempting to save config:', config);
 
-  // Get all existing rules (simulated - in production, fetch from DB)
-  const existingRules = []; // Would be fetched from database
+  const validation = validateUpsellRulesConfig(config);
 
-  // Validate configuration with rule compatibility checks
-  const validation = validateUpsellRule(config, existingRules);
-  
   console.log('🔍 Validation result:', validation);
-  
+
   if (!validation.valid) {
     console.error('❌ Validation failed:', validation.error);
     throw new Error(validation.error);

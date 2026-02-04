@@ -282,18 +282,18 @@ export default function UpsellPage() {
 
       const loadedConfig = {
         rule1: {
-          enabled: data.config?.rule1?.enabled ?? true,
-          upsellProducts: data.config?.rule1?.upsellProducts || ['sp-1', 'sp-2'],
+          enabled: true,
+          upsellProducts: data.config.upsellProducts || ['sp-1', 'sp-2'],
         },
         rule2: {
-          enabled: data.config?.rule2?.enabled ?? false,
-          triggerProducts: data.config?.rule2?.triggerProducts || [],
-          upsellProducts: data.config?.rule2?.upsellProducts || [],
+          enabled: false,
+          triggerProducts: [],
+          upsellProducts: [],
         },
         rule3: {
-          enabled: data.config?.rule3?.enabled ?? false,
-          cartValueThreshold: data.config?.rule3?.cartValueThreshold ?? 1000,
-          upsellProducts: data.config?.rule3?.upsellProducts || [],
+          enabled: false,
+          cartValueThreshold: 1000,
+          upsellProducts: [],
         },
       };
 

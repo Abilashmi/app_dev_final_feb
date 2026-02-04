@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Page,
   Layout,
@@ -23,7 +23,13 @@ import {
   ResourceItem,
   Thumbnail,
 } from '@shopify/polaris';
-import { sampleCoupons, COUPON_STYLES, COUPON_STYLE_METADATA, globalCouponStyle } from '../services/api.cart-settings';
+import { sampleCoupons, COUPON_STYLES, COUPON_STYLE_METADATA, globalCouponStyle, saveUpsellConfig, shopifyProducts, mockCollections } from '../services/api.cart-settings';
+import { 
+  getUpsellConfig, 
+  evaluateUpsellRules, 
+  SAMPLE_UPSELL_PRODUCTS,
+  trackUpsellEvent 
+} from '../services/api.upsell';
 
 // ==========================================
 // MOCK API FUNCTIONS
@@ -101,90 +107,6 @@ const mockProducts = [
   { id: 104, title: 'Surprise Mystery Gift', price: 0, image: '🎉' },
 ];
 
-// Mock collections
-const mockCollections = [
-  { id: 'col-1', title: 'Winter Gear' },
-  { id: 'col-2', title: 'Gifts & Bundles' },
-  { id: 'col-3', title: 'Premium Accessories' },
-  { id: 'col-4', title: 'Discountable Items' },
-];
-
-// Mock shopify products for product picker
-const mockShopifyProducts = [
-  { 
-    id: 'sp-1', 
-    title: 'Gift Card', 
-    price: '10.00', 
-    image: '🎁',
-    variants: 4,
-    status: 'outofstock',
-    collections: ['col-2', 'col-4'],
-  },
-  { 
-    id: 'sp-2', 
-    title: 'The Inventory Not Tracked Snowboard', 
-    price: '949.95', 
-    image: '🏂',
-    variants: 1,
-    status: 'active',
-    collections: ['col-1'],
-  },
-  { 
-    id: 'sp-3', 
-    title: 'The Archived Snowboard', 
-    price: '629.95', 
-    image: '🏂',
-    variants: 1,
-    status: 'archived',
-    collections: ['col-1'],
-  },
-  { 
-    id: 'sp-4', 
-    title: 'The Draft Snowboard', 
-    price: '2629.95', 
-    image: '🏂',
-    variants: 1,
-    status: 'draft',
-    collections: ['col-1', 'col-3'],
-  },
-  { 
-    id: 'sp-5', 
-    title: 'The Out of Stock Snowboard', 
-    price: '885.95', 
-    image: '🏂',
-    variants: 1,
-    status: 'outofstock',
-    collections: ['col-1'],
-  },
-  { 
-    id: 'sp-6', 
-    title: 'Premium Mug Set', 
-    price: '15.99', 
-    image: '☕',
-    variants: 3,
-    status: 'active',
-    collections: ['col-3'],
-  },
-  { 
-    id: 'sp-7', 
-    title: 'Discount Code Generator', 
-    price: '0.00', 
-    image: '🏷️',
-    variants: 1,
-    status: 'active',
-    collections: ['col-4'],
-  },
-  { 
-    id: 'sp-8', 
-    title: 'Mystery Surprise Gift Box', 
-    price: '0.00', 
-    image: '🎉',
-    variants: 1,
-    status: 'active',
-    collections: ['col-2'],
-  },
-];
-
 // Mock API functions
 const mockApi = {
   getCartData: async () => {
@@ -217,9 +139,237 @@ const mockApi = {
       headers: {
         'X-Shop-ID': SHOP_ID,
       },
-    }).then(() => mockShopifyProducts).catch(() => mockShopifyProducts);
+    }).then(() => shopifyProducts).catch(() => shopifyProducts);
   },
 };
+
+// ==========================================
+// UPSELL COMPONENTS - Rule Card, Product Picker, Display
+// ==========================================
+
+function RuleCard({ 
+  title, 
+  description, 
+  ruleKey, 
+  config, 
+  onConfigChange,
+  children 
+}) {
+  const isEnabled = config[ruleKey]?.enabled || false;
+
+  return (
+    <Card>
+      <BlockStack gap="400">
+        <InlineStack align="space-between" blockAlign="center">
+          <BlockStack gap="100">
+            <Text as="h2" variant="headingMd">
+              {title}
+            </Text>
+            <Text as="p" tone="subdued" variant="bodySmall">
+              {description}
+            </Text>
+          </BlockStack>
+          <Checkbox
+            label="Enable"
+            checked={isEnabled}
+            onChange={(value) =>
+              onConfigChange({
+                ...config,
+                [ruleKey]: { ...config[ruleKey], enabled: value },
+              })
+            }
+          />
+        </InlineStack>
+
+        {isEnabled && (
+          <>
+            <Divider />
+            {children}
+          </>
+        )}
+      </BlockStack>
+    </Card>
+  );
+}
+
+function ProductPicker({
+  label,
+  selected,
+  onChange,
+  maxSelect = null,
+  showCount = true,
+}) {
+  const selectedProducts = selected
+    .map((id) => SAMPLE_UPSELL_PRODUCTS.find((p) => p.id === id))
+    .filter((p) => p !== undefined);
+
+  return (
+    <BlockStack gap="200">
+      <InlineStack align="space-between" blockAlign="center">
+        <Text as="p" fontWeight="semibold">
+          {label}
+        </Text>
+        {showCount && (
+          <Badge>
+            {selected.length}
+            {maxSelect ? ` / ${maxSelect}` : ''}
+          </Badge>
+        )}
+      </InlineStack>
+
+      <BlockStack gap="150">
+        {SAMPLE_UPSELL_PRODUCTS.map((product) => (
+          <div
+            key={product.id}
+            style={{
+              padding: '12px',
+              border: selected.includes(product.id)
+                ? '2px solid #0070f3'
+                : '1px solid #e5e7eb',
+              borderRadius: '6px',
+              backgroundColor: selected.includes(product.id)
+                ? '#f0f7ff'
+                : '#ffffff',
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+            }}
+            onClick={() => {
+              if (selected.includes(product.id)) {
+                onChange(selected.filter((id) => id !== product.id));
+              } else {
+                if (maxSelect === null || selected.length < maxSelect) {
+                  onChange([...selected, product.id]);
+                }
+              }
+            }}
+          >
+            <InlineStack gap="200" align="center">
+              <div
+                style={{
+                  width: '50px',
+                  height: '50px',
+                  backgroundColor: '#f3f4f6',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  flexShrink: 0,
+                }}
+              >
+                {product.image ? (
+                  <img
+                    src={product.image}
+                    alt={product.title}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <Text tone="subdued" variant="bodySm">
+                    No Image
+                  </Text>
+                )}
+              </div>
+              <BlockStack gap="050" style={{ flex: 1 }}>
+                <Text fontWeight="semibold" variant="bodySm">
+                  {product.title}
+                </Text>
+                <Text tone="subdued" variant="bodySm">
+                  ₹{product.price}
+                </Text>
+              </BlockStack>
+              {selected.includes(product.id) && (
+                <Text as="span" tone="success">
+                  ✓
+                </Text>
+              )}
+            </InlineStack>
+          </div>
+        ))}
+      </BlockStack>
+    </BlockStack>
+  );
+}
+
+function SelectedProductsDisplay({ productIds, label }) {
+  const selectedProducts = productIds
+    .map((id) => SAMPLE_UPSELL_PRODUCTS.find((p) => p.id === id))
+    .filter((p) => p !== undefined);
+
+  if (selectedProducts.length === 0) {
+    return (
+      <div
+        style={{
+          padding: '16px',
+          backgroundColor: '#f9fafb',
+          borderRadius: '6px',
+          textAlign: 'center',
+        }}
+      >
+        <Text tone="subdued">{label}: No products selected</Text>
+      </div>
+    );
+  }
+
+  return (
+    <BlockStack gap="200">
+      <Text as="p" fontWeight="semibold">
+        {label}:
+      </Text>
+      <BlockStack gap="100">
+        {selectedProducts.map((product) => (
+          <div
+            key={product.id}
+            style={{
+              padding: '12px',
+              backgroundColor: '#f0f7ff',
+              border: '1px solid #0070f3',
+              borderRadius: '6px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+            }}
+          >
+            <InlineStack gap="200" align="center">
+              <div
+                style={{
+                  width: '40px',
+                  height: '40px',
+                  backgroundColor: '#e5eeff',
+                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                }}
+              >
+                {product.image ? (
+                  <img
+                    src={product.image}
+                    alt={product.title}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <Text tone="subdued" variant="bodySm">
+                    No Image
+                  </Text>
+                )}
+              </div>
+              <BlockStack gap="050">
+                <Text fontWeight="semibold" variant="bodySm">
+                  {product.title}
+                </Text>
+                <Text tone="subdued" variant="bodySm">
+                  ₹{product.price}
+                </Text>
+              </BlockStack>
+            </InlineStack>
+            <Badge>{product.sku}</Badge>
+          </div>
+        ))}
+      </BlockStack>
+    </BlockStack>
+  );
+}
 
 // ==========================================
 // PROGRESS CALCULATION FUNCTIONS
@@ -298,7 +448,7 @@ export default function CartDrawerAdmin() {
   const [productSearchQuery, setProductSearchQuery] = useState('');
   const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [currentTierForProducts, setCurrentTierForProducts] = useState(null);
-  const [shopifyProducts, setShopifyProducts] = useState([]);
+  const [loadedShopifyProducts, setLoadedShopifyProducts] = useState([]);
 
   // ==========================================
   // COUPON EDITOR STATE
@@ -316,28 +466,41 @@ export default function CartDrawerAdmin() {
   const couponSliderRef = React.useRef(null);
 
   // ==========================================
-  // UPSELL EDITOR STATE
+  // UPSELL EDITOR STATE (RULE 1/2/3 CONFIG)
   // ==========================================
   const [upsellConfig, setUpsellConfig] = useState({
-    enabled: true,
-    showOnEmptyCart: false,
-    upsellMode: 'manual', // 'ai' or 'manual' - MUTUALLY EXCLUSIVE
-    aiRecommendationType: 'related', // 'related' or 'complementary'
-    manualRules: [], // Array of independent rules
-    upsellTitle: {
-      text: 'Recommended for you',
-      formatting: { bold: false, italic: false, underline: false },
+    rule1: {
+      enabled: true,
+      upsellProducts: ['sp-1', 'sp-2'],
     },
-    titleStyle: {
-      color: '#1A1A1A',
-      size: 'medium', // 'small', 'medium', 'large'
-      align: 'left', // 'left', 'center', 'right'
+    rule2: {
+      enabled: false,
+      triggerProducts: [],
+      upsellProducts: [],
     },
-    buttonStyle: 'box', // 'box' or 'circle'
-    position: 'bottom', // 'top' or 'bottom'
-    layout: 'grid', // 'grid' or 'carousel'
-    alignment: 'horizontal', // 'horizontal' or 'vertical'
-    showProductReviews: false,
+    rule3: {
+      enabled: false,
+      cartValueThreshold: 1000,
+      upsellProducts: [],
+    },
+  });
+  const [initialUpsellConfig, setInitialUpsellConfig] = useState(null);
+  const [upsellSaving, setUpsellSaving] = useState(false);
+  const [upsellRulesConfig, setUpsellRulesConfig] = useState({
+    rule1: {
+      enabled: true,
+      upsellProducts: ['sp-1', 'sp-2'],
+    },
+    rule2: {
+      enabled: false,
+      triggerProducts: [],
+      upsellProducts: [],
+    },
+    rule3: {
+      enabled: false,
+      cartValueThreshold: 1000,
+      upsellProducts: [],
+    },
   });
   const [carouselScrollPosition, setCarouselScrollPosition] = useState(0);
   const carouselRef = React.useRef(null);
@@ -351,28 +514,48 @@ export default function CartDrawerAdmin() {
   const [excludeDraft, setExcludeDraft] = useState(true);
   const [excludeOutOfStock, setExcludeOutOfStock] = useState(false);
   const [showOnlySelected, setShowOnlySelected] = useState(false);
-  const [manualUpsellRules, setManualUpsellRules] = useState([]);
-  const [currentUpsellRule, setCurrentUpsellRule] = useState(null);
-  const [upsellPickerMode, setUpsellPickerMode] = useState(null);
-  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
-  const [showManualUpsellModal, setShowManualUpsellModal] = useState(false);
+
+  // ==========================================
+  // MANUAL UPSELL STATE
+  // ==========================================
   const [useAIUpsells, setUseAIUpsells] = useState(false);
-  const [upsellSettings, setUpsellSettings] = useState({
-    enabled: true,
-    ruleType: 'MANUAL',
-    trigger: 'ANY_CART',
-    products: ['sp-2', 'sp-4', 'sp-6'],
-    limit: 3,
-    ui: {
-      layout: 'slider',
-      buttonText: 'Add to Cart',
-      buttonColor: '#000000',
-      showPrice: true,
-      title: 'Recommended for you',
-      position: 'bottom',
-    },
-    analytics: { trackViews: true, trackClicks: true, trackAddToCart: true },
-  });
+  const [manualUpsellRules, setManualUpsellRules] = useState([]);
+  const [initialManualUpsellRules, setInitialManualUpsellRules] = useState([]);
+  const [showManualUpsellBuilder, setShowManualUpsellBuilder] = useState(false);
+  const [showProductPickerModal, setShowProductPickerModal] = useState(false);
+  const [productPickerMode, setProductPickerMode] = useState(null); // 'trigger' | 'upsell'
+  const [editingRuleId, setEditingRuleId] = useState(null);
+  const [tempSelectedProductIds, setTempSelectedProductIds] = useState([]);
+  const [tempSelectedCollectionIds, setTempSelectedCollectionIds] = useState([]);
+
+  // ==========================================
+  // LOAD UPSELL DATA FROM API
+  // ==========================================
+  useEffect(() => {
+    async function loadUpsellData() {
+      try {
+        const response = await getUpsellConfig();
+        console.log('✅ Upsell config loaded:', response);
+
+        if (response?.config) {
+          setUpsellRulesConfig(response.config);
+          setUpsellConfig(response.config);
+          setInitialUpsellConfig(response.config);
+        }
+        
+        // Display data in console for verification
+        if (response.products && response.products.length > 0) {
+          console.log(`✨ Loaded ${response.products.length} upsell products:`, 
+            response.products.map(p => `${p.title} (₹${p.price})`).join(', ')
+          );
+        }
+      } catch (error) {
+        console.error('❌ Error loading upsell config:', error);
+      }
+    }
+    
+    loadUpsellData();
+  }, []);
 
   // Mock cart items for preview
   const mockCartItems = [
@@ -466,7 +649,7 @@ export default function CartDrawerAdmin() {
   React.useEffect(() => {
     const loadShopifyProducts = async () => {
       const products = await mockApi.getShopifyProducts();
-      setShopifyProducts(products);
+      setLoadedShopifyProducts(products);
     };
     loadShopifyProducts();
   }, []);
@@ -558,7 +741,7 @@ export default function CartDrawerAdmin() {
     );
   };
 
-  const filteredProducts = shopifyProducts.filter(product => {
+  const filteredProducts = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).filter(product => {
     const matchesQuery = product.title.toLowerCase().includes(productSearchQuery.toLowerCase());
     const isArchived = product.status === 'archived';
     const isDraft = product.status === 'draft';
@@ -718,318 +901,242 @@ export default function CartDrawerAdmin() {
   };
 
   // ==========================================
-  // UPSELL HANDLERS
+  // UPSELL HANDLERS - RULE1/RULE2/RULE3 CONFIG
   // ==========================================
-  const updateUpsellConfig = (key, value) => {
-    setUpsellConfig(prev => ({ ...prev, [key]: value }));
-  };
 
-  const updateUpsellTitleText = (text) => {
-    setUpsellConfig(prev => ({
-      ...prev,
-      upsellTitle: { ...prev.upsellTitle, text },
-    }));
-  };
+  // ==========================================
+  // UPSELL RULES (RULE 1/2/3) HANDLERS
+  // ==========================================
+  const getUpsellValidationError = () => {
+    if (!upsellConfig) return '';
 
-  const updateUpsellTitleFormatting = (formatType) => {
-    setUpsellConfig(prev => ({
-      ...prev,
-      upsellTitle: {
-        ...prev.upsellTitle,
-        formatting: {
-          ...prev.upsellTitle.formatting,
-          [formatType]: !prev.upsellTitle.formatting[formatType],
-        },
-      },
-    }));
-  };
+    const enabledRules = [
+      upsellConfig.rule1?.enabled,
+      upsellConfig.rule2?.enabled,
+      upsellConfig.rule3?.enabled,
+    ].filter(Boolean).length;
 
-  const updateTitleStyle = (key, value) => {
-    setUpsellConfig(prev => ({
-      ...prev,
-      titleStyle: { ...prev.titleStyle, [key]: value },
-    }));
-  };
-
-  // Handle mode change - mutually exclusive
-  const handleModeChange = (mode) => {
-    console.log('[Upsell] Mode changed to:', mode, '| shopId:', SHOP_ID);
-    setUpsellConfig(prev => ({ ...prev, upsellMode: mode }));
-  };
-
-  // Manual Rules Management
-  const addManualRule = () => {
-    const newRule = {
-      ruleId: `rule-${Date.now()}`,
-      triggerType: 'all_products', // 'all_products' or 'triggered_products'
-      triggerItems: { products: [], collections: [] },
-      upsellItems: { products: [], collections: [] },
-    };
-    setUpsellConfig(prev => ({
-      ...prev,
-      manualRules: [...prev.manualRules, newRule],
-    }));
-  };
-
-  const updateManualRule = (ruleId, updates) => {
-    setUpsellConfig(prev => ({
-      ...prev,
-      manualRules: prev.manualRules.map(rule =>
-        rule.ruleId === ruleId ? { ...rule, ...updates } : rule
-      ),
-    }));
-  };
-
-  const deleteManualRule = (ruleId) => {
-    setUpsellConfig(prev => ({
-      ...prev,
-      manualRules: prev.manualRules.filter(rule => rule.ruleId !== ruleId),
-    }));
-  };
-
-  // Carousel navigation
-  const handleCarouselScroll = (direction) => {
-    if (carouselRef.current) {
-      const scrollAmount = 250;
-      const newPosition = direction === 'left' 
-        ? carouselRef.current.scrollLeft - scrollAmount
-        : carouselRef.current.scrollLeft + scrollAmount;
-      carouselRef.current.scrollTo({ left: newPosition, behavior: 'smooth' });
+    if (enabledRules === 0) {
+      return 'Please enable at least one rule';
     }
-  };
 
-  const handleOpenTriggeredProductsModal = (ruleId) => {
-    const rule = upsellConfig.manualRules?.find(r => r.ruleId === ruleId);
-    if (rule) {
-      setCurrentUpsellRule(ruleId);
-      setModalActiveTab('products');
-      setSelectedProductIds(rule.triggerItems?.products || []);
-      setSelectedCollectionIds(rule.triggerItems?.collections || []);
-      setShowTriggeredProductsModal(true);
+    if (upsellConfig.rule1?.enabled && (!upsellConfig.rule1?.upsellProducts || upsellConfig.rule1.upsellProducts.length === 0)) {
+      return 'Rule #1: Select at least one upsell product';
     }
-  };
 
-  const handleOpenUpsellProductsModal = (ruleId) => {
-    const rule = upsellConfig.manualRules?.find(r => r.ruleId === ruleId);
-    if (rule) {
-      setCurrentUpsellRule(ruleId);
-      setModalActiveTab('products');
-      setSelectedProductIds(rule.upsellItems?.products || []);
-      setSelectedCollectionIds(rule.upsellItems?.collections || []);
-      setShowUpsellProductsModal(true);
+    if (upsellConfig.rule2?.enabled) {
+      if (!upsellConfig.rule2?.triggerProducts || upsellConfig.rule2.triggerProducts.length === 0) {
+        return 'Rule #2: Select at least one trigger product';
+      }
+      if (!upsellConfig.rule2?.upsellProducts || upsellConfig.rule2.upsellProducts.length === 0) {
+        return 'Rule #2: Select at least one upsell product';
+      }
     }
-  };
 
-  const handleSaveTriggeredProducts = () => {
-    if (currentUpsellRule) {
-      updateManualRule(currentUpsellRule, {
-        triggerItems: {
-          products: selectedProductIds,
-          collections: selectedCollectionIds,
-        },
-      });
+    if (upsellConfig.rule3?.enabled) {
+      if (!upsellConfig.rule3?.cartValueThreshold || upsellConfig.rule3.cartValueThreshold <= 0) {
+        return 'Rule #3: Set a valid cart value threshold';
+      }
+      if (!upsellConfig.rule3?.upsellProducts || upsellConfig.rule3.upsellProducts.length === 0) {
+        return 'Rule #3: Select at least one upsell product';
+      }
     }
-    setShowTriggeredProductsModal(false);
-    setCurrentUpsellRule(null);
-    setSelectedProductIds([]);
-    setSelectedCollectionIds([]);
-    setProductSearchQuery('');
-    setCollectionSearchQuery('');
+
+    return '';
   };
 
-  const handleSaveUpsellProducts = () => {
-    if (currentUpsellRule) {
-      updateManualRule(currentUpsellRule, {
-        upsellItems: {
-          products: selectedProductIds,
-          collections: selectedCollectionIds,
-        },
-      });
-    }
-    setShowUpsellProductsModal(false);
-    setCurrentUpsellRule(null);
-    setSelectedProductIds([]);
-    setSelectedCollectionIds([]);
-    setProductSearchQuery('');
-    setCollectionSearchQuery('');
-  };
+  const isUpsellConfigDirty = JSON.stringify(upsellConfig) !== JSON.stringify(initialUpsellConfig);
 
-  const handleSaveUpsellConfig = async () => {
-    setIsSaving(true);
-    
-    console.log('[Upsell] Saving config for shopId:', SHOP_ID, upsellConfig);
-    
-    try {
-      const response = await fetch(`/api/cart-settings/upsell?shopId=${encodeURIComponent(SHOP_ID)}`, {
-        method: 'POST',
-        headers: {
-          'X-Shop-ID': SHOP_ID,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(upsellConfig),
-      });
-      
-      const result = await response.json();
-      console.log('[Upsell] Save response:', result, '| shopId:', result.shopId);
-      
-      await new Promise(resolve => setTimeout(resolve, 600));
-      setSaveToastMessage(`Upsell settings saved for ${SHOP_ID}`);
+  const handleSaveUpsellRules = async () => {
+    const error = getUpsellValidationError();
+    if (error) {
+      setSaveToastMessage(error);
       setShowSaveToast(true);
+      return;
+    }
+
+    setUpsellSaving(true);
+    try {
+      // Prepare config with manual upsell rules
+      const configToSave = {
+        enabled: upsellConfig.enabled,
+        upsellTitle: upsellConfig.upsellTitle,
+        position: upsellConfig.position,
+        layout: upsellConfig.layout,
+        alignment: upsellConfig.alignment,
+        showOnEmptyCart: upsellConfig.showOnEmptyCart,
+        upsellMode: upsellConfig.upsellMode,
+        useAI: upsellConfig.upsellMode === 'ai',
+        manualRules: manualUpsellRules,
+      };
+      
+      const response = await saveUpsellConfig(SHOP_ID, configToSave);
+      console.log('✅ Upsell rules saved:', response);
+      setInitialUpsellConfig(upsellConfig);
+      setSaveToastMessage('✅ Upsell rules saved successfully');
+      setShowSaveToast(true);
+      
+      try {
+        trackUpsellEvent('upsell_config_saved', {
+          enabled: configToSave.enabled,
+          mode: configToSave.upsellMode,
+          rulesCount: manualUpsellRules.length,
+        });
+      } catch (trackingError) {
+        console.warn('Analytics tracking failed:', trackingError);
+      }
     } catch (error) {
-      console.error('[Upsell] Save failed:', error);
-      setSaveToastMessage('Save failed');
+      console.error('❌ Error saving upsell rules:', error);
+      setSaveToastMessage(error.message || 'Failed to save upsell rules');
       setShowSaveToast(true);
     } finally {
-      setIsSaving(false);
+      setUpsellSaving(false);
     }
   };
 
-  const handleCancelUpsellConfig = async () => {
-    // Fetch last saved config from API
-    console.log('[Upsell] Canceling, fetching last saved config for shopId:', SHOP_ID);
-    try {
-      const response = await fetch(`/api/cart-settings/upsell?shopId=${encodeURIComponent(SHOP_ID)}`, {
-        headers: {
-          'X-Shop-ID': SHOP_ID,
-        },
-      });
-      const data = await response.json();
-      console.log('[Upsell] Restored config:', data, '| shopId:', data.shopId);
-      setUpsellConfig(data.config || {
-        enabled: true,
-        showOnEmptyCart: false,
-        upsellMode: 'manual',
-        aiRecommendationType: 'related',
-        manualRules: [],
-        upsellTitle: {
-          text: 'Recommended for you',
-          formatting: { bold: false, italic: false, underline: false },
-        },
-        titleStyle: {
-          color: '#1A1A1A',
-          size: 'medium',
-          align: 'left',
-        },
-        buttonStyle: 'box',
-        position: 'bottom',
-        layout: 'grid',
-        alignment: 'horizontal',
-        showProductReviews: false,
-      });
-    } catch (error) {
-      console.error('[Upsell] Cancel/restore failed:', error);
-    }
-  };
-
-  // ==========================================
-  // UPSELL API HANDLER
-  // ==========================================
-  const handleApiUpdate = async (endpoint, data) => {
-    if (endpoint === '/api/upsell') {
-      setUpsellSettings(data);
-      setShowSaveToast(true);
-      setSaveToastMessage('Upsell settings saved');
-    }
+  const handleCancelUpsellRules = () => {
+    setUpsellConfig(initialUpsellConfig);
+    setSaveToastMessage('Changes discarded');
   };
 
   // ==========================================
   // MANUAL UPSELL HANDLERS
   // ==========================================
-  const handleAddUpsellRule = () => {
+
+  const generateUpsellRuleId = () => `rule-${Date.now()}-${Math.random()}`;
+
+  const addManualUpsellRule = () => {
     const newRule = {
-      id: Date.now(),
-      triggerType: 'specific', // 'specific' or 'all'
-      triggerSource: 'products', // 'products' or 'collections'
+      id: generateUpsellRuleId(),
+      triggerType: 'all', // 'all' | 'specific'
       triggerProductIds: [],
       triggerCollectionIds: [],
       upsellProductIds: [],
-      priority: manualUpsellRules.length,
     };
     setManualUpsellRules([...manualUpsellRules, newRule]);
   };
 
-  const handleRemoveUpsellRule = (ruleId) => {
-    const remaining = manualUpsellRules.filter(rule => rule.id !== ruleId);
-    const reordered = remaining.map((rule, index) => ({ ...rule, priority: index }));
-    setManualUpsellRules(reordered);
+  const removeManualUpsellRule = (ruleId) => {
+    setManualUpsellRules(manualUpsellRules.filter(r => r.id !== ruleId));
   };
 
-  const handleUpdateUpsellRule = (ruleId, updates) => {
-    setManualUpsellRules(manualUpsellRules.map(rule => 
-      rule.id === ruleId ? { ...rule, ...updates } : rule
-    ));
+  const updateManualUpsellRule = (ruleId, updates) => {
+    setManualUpsellRules(
+      manualUpsellRules.map(r => r.id === ruleId ? { ...r, ...updates } : r)
+    );
   };
 
-  const handleOpenTriggerPicker = (ruleId) => {
-    const rule = manualUpsellRules.find(r => r.id === ruleId);
-    if (rule) {
-      setCurrentUpsellRule(ruleId);
-      setUpsellPickerMode('trigger');
-      setSelectedProductIds(rule.triggerProductIds || []);
-      setShowProductPicker(true);
-    }
-  };
-
-  const handleOpenUpsellPicker = (ruleId) => {
-    const rule = manualUpsellRules.find(r => r.id === ruleId);
-    if (rule) {
-      setCurrentUpsellRule(ruleId);
-      setUpsellPickerMode('upsell');
-      setSelectedProductIds(rule.upsellProductIds || []);
-      setShowProductPicker(true);
-    }
-  };
-
-  const handleOpenCollectionPicker = (ruleId) => {
-    const rule = manualUpsellRules.find(r => r.id === ruleId);
-    if (rule) {
-      setCurrentUpsellRule(ruleId);
-      setSelectedCollectionIds(rule.triggerCollectionIds || []);
-      setShowCollectionPicker(true);
-    }
-  };
-
-  const handleMoveRule = (ruleId, direction) => {
-    const index = manualUpsellRules.findIndex(r => r.id === ruleId);
-    if (
-      (direction === 'up' && index === 0) ||
-      (direction === 'down' && index === manualUpsellRules.length - 1)
-    ) {
-      return;
-    }
-
+  const reorderManualUpsellRules = (fromIdx, toIdx) => {
     const newRules = [...manualUpsellRules];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    [newRules[index], newRules[targetIndex]] = [newRules[targetIndex], newRules[index]];
-    
-    // Update priorities
-    newRules.forEach((rule, idx) => {
-      rule.priority = idx;
-    });
-    
+    const [movedRule] = newRules.splice(fromIdx, 1);
+    newRules.splice(toIdx, 0, movedRule);
     setManualUpsellRules(newRules);
   };
 
-  const isUpsellConfigValid = () => {
-    if (manualUpsellRules.length === 0) return false;
-    
-    return manualUpsellRules.every(rule => {
-      const hasTrigger = rule.triggerType === 'all'
-        || (rule.triggerSource === 'products' && rule.triggerProductIds.length > 0)
-        || (rule.triggerSource === 'collections' && rule.triggerCollectionIds.length > 0);
-      const hasUpsells = rule.upsellProductIds.length > 0;
-      return hasTrigger && hasUpsells;
-    });
+  const openProductPicker = (ruleId, mode) => {
+    setEditingRuleId(ruleId);
+    setProductPickerMode(mode);
+    const rule = manualUpsellRules.find(r => r.id === ruleId);
+    if (mode === 'trigger') {
+      setTempSelectedProductIds(rule?.triggerProductIds || []);
+      setTempSelectedCollectionIds(rule?.triggerCollectionIds || []);
+    } else {
+      setTempSelectedProductIds(rule?.upsellProductIds || []);
+    }
+    setShowProductPickerModal(true);
   };
 
-  const getRuleValidation = (rule) => {
-    const triggerMissing = rule.triggerType !== 'all'
-      && !(
-        (rule.triggerSource === 'products' && rule.triggerProductIds.length > 0)
-        || (rule.triggerSource === 'collections' && rule.triggerCollectionIds.length > 0)
-      );
-    const upsellMissing = rule.upsellProductIds.length === 0;
-    return { triggerMissing, upsellMissing };
+  const saveProductPickerSelection = () => {
+    const rule = manualUpsellRules.find(r => r.id === editingRuleId);
+    if (!rule) return;
+
+    if (productPickerMode === 'trigger') {
+      updateManualUpsellRule(editingRuleId, {
+        triggerProductIds: tempSelectedProductIds,
+        triggerCollectionIds: tempSelectedCollectionIds,
+      });
+    } else {
+      updateManualUpsellRule(editingRuleId, {
+        upsellProductIds: tempSelectedProductIds,
+      });
+    }
+    
+    setShowProductPickerModal(false);
+    setEditingRuleId(null);
+    setProductPickerMode(null);
+    setTempSelectedProductIds([]);
+    setTempSelectedCollectionIds([]);
+  };
+
+  const saveManualUpsellRules = async () => {
+    // Validate rules
+    if (manualUpsellRules.length === 0) {
+      setSaveToastMessage('Add at least one upsell rule');
+      setShowSaveToast(true);
+      return;
+    }
+
+    const allValid = manualUpsellRules.every(rule => {
+      const hasTrigger = rule.triggerType === 'all' || 
+                        rule.triggerProductIds.length > 0 || 
+                        rule.triggerCollectionIds.length > 0;
+      const hasUpsell = rule.upsellProductIds.length > 0;
+      return hasTrigger && hasUpsell;
+    });
+
+    if (!allValid) {
+      setSaveToastMessage('Each rule must have trigger and upsell products');
+      setShowSaveToast(true);
+      return;
+    }
+
+    setUpsellSaving(true);
+    try {
+      const { saveUpsellConfig } = await import('../services/api.cart-settings.jsx');
+      const shopId = SHOP_ID;
+      const configData = {
+        useAI: useAIUpsells,
+        manualRules: manualUpsellRules,
+      };
+      
+      const response = await saveUpsellConfig(shopId, configData);
+      console.log('✅ Manual upsell rules saved:', response);
+      
+      setInitialManualUpsellRules(JSON.parse(JSON.stringify(manualUpsellRules)));
+      setSaveToastMessage('✅ Upsell rules saved successfully');
+      setShowSaveToast(true);
+      setShowManualUpsellBuilder(false);
+    } catch (error) {
+      console.error('❌ Error saving upsell rules:', error);
+      setSaveToastMessage(error.message || 'Failed to save upsell rules');
+      setShowSaveToast(true);
+    } finally {
+      setUpsellSaving(false);
+    }
+  };
+
+  const cancelManualUpsellRules = () => {
+    setManualUpsellRules(JSON.parse(JSON.stringify(initialManualUpsellRules)));
+    setSaveToastMessage('Changes discarded');
+    setShowSaveToast(true);
+    setShowManualUpsellBuilder(false);
+  };
+
+  const getTriggerSummary = (rule) => {
+    if (rule.triggerType === 'all') {
+      return 'Any product';
+    }
+    const productCount = rule.triggerProductIds.length;
+    const collectionCount = rule.triggerCollectionIds.length;
+    const parts = [];
+    if (productCount > 0) parts.push(`${productCount} product${productCount !== 1 ? 's' : ''}`);
+    if (collectionCount > 0) parts.push(`${collectionCount} collection${collectionCount !== 1 ? 's' : ''}`);
+    return parts.join(' + ') || 'Select trigger';
+  };
+
+  const getUpsellSummary = (rule) => {
+    const count = rule.upsellProductIds.length;
+    return count > 0 ? `${count} product${count !== 1 ? 's' : ''}` : 'Select products';
   };
 
   // ==========================================
@@ -1390,7 +1497,7 @@ export default function CartDrawerAdmin() {
                     <BlockStack gap="200">
                       <InlineStack align="space-between" blockAlign="center">
                         <Text as="label" variant="bodyMd" fontWeight="semibold">
-                          Products — {activeTier.products?.length || 0} of {shopifyProducts.length} products added
+                          Products — {activeTier.products?.length || 0} of {(loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).length} products added
                         </Text>
                         <Button
                           onClick={() => handleOpenProductPicker(activeTierIndex)}
@@ -1404,7 +1511,7 @@ export default function CartDrawerAdmin() {
                       {activeTier.products && activeTier.products.length > 0 ? (
                         <BlockStack gap="150">
                           {activeTier.products.map(productId => {
-                            const product = shopifyProducts.find(p => p.id === productId);
+                            const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
                             return product ? (
                               <div
                                 key={productId}
@@ -1499,7 +1606,7 @@ export default function CartDrawerAdmin() {
               </Button>
             </InlineStack>
 
-            {/* Horizontal Legacy Tabs */}
+            {/* Tab Navigation */}
             <div style={{ 
               display: 'flex', 
               gap: '4px',
@@ -1521,7 +1628,7 @@ export default function CartDrawerAdmin() {
                   marginBottom: '-2px',
                 }}
               >
-                Global Coupon Style
+                Coupon Styles
               </button>
               <button
                 onClick={() => setCouponSubTab('manage-coupons')}
@@ -1542,92 +1649,86 @@ export default function CartDrawerAdmin() {
               </button>
             </div>
 
-            {/* Tab Content */}
+            {/* TAB 1: Coupon Styles */}
             {couponSubTab === 'global-style' && (
+              <Card>
+                <BlockStack gap="300">
+                  <Text variant="headingMd" as="h2">Select Coupon Style</Text>
+                  <Text tone="subdued" as="p">Choose one style that applies to all coupons</Text>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                    {Object.entries(COUPON_STYLE_METADATA).map(([styleKey, metadata]) => (
+                      <div
+                        key={styleKey}
+                        onClick={() => handleStyleSelect(styleKey)}
+                        style={{
+                          border: `2px solid ${selectedCouponStyle === styleKey ? '#2c6ecb' : '#e5e7eb'}`,
+                          borderRadius: '8px',
+                          padding: '12px',
+                          cursor: 'pointer',
+                          backgroundColor: selectedCouponStyle === styleKey ? '#f0f7ff' : '#fff',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <BlockStack gap="200">
+                          <img 
+                            src={metadata.previewImage} 
+                            alt={metadata.name}
+                            style={{ width: '100%', borderRadius: '4px', border: '1px solid #e5e7eb' }}
+                          />
+                          <InlineStack align="space-between" blockAlign="center">
+                            <BlockStack gap="100">
+                              <Text variant="bodyMd" fontWeight="semibold">{metadata.name}</Text>
+                              <Text variant="bodySm" tone="subdued">{metadata.description}</Text>
+                            </BlockStack>
+                            {selectedCouponStyle === styleKey && (
+                              <div style={{ 
+                                width: '20px', 
+                                height: '20px', 
+                                borderRadius: '50%', 
+                                backgroundColor: '#2c6ecb',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: '#fff',
+                                fontSize: '12px',
+                                fontWeight: 'bold',
+                              }}>
+                                ✓
+                              </div>
+                            )}
+                          </InlineStack>
+                        </BlockStack>
+                      </div>
+                    ))}
+                  </div>
+                </BlockStack>
+              </Card>
+            )}
+
+            {/* TAB 2: Manage Coupons */}
+            {couponSubTab === 'manage-coupons' && (
               <BlockStack gap="400">
                 <Card>
-                  <BlockStack gap="300">
-                    <Text variant="headingMd" as="h2">Global Coupon Style</Text>
-                    <Text tone="subdued" as="p">Select one style that applies to all coupons</Text>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                      {Object.entries(COUPON_STYLE_METADATA).map(([styleKey, metadata]) => (
-                        <div
-                          key={styleKey}
-                          onClick={() => handleStyleSelect(styleKey)}
-                          style={{
-                            border: `2px solid ${selectedCouponStyle === styleKey ? '#2c6ecb' : '#e5e7eb'}`,
-                            borderRadius: '8px',
-                            padding: '12px',
-                            cursor: 'pointer',
-                            backgroundColor: selectedCouponStyle === styleKey ? '#f0f7ff' : '#fff',
-                            transition: 'all 0.2s',
-                          }}
-                        >
-                          <BlockStack gap="200">
-                            <img 
-                              src={metadata.previewImage} 
-                              alt={metadata.name}
-                              style={{ width: '100%', borderRadius: '4px', border: '1px solid #e5e7eb' }}
-                            />
-                            <InlineStack align="space-between" blockAlign="center">
-                              <BlockStack gap="100">
-                                <Text variant="bodyMd" fontWeight="semibold">{metadata.name}</Text>
-                                <Text variant="bodySm" tone="subdued">{metadata.description}</Text>
-                              </BlockStack>
-                              {selectedCouponStyle === styleKey && (
-                                <div style={{ 
-                                  width: '20px', 
-                                  height: '20px', 
-                                  borderRadius: '50%', 
-                                  backgroundColor: '#2c6ecb',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  color: '#fff',
-                                  fontSize: '12px',
-                                  fontWeight: 'bold',
-                                }}>
-                                  ✓
-                                </div>
-                              )}
-                            </InlineStack>
-                          </BlockStack>
-                        </div>
-                      ))}
-                    </div>
-                  </BlockStack>
-                </Card>
+                  <BlockStack gap="400">
+                    <BlockStack gap="200">
+                      <Text variant="headingMd" as="h2">Enable/Disable Coupons</Text>
+                      <Text tone="subdued" as="p">Select which coupons to show in the slider</Text>
+                    </BlockStack>
 
-                {/* Active Coupons Selector */}
-                <Card>
-                  <BlockStack gap="300">
-                    <Text variant="headingMd" as="h2">Active Coupons</Text>
-                    <Text tone="subdued" as="p">Enable or disable coupons for display</Text>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '12px' }}>
+                    {/* Coupon List with Enable/Disable */}
+                    <BlockStack gap="200">
                       {allCoupons.map(coupon => (
                         <div 
                           key={coupon.id}
-                          onClick={() => {
-                            handleCouponTabClick(coupon.id);
-                            setCouponSubTab('manage-coupons');
-                          }}
+                          onClick={() => handleCouponTabClick(coupon.id)}
                           style={{
                             padding: '12px 16px',
-                            backgroundColor: '#f9fafb',
-                            border: '1px solid #e5e7eb',
+                            backgroundColor: activeCouponTab === coupon.id ? '#f0f7ff' : '#f9fafb',
+                            border: `1px solid ${activeCouponTab === coupon.id ? '#2c6ecb' : '#e5e7eb'}`,
                             borderRadius: '8px',
                             transition: 'all 0.2s',
                             cursor: 'pointer',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = '#f3f4f6';
-                            e.currentTarget.style.borderColor = '#2c6ecb';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = '#f9fafb';
-                            e.currentTarget.style.borderColor = '#e5e7eb';
                           }}
                         >
                           <InlineStack align="space-between" blockAlign="center" gap="200">
@@ -1655,120 +1756,80 @@ export default function CartDrawerAdmin() {
                           </InlineStack>
                         </div>
                       ))}
-                    </div>
-                  </BlockStack>
-                </Card>
-              </BlockStack>
-            )}
+                    </BlockStack>
 
-            {couponSubTab === 'manage-coupons' && (
-              <BlockStack gap="400">
-            <Card>
-              <BlockStack gap="400">
-                <BlockStack gap="200">
-                  <Text variant="headingMd" as="h2">Manage Coupons</Text>
-                  <Text tone="subdued" as="p">Select an enabled coupon to edit</Text>
-                </BlockStack>
+                    <Divider />
 
-                {/* Compact Coupon Selector - Only Enabled Coupons */}
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {allCoupons.filter(c => c.enabled).map(coupon => (
-                    <button
-                      key={coupon.id}
-                      onClick={() => handleCouponTabClick(coupon.id)}
-                      style={{
-                        padding: '8px 12px',
-                        fontSize: '13px',
-                        fontWeight: '600',
-                        border: `2px solid ${activeCouponTab === coupon.id ? '#2c6ecb' : '#d1d5db'}`,
-                        borderRadius: '6px',
-                        backgroundColor: activeCouponTab === coupon.id ? '#f0f7ff' : '#fff',
-                        color: activeCouponTab === coupon.id ? '#2c6ecb' : '#374151',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                      }}
-                    >
-                      <span style={{ fontSize: '14px' }}>{coupon.iconUrl}</span>
-                      {coupon.code}
-                    </button>
-                  ))}
-                </div>
+                    {/* Coupon Editor */}
+                    {editingCoupon ? (
+                      <div style={{ padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                        <BlockStack gap="400">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <BlockStack gap="100">
+                              <Text variant="headingSm" as="h3">Edit: {editingCoupon.code}</Text>
+                              <Text tone="subdued" variant="bodySm">Configure display and discount settings</Text>
+                            </BlockStack>
+                          </InlineStack>
 
-                <Divider />
+                          <Divider />
+                  
+                          {/* Compact Single Column Layout */}
+                          <BlockStack gap="300">
+                            <InlineStack gap="300" blockAlign="start">
+                              <div style={{ flex: 1 }}>
+                                <TextField
+                                  label="Coupon Code"
+                                  value={editingCoupon.code}
+                                  disabled
+                                  autoComplete="off"
+                                />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <TextField
+                                  label="Label Text"
+                                  value={editingCoupon.label}
+                                  onChange={(value) => updateCouponField('label', value)}
+                                  autoComplete="off"
+                                />
+                              </div>
+                            </InlineStack>
 
-                {/* Editor Panel */}
-                {editingCoupon ? (
-                    <div style={{ padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                      <BlockStack gap="400">
-                        <InlineStack align="space-between" blockAlign="center">
-                          <BlockStack gap="100">
-                            <Text variant="headingSm" as="h3">Edit: {editingCoupon.code}</Text>
-                            <Text tone="subdued" variant="bodySm">Configure display and discount settings</Text>
-                          </BlockStack>
-                        </InlineStack>
-
-                      <Divider />
-                
-                      {/* Compact Single Column Layout */}
-                      <BlockStack gap="300">
-                        <InlineStack gap="300" blockAlign="start">
-                          <div style={{ flex: 1 }}>
                             <TextField
-                              label="Coupon Code"
-                              value={editingCoupon.code}
-                              disabled
+                              label="Description"
+                              value={editingCoupon.description}
+                              onChange={(value) => updateCouponField('description', value)}
                               autoComplete="off"
                             />
-                          </div>
-                          <div style={{ flex: 1 }}>
+
+                            <InlineStack gap="300">
+                              <div style={{ flex: 1 }}>
+                                <Select
+                                  label="Discount Type"
+                                  options={[
+                                    { label: 'Percentage Off', value: 'percentage' },
+                                    { label: 'Fixed Amount Off', value: 'fixed' },
+                                  ]}
+                                  value={editingCoupon.discountType || 'percentage'}
+                                  onChange={(value) => updateCouponField('discountType', value)}
+                                />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <TextField
+                                  label="Discount Value"
+                                  type="number"
+                                  value={String(editingCoupon.discountValue || 0)}
+                                  onChange={(value) => updateCouponField('discountValue', Number(value))}
+                                  autoComplete="off"
+                                  suffix={editingCoupon.discountType === 'percentage' ? '%' : '₹'}
+                                />
+                              </div>
+                            </InlineStack>
+
                             <TextField
-                              label="Label Text"
-                              value={editingCoupon.label}
-                              onChange={(value) => updateCouponField('label', value)}
-                              autoComplete="off"
-                            />
-                          </div>
-                        </InlineStack>
-
-                        <TextField
-                          label="Description"
-                          value={editingCoupon.description}
-                          onChange={(value) => updateCouponField('description', value)}
-                          autoComplete="off"
-                        />
-
-                        <InlineStack gap="300">
-                          <div style={{ flex: 1 }}>
-                            <Select
-                              label="Discount Type"
-                              options={[
-                                { label: 'Percentage Off', value: 'percentage' },
-                                { label: 'Fixed Amount Off', value: 'fixed' },
-                              ]}
-                              value={editingCoupon.discountType || 'percentage'}
-                              onChange={(value) => updateCouponField('discountType', value)}
-                            />
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <TextField
-                              label="Discount Value"
-                              type="number"
-                              value={String(editingCoupon.discountValue || 0)}
-                              onChange={(value) => updateCouponField('discountValue', Number(value))}
-                              autoComplete="off"
-                              suffix={editingCoupon.discountType === 'percentage' ? '%' : '₹'}
-                            />
-                          </div>
-                        </InlineStack>
-
-                        <TextField
-                          label="Expiry Date (Optional)"
-                          type="date"
-                          value={editingCoupon.expiryDate || ''}
-                          onChange={(value) => updateCouponField('expiryDate', value)}
+                              label="Expiry Date (Optional)"
+                              type="date"
+                              value={editingCoupon.expiryDate || ''}
+                              onChange={(value) => updateCouponField('expiryDate', value)}
                           autoComplete="off"
                           helpText="Leave empty for no expiry"
                         />
@@ -1896,484 +1957,318 @@ export default function CartDrawerAdmin() {
                     </div>
                 ) : (
                   <div style={{ padding: '40px 20px', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                    <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#374151' }}>← Select a coupon to edit</p>
-                    <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>Click on any coupon from the Active Coupons section in the Global Coupon Style tab</p>
+                    <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#374151' }}>👈 Select a coupon to edit</p>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>Click on a coupon above to edit its settings</p>
                   </div>
                 )}
               </BlockStack>
             </Card>
-              </BlockStack>
+            </BlockStack>
             )}
           </BlockStack>
         </div>
       );
     }
 
-    // Upsell Products Editor
+    // Upsell Rules Editor - Manual Upsell Builder
     if (selectedTab === 'upsell') {
-      // Helper to apply title formatting dynamically
-      const getTitleStyle = () => {
-        const styles = {};
-        if (upsellConfig.upsellTitle?.formatting?.bold) styles.fontWeight = 'bold';
-        if (upsellConfig.upsellTitle?.formatting?.italic) styles.fontStyle = 'italic';
-        if (upsellConfig.upsellTitle?.formatting?.underline) styles.textDecoration = 'underline';
-        return styles;
-      };
-
-      // Helper to get font size
-      const getFontSize = () => {
-        const sizes = { small: '12px', medium: '14px', large: '16px' };
-        return sizes[upsellConfig.titleStyle?.size] || '14px';
-      };
-
+      const validationError = getUpsellValidationError();
+      
       return (
         <div style={{ padding: '20px', height: '100%', overflowY: 'auto' }}>
           <BlockStack gap="400">
-            {/* Header with shopId indicator */}
-            <InlineStack align="space-between" blockAlign="center">
-              <div>
-                <Text variant="headingLg" as="h1">Upsell Settings</Text>
-                <Text variant="bodySm" tone="subdued">Shop: {SHOP_ID}</Text>
-              </div>
-              <Button
-                variant={upsellConfig.enabled ? 'primary' : 'secondary'}
-                onClick={() => updateUpsellConfig('enabled', !upsellConfig.enabled)}
-              >
-                {upsellConfig.enabled ? 'Enabled' : 'Disabled'}
-              </Button>
-            </InlineStack>
+            {/* Header */}
+            <BlockStack gap="100">
+              <Text variant="headingLg" as="h1">Upsell Rules</Text>
+              <Text variant="bodySm" tone="subdued">Recommend products to customers based on cart contents</Text>
+            </BlockStack>
 
-            {/* Top Controls */}
+            {/* Main Enable/Disable Section */}
             <Card>
-              <BlockStack gap="300">
-                <Text variant="headingMd" as="h2">Top Controls</Text>
-                
-                <Checkbox
-                  label="Show upsell on empty cart"
-                  checked={upsellConfig.showOnEmptyCart}
-                  onChange={(value) => updateUpsellConfig('showOnEmptyCart', value)}
-                  helpText="Display upsell recommendations even when cart is empty"
-                />
-              </BlockStack>
-            </Card>
-
-            {/* Recommendation Type - MUTUALLY EXCLUSIVE */}
-            <Card>
-              <BlockStack gap="300">
-                <Text variant="headingMd" as="h2">Recommendation Type (Choose One)</Text>
-                <Text variant="bodySm" tone="subdued">Only one mode can be active at a time</Text>
-                
-                <div style={{ padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                  <ChoiceList
-                    title=""
-                    choices={[
-                      { 
-                        label: 'AI Recommendation', 
-                        value: 'ai',
-                        helpText: 'Automatically recommend related or complementary products',
-                      },
-                      { 
-                        label: 'Manual Upsell', 
-                        value: 'manual',
-                        helpText: 'Create custom rules to control which products to upsell',
-                      },
-                    ]}
-                    selected={[upsellConfig.upsellMode]}
-                    onChange={(value) => handleModeChange(value[0])}
+              <BlockStack gap="200">
+                <InlineStack align="space-between" blockAlign="center">
+                  <BlockStack gap="050">
+                    <Text variant="headingSm">Enable Upsell</Text>
+                    <Text variant="bodySm" tone="subdued">Show product recommendations in cart</Text>
+                  </BlockStack>
+                  <Checkbox
+                    checked={upsellConfig.enabled}
+                    onChange={(checked) => setUpsellConfig({ ...upsellConfig, enabled: checked })}
                   />
-                </div>
-                
-                {/* AI Options - Only shown when AI mode is active */}
-                {upsellConfig.upsellMode === 'ai' && (
-                  <div style={{ padding: '16px', backgroundColor: '#f0f7ff', borderRadius: '8px', border: '1px solid #2c6ecb' }}>
-                    <BlockStack gap="300">
-                      <Text variant="bodyMd" fontWeight="semibold">AI Recommendation Type</Text>
-                      <ChoiceList
-                        title=""
-                        choices={[
-                          { label: 'Related Products', value: 'related', helpText: 'Similar products in same category' },
-                          { label: 'Complementary Products', value: 'complementary', helpText: 'Products that go well together' },
-                        ]}
-                        selected={[upsellConfig.aiRecommendationType]}
-                        onChange={(value) => updateUpsellConfig('aiRecommendationType', value[0])}
-                      />
-                    </BlockStack>
-                  </div>
-                )}
+                </InlineStack>
               </BlockStack>
             </Card>
 
-            {/* Manual Upsell Configuration - Rules Based */}
-            {upsellConfig.upsellMode === 'manual' && (
-              <Card>
-                <BlockStack gap="400">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text variant="headingMd" as="h2">Manual Upsell Rules</Text>
-                    <Button onClick={addManualRule} variant="primary">
-                      + Add Rule
-                    </Button>
-                  </InlineStack>
-                  
-                  <div style={{ padding: '12px', backgroundColor: '#fef3c7', borderRadius: '6px', border: '1px solid #f59e0b' }}>
-                    <Text variant="bodySm" fontWeight="semibold" as="p" tone="caution">Rule Priority System:</Text>
-                    <Text variant="bodySm" as="p" tone="subdued">
-                      • <strong>Triggered Product</strong> rules are evaluated first (higher priority)<br/>
-                      • <strong>All Products</strong> rules act as fallback when no Triggered rules match<br/>
-                      • If any Triggered rule matches cart items, only those upsells are shown<br/>
-                      • All Products upsells are shown only when no Triggered rules match
-                    </Text>
-                  </div>
-
-                  {/* Display existing rules */}
-                  {upsellConfig.manualRules && upsellConfig.manualRules.length > 0 ? (
-                    <BlockStack gap="300">
-                      {upsellConfig.manualRules.map((rule, index) => (
-                        <div
-                          key={rule.ruleId}
-                          style={{
-                            padding: '16px',
-                            backgroundColor: '#f9fafb',
-                            borderRadius: '8px',
-                            border: '1px solid #e5e7eb',
-                          }}
+            {/* Settings (only show if enabled) */}
+            {upsellConfig.enabled && (
+              <>
+                {/* Title & Formatting */}
+                <Card>
+                  <BlockStack gap="200">
+                    <Text variant="headingSm">Upsell Title</Text>
+                    <TextField
+                      label="Title text"
+                      value={upsellConfig.upsellTitle?.text || 'Recommended for you'}
+                      onChange={(value) =>
+                        setUpsellConfig({
+                          ...upsellConfig,
+                          upsellTitle: { ...upsellConfig.upsellTitle, text: value },
+                        })
+                      }
+                      placeholder="e.g., Recommended for you"
+                    />
+                    
+                    {/* Text Formatting Buttons */}
+                    <BlockStack gap="100">
+                      <Text variant="bodySm" fontWeight="semibold">Formatting</Text>
+                      <InlineStack gap="100">
+                        <Button
+                          onClick={() =>
+                            setUpsellConfig({
+                              ...upsellConfig,
+                              upsellTitle: {
+                                ...upsellConfig.upsellTitle,
+                                formatting: {
+                                  ...upsellConfig.upsellTitle?.formatting,
+                                  bold: !upsellConfig.upsellTitle?.formatting?.bold,
+                                },
+                              },
+                            })
+                          }
+                          variant={upsellConfig.upsellTitle?.formatting?.bold ? 'primary' : 'secondary'}
+                          size="slim"
                         >
-                          <BlockStack gap="300">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Text variant="bodyMd" fontWeight="semibold">Rule #{index + 1}</Text>
-                                {rule.triggerType === 'all_products' ? (
-                                  <Badge tone="attention">All Products</Badge>
-                                ) : (
-                                  <Badge tone="info">Triggered Products</Badge>
-                                )}
-                              </div>
-                              <Button
-                                onClick={() => deleteManualRule(rule.ruleId)}
-                                tone="critical"
-                                size="slim"
-                              >
-                                Delete
-                              </Button>
-                            </InlineStack>
+                          <strong>B</strong>
+                        </Button>
+                        <Button
+                          onClick={() =>
+                            setUpsellConfig({
+                              ...upsellConfig,
+                              upsellTitle: {
+                                ...upsellConfig.upsellTitle,
+                                formatting: {
+                                  ...upsellConfig.upsellTitle?.formatting,
+                                  italic: !upsellConfig.upsellTitle?.formatting?.italic,
+                                },
+                              },
+                            })
+                          }
+                          variant={upsellConfig.upsellTitle?.formatting?.italic ? 'primary' : 'secondary'}
+                          size="slim"
+                        >
+                          <em>I</em>
+                        </Button>
+                        <Button
+                          onClick={() =>
+                            setUpsellConfig({
+                              ...upsellConfig,
+                              upsellTitle: {
+                                ...upsellConfig.upsellTitle,
+                                formatting: {
+                                  ...upsellConfig.upsellTitle?.formatting,
+                                  underline: !upsellConfig.upsellTitle?.formatting?.underline,
+                                },
+                              },
+                            })
+                          }
+                          variant={upsellConfig.upsellTitle?.formatting?.underline ? 'primary' : 'secondary'}
+                          size="slim"
+                        >
+                          <u>U</u>
+                        </Button>
+                      </InlineStack>
+                    </BlockStack>
+                  </BlockStack>
+                </Card>
 
-                            {/* Trigger Type Selection */}
-                            <div>
-                              <Text as="label" variant="bodySm" fontWeight="semibold">Trigger Type</Text>
-                              <div style={{ marginTop: '8px' }}>
-                                <ChoiceList
-                                  title=""
-                                  choices={[
-                                    { label: 'All Products', value: 'all_products', helpText: 'Fallback rule - Shows upsells only when no Triggered rules match' },
-                                    { label: 'Triggered Products', value: 'triggered_products', helpText: 'Higher priority - Shows upsells when specific products are in cart' },
-                                  ]}
-                                  selected={[rule.triggerType]}
-                                  onChange={(value) => updateManualRule(rule.ruleId, { triggerType: value[0] })}
-                                />
-                              </div>
-                            </div>
+                {/* Position & Alignment */}
+                <Card>
+                  <BlockStack gap="200">
+                    <Text variant="headingSm">Display Settings</Text>
+                    
+                    <BlockStack gap="150">
+                      <BlockStack gap="050">
+                        <Text variant="bodySm" fontWeight="semibold">Position in Cart</Text>
+                        <InlineStack gap="200">
+                          <Checkbox
+                            label="Top of cart"
+                            checked={upsellConfig.position === 'top'}
+                            onChange={() => setUpsellConfig({ ...upsellConfig, position: 'top' })}
+                          />
+                          <Checkbox
+                            label="Bottom of cart"
+                            checked={upsellConfig.position === 'bottom'}
+                            onChange={() => setUpsellConfig({ ...upsellConfig, position: 'bottom' })}
+                          />
+                        </InlineStack>
+                      </BlockStack>
 
-                            {/* Triggered Products/Collections Section */}
-                            {rule.triggerType === 'triggered_products' && (
-                              <div style={{ padding: '12px', backgroundColor: '#fff', borderRadius: '6px', border: '1px solid #d1d5db' }}>
-                                <BlockStack gap="200">
-                                  <InlineStack align="space-between" blockAlign="center">
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                      <Badge tone="info">Trigger</Badge>
-                                      <Text variant="bodySm" fontWeight="semibold">When these items are in cart</Text>
-                                    </div>
-                                      <Button onClick={() => handleOpenTriggeredProductsModal(rule.ruleId)} size="slim">
-                                      {((rule.triggerItems?.products?.length || 0) + (rule.triggerItems?.collections?.length || 0)) > 0
-                                        ? `${(rule.triggerItems?.products?.length || 0) + (rule.triggerItems?.collections?.length || 0)} Selected`
-                                        : 'Select Trigger Items'}
-                                    </Button>
-                                  </InlineStack>
+                      <BlockStack gap="050">
+                        <Text variant="bodySm" fontWeight="semibold">Layout</Text>
+                        <InlineStack gap="200">
+                          <Checkbox
+                            label="Grid (2 columns)"
+                            checked={upsellConfig.layout === 'grid'}
+                            onChange={() => setUpsellConfig({ ...upsellConfig, layout: 'grid' })}
+                          />
+                          <Checkbox
+                            label="Carousel"
+                            checked={upsellConfig.layout === 'carousel'}
+                            onChange={() => setUpsellConfig({ ...upsellConfig, layout: 'carousel' })}
+                          />
+                        </InlineStack>
+                      </BlockStack>
 
-                                  {/* Display selected trigger products */}
-                                  {rule.triggerItems?.products && rule.triggerItems.products.length > 0 && (
-                                    <div>
-                                      <Text variant="bodySm" tone="subdued">Trigger Products:</Text>
-                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
-                                        {rule.triggerItems.products.map(productId => {
-                                          const product = shopifyProducts.find(p => p.id === productId);
-                                          if (!product) return null;
-                                          return (
-                                            <div
-                                              key={productId}
-                                              style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '4px',
-                                                padding: '4px 8px',
-                                                backgroundColor: '#eff6ff',
-                                                borderRadius: '4px',
-                                                border: '1px solid #3b82f6',
-                                                fontSize: '11px',
-                                              }}
-                                            >
-                                              <span>{product.image}</span>
-                                              <span>{product.title}</span>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  )}
+                      <BlockStack gap="050">
+                        <Text variant="bodySm" fontWeight="semibold">Alignment</Text>
+                        <InlineStack gap="200">
+                          <Checkbox
+                            label="Horizontal"
+                            checked={upsellConfig.alignment === 'horizontal'}
+                            onChange={() => setUpsellConfig({ ...upsellConfig, alignment: 'horizontal' })}
+                          />
+                          <Checkbox
+                            label="Vertical"
+                            checked={upsellConfig.alignment === 'vertical'}
+                            onChange={() => setUpsellConfig({ ...upsellConfig, alignment: 'vertical' })}
+                          />
+                        </InlineStack>
+                      </BlockStack>
+                    </BlockStack>
+                  </BlockStack>
+                </Card>
 
-                                  {/* Display selected trigger collections */}
-                                  {rule.triggerItems?.collections && rule.triggerItems.collections.length > 0 && (
-                                    <div>
-                                      <Text variant="bodySm" tone="subdued">Trigger Collections:</Text>
-                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
-                                        {rule.triggerItems.collections.map(collectionId => {
-                                          const collection = mockCollections.find(c => c.id === collectionId);
-                                          if (!collection) return null;
-                                          return (
-                                            <div
-                                              key={collectionId}
-                                              style={{
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '4px',
-                                                padding: '4px 8px',
-                                                backgroundColor: '#eff6ff',
-                                                borderRadius: '4px',
-                                                border: '1px solid #3b82f6',
-                                                fontSize: '11px',
-                                              }}
-                                            >
-                                              <span>🏷️</span>
-                                              <span>{collection.title}</span>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  )}
-                                </BlockStack>
-                              </div>
-                            )}
+                {/* Upsell Rules Section */}
+                <Card>
+                  <BlockStack gap="200">
+                    <BlockStack gap="050">
+                      <Text variant="headingSm">Upsell Rules</Text>
+                      <Text variant="bodySm" tone="subdued">Configure which products to recommend</Text>
+                    </BlockStack>
 
-                            {/* Upsell Products Section for this Rule */}
-                            <div style={{ padding: '12px', backgroundColor: '#f0fdf4', borderRadius: '6px', border: '1px solid #10b981' }}>
-                              <BlockStack gap="200">
-                                <InlineStack align="space-between" blockAlign="center">
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <Badge tone="success">Upsell</Badge>
-                                    <Text variant="bodySm" fontWeight="semibold">Show these products</Text>
-                                  </div>
-                                  <Button onClick={() => handleOpenUpsellProductsModal(rule.ruleId)} variant="primary" size="slim">
-                                    {(rule.upsellItems?.products?.length || 0) > 0
-                                      ? `${rule.upsellItems.products.length} Selected`
-                                      : 'Add Upsell Products'}
-                                  </Button>
-                                </InlineStack>
+                    {/* Manual Rules */}
+                    <BlockStack gap="150">
+                      <BlockStack gap="100">
+                        <Checkbox
+                          label="Use manual rules"
+                          checked={upsellConfig.upsellMode === 'manual'}
+                          onChange={() =>
+                            setUpsellConfig({
+                              ...upsellConfig,
+                              upsellMode: upsellConfig.upsellMode === 'manual' ? 'ai' : 'manual',
+                            })
+                          }
+                        />
+                        {upsellConfig.upsellMode === 'manual' && (
+                          <Button
+                            onClick={() => {
+                              setInitialManualUpsellRules(JSON.parse(JSON.stringify(manualUpsellRules)));
+                              setShowManualUpsellBuilder(true);
+                            }}
+                            variant="secondary"
+                            fullWidth
+                          >
+                            {manualUpsellRules.length === 0
+                              ? '+ Add Rule'
+                              : `Edit Rules (${manualUpsellRules.length})`}
+                          </Button>
+                        )}
+                      </BlockStack>
 
-                                {rule.upsellItems?.products && rule.upsellItems.products.length > 0 ? (
-                                  <div>
-                                    <Text variant="bodySm" tone="subdued">Upsell Products:</Text>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
-                                      {rule.upsellItems.products.map(productId => {
-                                        const product = shopifyProducts.find(p => p.id === productId);
-                                        if (!product) return null;
-                                        return (
-                                          <div
-                                            key={productId}
-                                            style={{
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              gap: '4px',
-                                              padding: '4px 8px',
-                                              backgroundColor: '#fff',
-                                              borderRadius: '4px',
-                                              border: '1px solid #10b981',
-                                              fontSize: '11px',
-                                            }}
-                                          >
-                                            <span>{product.image}</span>
-                                            <span style={{ fontWeight: '500' }}>{product.title}</span>
-                                            <span style={{ color: '#6b7280' }}>₹{product.price}</span>
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <Text variant="bodySm" tone="subdued">No upsell products selected yet</Text>
-                                )}
-                              </BlockStack>
-                            </div>
-                          </BlockStack>
-                        </div>
+                      <BlockStack gap="100">
+                        <Checkbox
+                          label="Use AI recommendations"
+                          checked={upsellConfig.upsellMode === 'ai'}
+                          onChange={() =>
+                            setUpsellConfig({
+                              ...upsellConfig,
+                              upsellMode: upsellConfig.upsellMode === 'ai' ? 'manual' : 'ai',
+                            })
+                          }
+                        />
+                        {upsellConfig.upsellMode === 'ai' && (
+                          <Text variant="bodySm" tone="subdued">AI will analyze cart and suggest relevant products</Text>
+                        )}
+                      </BlockStack>
+                    </BlockStack>
+                  </BlockStack>
+                </Card>
+
+                {/* Show on Empty Cart */}
+                <Card>
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between" blockAlign="center">
+                      <BlockStack gap="050">
+                        <Text variant="headingSm">Show on Empty Cart</Text>
+                        <Text variant="bodySm" tone="subdued">Display recommendations even if cart is empty</Text>
+                      </BlockStack>
+                      <Checkbox
+                        checked={upsellConfig.showOnEmptyCart}
+                        onChange={(checked) =>
+                          setUpsellConfig({ ...upsellConfig, showOnEmptyCart: checked })
+                        }
+                      />
+                    </InlineStack>
+                  </BlockStack>
+                </Card>
+
+                {/* Active Rules Summary */}
+                {manualUpsellRules.length > 0 && upsellConfig.upsellMode === 'manual' && (
+                  <Card tone="info">
+                    <BlockStack gap="200">
+                      <Text variant="headingSm">Active Rules ({manualUpsellRules.length})</Text>
+                      {manualUpsellRules.map((rule, idx) => (
+                        <BlockStack key={rule.id} gap="100">
+                          <InlineStack align="space-between" blockAlign="center">
+                            <BlockStack gap="050">
+                              <Text variant="bodySm" fontWeight="semibold">Rule #{idx + 1}</Text>
+                              <Text variant="bodySm" tone="subdued">
+                                {getTriggerSummary(rule)} → {getUpsellSummary(rule)}
+                              </Text>
+                            </BlockStack>
+                            <Button
+                              variant="plain"
+                              tone="critical"
+                              size="slim"
+                              onClick={() => removeManualUpsellRule(rule.id)}
+                            >
+                              ✕
+                            </Button>
+                          </InlineStack>
+                        </BlockStack>
                       ))}
                     </BlockStack>
-                  ) : (
-                    <div style={{ padding: '40px', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px dashed #d1d5db' }}>
-                      <Text variant="bodyMd" tone="subdued">
-                        No rules created yet. Click "Add Rule" to create your first upsell rule.
-                      </Text>
-                    </div>
-                  )}
-                </BlockStack>
-              </Card>
-            )}
-
-            {/* Upsell Content & Design */}
-            <Card>
-              <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">Upsell Content & Design</Text>
-                
-                {/* Rich Text Title */}
-                <BlockStack gap="200">
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="label" variant="bodyMd" fontWeight="semibold">Upsell Title</Text>
-                    <InlineStack gap="100">
-                      <button
-                        onClick={() => updateUpsellTitleFormatting('bold')}
-                        style={{
-                          padding: '6px 10px',
-                          border: `2px solid ${upsellConfig.upsellTitle?.formatting?.bold ? '#2c6ecb' : '#d1d5db'}`,
-                          borderRadius: '4px',
-                          backgroundColor: upsellConfig.upsellTitle?.formatting?.bold ? '#f0f7ff' : '#fff',
-                          cursor: 'pointer',
-                          fontWeight: 'bold',
-                          fontSize: '13px',
-                        }}
-                      >
-                        B
-                      </button>
-                      <button
-                        onClick={() => updateUpsellTitleFormatting('italic')}
-                        style={{
-                          padding: '6px 10px',
-                          border: `2px solid ${upsellConfig.upsellTitle?.formatting?.italic ? '#2c6ecb' : '#d1d5db'}`,
-                          borderRadius: '4px',
-                          backgroundColor: upsellConfig.upsellTitle?.formatting?.italic ? '#f0f7ff' : '#fff',
-                          cursor: 'pointer',
-                          fontStyle: 'italic',
-                          fontSize: '13px',
-                        }}
-                      >
-                        I
-                      </button>
-                      <button
-                        onClick={() => updateUpsellTitleFormatting('underline')}
-                        style={{
-                          padding: '6px 10px',
-                          border: `2px solid ${upsellConfig.upsellTitle?.formatting?.underline ? '#2c6ecb' : '#d1d5db'}`,
-                          borderRadius: '4px',
-                          backgroundColor: upsellConfig.upsellTitle?.formatting?.underline ? '#f0f7ff' : '#fff',
-                          cursor: 'pointer',
-                          textDecoration: 'underline',
-                          fontSize: '13px',
-                        }}
-                      >
-                        U
-                      </button>
-                    </InlineStack>
-                  </InlineStack>
-                  <TextField
-                    value={upsellConfig.upsellTitle?.text || ''}
-                    onChange={(value) => updateUpsellTitleText(value)}
-                    autoComplete="off"
-                  />
-                  <div style={{ padding: '8px 12px', backgroundColor: '#f9fafb', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
-                    <Text as="p" variant="bodySm" style={getTitleStyle()}>
-                      Preview: {upsellConfig.upsellTitle?.text || 'Recommended for you'}
-                    </Text>
-                  </div>
-                </BlockStack>
-
-                {/* Button Style */}
-                <BlockStack gap="200">
-                  <Text as="label" variant="bodyMd" fontWeight="semibold">Add to cart button style</Text>
-                  <ChoiceList
-                    title=""
-                    choices={[
-                      { label: 'Box', value: 'box' },
-                      { label: 'Circle', value: 'circle' },
-                    ]}
-                    selected={[upsellConfig.buttonStyle]}
-                    onChange={(value) => updateUpsellConfig('buttonStyle', value[0])}
-                  />
-                </BlockStack>
-
-                {/* Position */}
-                <BlockStack gap="200">
-                  <Text as="label" variant="bodyMd" fontWeight="semibold">Position</Text>
-                  <ChoiceList
-                    title=""
-                    choices={[
-                      { label: 'Top of cart items', value: 'top' },
-                      { label: 'Bottom of cart items', value: 'bottom' },
-                    ]}
-                    selected={[upsellConfig.position]}
-                    onChange={(value) => updateUpsellConfig('position', value[0])}
-                  />
-                </BlockStack>
-
-                {/* Layout */}
-                <BlockStack gap="200">
-                  <Text as="label" variant="bodyMd" fontWeight="semibold">Layout</Text>
-                  <ChoiceList
-                    title=""
-                    choices={[
-                      { label: 'Grid', value: 'grid' },
-                      { label: 'Carousel', value: 'carousel' },
-                    ]}
-                    selected={[upsellConfig.layout]}
-                    onChange={(value) => updateUpsellConfig('layout', value[0])}
-                  />
-                </BlockStack>
-
-                {/* Alignment */}
-                <BlockStack gap="200">
-                  <Text as="label" variant="bodyMd" fontWeight="semibold">Alignment</Text>
-                  <ChoiceList
-                    title=""
-                    choices={[
-                      { label: 'Horizontal', value: 'horizontal' },
-                      { label: 'Vertical', value: 'vertical' },
-                    ]}
-                    selected={[upsellConfig.alignment]}
-                    onChange={(value) => {
-                      updateUpsellConfig('alignment', value[0]);
-                      // Show navigation arrows only for horizontal
-                      if (value[0] === 'vertical') {
-                        updateUpsellConfig('showNavigationArrows', false);
-                      } else {
-                        updateUpsellConfig('showNavigationArrows', true);
-                      }
-                    }}
-                  />
-                </BlockStack>
-
-                {/* Navigation Arrows (only for horizontal) */}
-                {upsellConfig.alignment === 'horizontal' && (
-                  <Checkbox
-                    label="Show left/right navigation arrows"
-                    checked={upsellConfig.showNavigationArrows}
-                    onChange={(value) => updateUpsellConfig('showNavigationArrows', value)}
-                  />
+                  </Card>
                 )}
 
-                {/* Product Reviews */}
-                <Checkbox
-                  label="Show product reviews"
-                  checked={upsellConfig.showProductReviews}
-                  onChange={(value) => updateUpsellConfig('showProductReviews', value)}
-                />
-              </BlockStack>
-            </Card>
+                {/* Validation Error */}
+                {validationError && (
+                  <Card tone="critical">
+                    <BlockStack gap="100">
+                      <Text variant="bodyMd" fontWeight="semibold">⚠️ Configuration Error</Text>
+                      <Text variant="bodySm">{validationError}</Text>
+                    </BlockStack>
+                  </Card>
+                )}
 
-            {/* Actions */}
-            <Card>
-              <InlineStack align="end" gap="200">
-                <Button onClick={handleCancelUpsellConfig} disabled={isSaving}>Cancel</Button>
-                <Button variant="primary" onClick={handleSaveUpsellConfig} loading={isSaving} disabled={isSaving}>
-                  Save Configuration
-                </Button>
-              </InlineStack>
-            </Card>
+                {/* Save Buttons */}
+                <Card>
+                  <InlineStack gap="200">
+                    <Button
+                      variant="primary"
+                      onClick={handleSaveUpsellRules}
+                      loading={upsellSaving}
+                      fullWidth
+                    >
+                      Save Settings
+                    </Button>
+                    <Button onClick={handleCancelUpsellRules} fullWidth>
+                      Cancel
+                    </Button>
+                  </InlineStack>
+                </Card>
+              </>
+            )}
           </BlockStack>
         </div>
       );
@@ -2381,6 +2276,8 @@ export default function CartDrawerAdmin() {
 
     return null;
   };
+
+
 
   // ==========================================
   // RENDER CART PREVIEW
@@ -2390,28 +2287,10 @@ export default function CartDrawerAdmin() {
     const showEmpty = previewCartState[0] === 'empty';
     const cartProductIds = mockCartItems.map(item => item.productId).filter(Boolean);
     const cartCollectionIds = cartProductIds.flatMap((productId) => {
-      const product = shopifyProducts.find(p => p.id === productId);
+      const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
       return product?.collections || [];
     });
 
-    const sortedRules = [...manualUpsellRules].sort((a, b) => a.priority - b.priority);
-    const matchedRule = sortedRules.find((rule) => {
-      if (rule.triggerType === 'all') return true;
-      if (rule.triggerSource === 'products') {
-        return rule.triggerProductIds.some(id => cartProductIds.includes(id));
-      }
-      if (rule.triggerSource === 'collections') {
-        return rule.triggerCollectionIds.some(id => cartCollectionIds.includes(id));
-      }
-      return false;
-    });
-
-    const recommendedProductIds = useAIUpsells
-      ? (upsellSettings.products || [])
-      : (matchedRule?.upsellProductIds || []);
-    const recommendedProducts = recommendedProductIds
-      .map(id => shopifyProducts.find(p => p.id === id))
-      .filter(Boolean);
 
     return (
       <div style={{ position: 'relative', height: '100%', overflow: 'hidden', backgroundColor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -2541,54 +2420,32 @@ export default function CartDrawerAdmin() {
               // Get upsell products based on mode with priority system
               let productsToShow = [];
               
-              if (upsellConfig.upsellMode === 'manual' && upsellConfig.manualRules && upsellConfig.manualRules.length > 0) {
-                const cartProductIds = mockCartItems.map(item => item.productId).filter(Boolean);
-                console.log('[Upsell Preview] Cart Product IDs:', cartProductIds);
-                
-                // PRIORITY 1: Check Triggered Product rules first
-                const triggeredUpsells = new Set();
-                const allProductsUpsells = new Set();
-                
-                for (const rule of upsellConfig.manualRules) {
-                  if (rule.triggerType === 'triggered_products') {
-                    // Check if any cart product matches trigger products
-                    const hasMatch = rule.triggerItems?.products?.some(pid => cartProductIds.includes(pid));
-                    console.log('[Upsell Preview] Triggered Rule Check:', {
-                      ruleId: rule.ruleId,
-                      triggerProducts: rule.triggerItems?.products,
-                      hasMatch,
-                      upsellProducts: rule.upsellItems?.products
-                    });
-                    if (hasMatch && rule.upsellItems?.products) {
-                      rule.upsellItems.products.forEach(pid => triggeredUpsells.add(pid));
-                    }
-                  } else if (rule.triggerType === 'all_products') {
-                    // Collect All Products upsells as fallback
-                    console.log('[Upsell Preview] All Products Rule:', {
-                      ruleId: rule.ruleId,
-                      upsellProducts: rule.upsellItems?.products
-                    });
-                    if (rule.upsellItems?.products) {
-                      rule.upsellItems.products.forEach(pid => allProductsUpsells.add(pid));
-                    }
-                  }
-                }
-                
-                console.log('[Upsell Preview] Results:', {
-                  triggeredUpsellsCount: triggeredUpsells.size,
-                  allProductsUpsellsCount: allProductsUpsells.size,
-                  triggeredUpsells: Array.from(triggeredUpsells),
-                  allProductsUpsells: Array.from(allProductsUpsells)
-                });
-                
-                // PRIORITY 2: Use Triggered upsells if any matched, otherwise use All Products as fallback
-                if (triggeredUpsells.size > 0) {
-                  productsToShow = Array.from(triggeredUpsells);
-                  console.log('[Upsell Preview] Showing TRIGGERED upsells:', productsToShow);
-                } else {
-                  productsToShow = Array.from(allProductsUpsells);
-                  console.log('[Upsell Preview] Showing ALL PRODUCTS upsells (fallback):', productsToShow);
-                }
+              if (upsellConfig.upsellMode === 'manual') {
+                const rulesForEvaluation = [
+                  {
+                    id: 'rule2',
+                    enabled: upsellRulesConfig.rule2?.enabled,
+                    ruleType: 'TRIGGERED',
+                    triggerProducts: upsellRulesConfig.rule2?.triggerProducts || [],
+                    upsellProducts: upsellRulesConfig.rule2?.upsellProducts || [],
+                  },
+                  {
+                    id: 'rule3',
+                    enabled: upsellRulesConfig.rule3?.enabled,
+                    ruleType: 'CART_CONDITIONS',
+                    cartValueThreshold: upsellRulesConfig.rule3?.cartValueThreshold || 0,
+                    upsellProducts: upsellRulesConfig.rule3?.upsellProducts || [],
+                  },
+                  {
+                    id: 'rule1',
+                    enabled: upsellRulesConfig.rule1?.enabled,
+                    ruleType: 'GLOBAL',
+                    upsellProducts: upsellRulesConfig.rule1?.upsellProducts || [],
+                  },
+                ];
+
+                const matchedRule = evaluateUpsellRules(rulesForEvaluation, cartProductIds, cartTotal);
+                productsToShow = matchedRule?.upsellProducts || [];
               } else if (upsellConfig.upsellMode === 'ai') {
                 // For AI mode, show some default products
                 productsToShow = ['sp-2', 'sp-6', 'sp-8'];
@@ -2663,7 +2520,7 @@ export default function CartDrawerAdmin() {
                       scrollBehavior: 'smooth',
                     }}>
                     {productsToShow.slice(0, 6).map(productId => {
-                      const product = shopifyProducts.find(p => p.id === productId);
+                      const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
                       if (!product) return null;
                       return (
                         <div key={product.id} style={{
@@ -3191,912 +3048,214 @@ export default function CartDrawerAdmin() {
         </Modal.Section>
       </Modal>
 
-      {/* Triggered Products Modal */}
+      {/* Modal: Manual Upsell Builder */}
       <Modal
-        open={showTriggeredProductsModal}
+        open={showManualUpsellBuilder}
         onClose={() => {
-          setShowTriggeredProductsModal(false);
-          setSelectedProductIds([]);
-          setSelectedCollectionIds([]);
-          setProductSearchQuery('');
-          setCollectionSearchQuery('');
-          setModalActiveTab('products');
+          setShowManualUpsellBuilder(false);
+          cancelManualUpsellRules();
         }}
-        title="Select Triggered Products / Collections"
-        large
+        title="Configure Manual Upsell Rules"
         primaryAction={{
-          content: 'Save',
-          onAction: handleSaveTriggeredProducts,
+          content: 'Save Rules',
+          loading: upsellSaving,
+          onAction: saveManualUpsellRules,
         }}
         secondaryActions={[
           {
             content: 'Cancel',
             onAction: () => {
-              setShowTriggeredProductsModal(false);
-              setSelectedProductIds([]);
-              setSelectedCollectionIds([]);
-              setProductSearchQuery('');
-              setCollectionSearchQuery('');
-              setModalActiveTab('products');
+              setShowManualUpsellBuilder(false);
+              cancelManualUpsellRules();
             },
           },
         ]}
-      >
-        <Modal.Section>
-          <BlockStack gap="400">
-            {/* Tabs */}
-            <div style={{ display: 'flex', gap: '8px', borderBottom: '2px solid #e5e7eb' }}>
-              <button
-                onClick={() => setModalActiveTab('products')}
-                style={{
-                  padding: '10px 16px',
-                  border: 'none',
-                  background: 'transparent',
-                  borderBottom: modalActiveTab === 'products' ? '3px solid #2c6ecb' : '3px solid transparent',
-                  color: modalActiveTab === 'products' ? '#2c6ecb' : '#6b7280',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  fontSize: '14px',
-                  marginBottom: '-2px',
-                }}
-              >
-                Select Product
-              </button>
-              <button
-                onClick={() => setModalActiveTab('collections')}
-                style={{
-                  padding: '10px 16px',
-                  border: 'none',
-                  background: 'transparent',
-                  borderBottom: modalActiveTab === 'collections' ? '3px solid #2c6ecb' : '3px solid transparent',
-                  color: modalActiveTab === 'collections' ? '#2c6ecb' : '#6b7280',
-                  cursor: 'pointer',
-                  fontWeight: '600',
-                  fontSize: '14px',
-                  marginBottom: '-2px',
-                }}
-              >
-                Select Collection
-              </button>
-            </div>
-
-            {/* Products Tab */}
-            {modalActiveTab === 'products' && (
-              <BlockStack gap="300">
-                <TextField
-                  label=""
-                  placeholder="Search Products..."
-                  value={productSearchQuery}
-                  onChange={setProductSearchQuery}
-                  autoComplete="off"
-                />
-
-                <InlineStack gap="300" blockAlign="center" wrap={false}>
-                  <Checkbox
-                    label="Exclude archived"
-                    checked={excludeArchived}
-                    onChange={setExcludeArchived}
-                  />
-                  <Checkbox
-                    label="Exclude draft"
-                    checked={excludeDraft}
-                    onChange={setExcludeDraft}
-                  />
-                  <Checkbox
-                    label="Exclude out of stock"
-                    checked={excludeOutOfStock}
-                    onChange={setExcludeOutOfStock}
-                  />
-                </InlineStack>
-
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="span" tone="subdued">{selectedProductIds.length} product{selectedProductIds.length !== 1 ? 's' : ''} selected</Text>
-                  <Checkbox
-                    label="Show only selected"
-                    checked={showOnlySelected}
-                    onChange={setShowOnlySelected}
-                  />
-                </InlineStack>
-
-                <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
-                  {filteredProducts.map((product) => (
-                    <div
-                      key={product.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        padding: '12px',
-                        borderBottom: '1px solid #e5e7eb',
-                        backgroundColor: selectedProductIds.includes(product.id) ? '#f0f9ff' : '#fff',
-                      }}
-                    >
-                      <Checkbox
-                        checked={selectedProductIds.includes(product.id)}
-                        onChange={() => toggleProductSelection(product.id)}
-                      />
-                      <div style={{ marginLeft: '12px', flex: 1 }}>
-                        <InlineStack align="space-between" blockAlign="start">
-                          <BlockStack gap="100">
-                            <Text variant="bodyMd" fontWeight="semibold">{product.image} {product.title}</Text>
-                            <Text as="span" tone="subdued" variant="bodySm">{product.variants} variant{product.variants !== 1 ? 's' : ''}</Text>
-                          </BlockStack>
-                          <InlineStack gap="200" blockAlign="center">
-                            {getStatusBadge(product.status)}
-                            <Text variant="bodyMd" fontWeight="semibold">${product.price}</Text>
-                          </InlineStack>
-                        </InlineStack>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {filteredProducts.length === 0 && (
-                  <Text as="p" tone="subdued" alignment="center">No products found</Text>
-                )}
-              </BlockStack>
-            )}
-
-            {/* Collections Tab */}
-            {modalActiveTab === 'collections' && (
-              <BlockStack gap="300">
-                <TextField
-                  label=""
-                  placeholder="Search Collections..."
-                  value={collectionSearchQuery}
-                  onChange={setCollectionSearchQuery}
-                  autoComplete="off"
-                />
-
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text as="span" tone="subdued">{selectedCollectionIds.length} collection{selectedCollectionIds.length !== 1 ? 's' : ''} selected</Text>
-                  <Checkbox
-                    label="Show only selected"
-                    checked={showOnlySelectedCollections}
-                    onChange={setShowOnlySelectedCollections}
-                  />
-                </InlineStack>
-
-                <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
-                  {filteredCollections.map((collection) => (
-                    <div
-                      key={collection.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        padding: '12px',
-                        borderBottom: '1px solid #e5e7eb',
-                        backgroundColor: selectedCollectionIds.includes(collection.id) ? '#f0f9ff' : '#fff',
-                      }}
-                    >
-                      <Checkbox
-                        checked={selectedCollectionIds.includes(collection.id)}
-                        onChange={() => toggleCollectionSelection(collection.id)}
-                        label={`🏷️ ${collection.title}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </BlockStack>
-            )}
-
-            {/* Common Selected Items Box */}
-            {(selectedProductIds.length > 0 || selectedCollectionIds.length > 0) && (
-              <div style={{ padding: '12px', backgroundColor: '#f0f7ff', borderRadius: '6px', border: '1px solid #2c6ecb' }}>
-                <Text variant="bodyMd" fontWeight="semibold">Selected Items ({selectedProductIds.length + selectedCollectionIds.length})</Text>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
-                  {selectedProductIds.map(productId => {
-                    const product = shopifyProducts.find(p => p.id === productId);
-                    if (!product) return null;
-                    return (
-                      <div
-                        key={productId}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '4px 8px',
-                          backgroundColor: '#fff',
-                          borderRadius: '4px',
-                          border: '1px solid #2c6ecb',
-                          fontSize: '12px',
-                        }}
-                      >
-                        <span>{product.image}</span>
-                        <span>{product.title}</span>
-                      </div>
-                    );
-                  })}
-                  {selectedCollectionIds.map(collectionId => {
-                    const collection = mockCollections.find(c => c.id === collectionId);
-                    if (!collection) return null;
-                    return (
-                      <div
-                        key={collectionId}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '4px 8px',
-                          backgroundColor: '#fff',
-                          borderRadius: '4px',
-                          border: '1px solid #2c6ecb',
-                          fontSize: '12px',
-                        }}
-                      >
-                        <span>🏷️</span>
-                        <span>{collection.title}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </BlockStack>
-        </Modal.Section>
-      </Modal>
-
-      {/* Upsell Products Modal */}
-      <Modal
-        open={showUpsellProductsModal}
-        onClose={() => {
-          setShowUpsellProductsModal(false);
-          setSelectedProductIds([]);
-          setProductSearchQuery('');
-        }}
-        title="Select Upsell Products"
         large
-        primaryAction={{
-          content: 'Save',
-          onAction: handleSaveUpsellProducts,
-        }}
-        secondaryActions={[
-          {
-            content: 'Cancel',
-            onAction: () => {
-              setShowUpsellProductsModal(false);
-              setSelectedProductIds([]);
-              setProductSearchQuery('');
-            },
-          },
-        ]}
       >
         <Modal.Section>
           <BlockStack gap="400">
-            <TextField
-              label=""
-              placeholder="Search Products..."
-              value={productSearchQuery}
-              onChange={setProductSearchQuery}
-              autoComplete="off"
-            />
+            {manualUpsellRules.map((rule, idx) => (
+              <Card key={rule.id}>
+                <BlockStack gap="200">
+                  <InlineStack align="space-between">
+                    <Text variant="headingSm">Rule #{idx + 1}</Text>
+                    <Button
+                      variant="plain"
+                      tone="critical"
+                      size="slim"
+                      onClick={() => removeManualUpsellRule(rule.id)}
+                    >
+                      Delete
+                    </Button>
+                  </InlineStack>
 
-            <InlineStack gap="300" blockAlign="center" wrap={false}>
-              <Checkbox
-                label="Exclude archived"
-                checked={excludeArchived}
-                onChange={setExcludeArchived}
-              />
-              <Checkbox
-                label="Exclude draft"
-                checked={excludeDraft}
-                onChange={setExcludeDraft}
-              />
-              <Checkbox
-                label="Exclude out of stock"
-                checked={excludeOutOfStock}
-                onChange={setExcludeOutOfStock}
-              />
-            </InlineStack>
+                  <Divider />
 
-            <InlineStack align="space-between" blockAlign="center">
-              <Text as="span" tone="subdued">{selectedProductIds.length} product{selectedProductIds.length !== 1 ? 's' : ''} selected</Text>
-              <Checkbox
-                label="Show only selected"
-                checked={showOnlySelected}
-                onChange={setShowOnlySelected}
-              />
-            </InlineStack>
-
-            <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
-              {filteredProducts.map((product) => (
-                <div
-                  key={product.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '12px',
-                    borderBottom: '1px solid #e5e7eb',
-                    backgroundColor: selectedProductIds.includes(product.id) ? '#f0f9ff' : '#fff',
-                  }}
-                >
-                  <Checkbox
-                    checked={selectedProductIds.includes(product.id)}
-                    onChange={() => toggleProductSelection(product.id)}
-                  />
-                  <div style={{ marginLeft: '12px', flex: 1 }}>
-                    <InlineStack align="space-between" blockAlign="start">
-                      <BlockStack gap="100">
-                        <Text variant="bodyMd" fontWeight="semibold">{product.image} {product.title}</Text>
-                        <Text as="span" tone="subdued" variant="bodySm">{product.variants} variant{product.variants !== 1 ? 's' : ''}</Text>
-                      </BlockStack>
-                      <InlineStack gap="200" blockAlign="center">
-                        {getStatusBadge(product.status)}
-                        <Text variant="bodyMd" fontWeight="semibold">${product.price}</Text>
+                  <BlockStack gap="150">
+                    <BlockStack gap="100">
+                      <Text variant="bodySm" fontWeight="semibold">Trigger Type</Text>
+                      <InlineStack gap="200">
+                        <Checkbox
+                          label="Any product"
+                          checked={rule.triggerType === 'all'}
+                          onChange={() =>
+                            updateManualUpsellRule(rule.id, { triggerType: 'all' })
+                          }
+                        />
+                        <Checkbox
+                          label="Specific products"
+                          checked={rule.triggerType === 'specific'}
+                          onChange={() =>
+                            updateManualUpsellRule(rule.id, { triggerType: 'specific' })
+                          }
+                        />
                       </InlineStack>
-                    </InlineStack>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {filteredProducts.length === 0 && (
-              <Text as="p" tone="subdued" alignment="center">No products found</Text>
-            )}
-          </BlockStack>
-        </Modal.Section>
-      </Modal>
-
-      {/* Manual Upsell Configuration Modal */}
-      <Modal
-        open={showManualUpsellModal}
-        onClose={() => setShowManualUpsellModal(false)}
-        title="Configure Manual Upsells"
-        large
-        primaryAction={{
-          content: 'Update',
-          onAction: () => {
-            // Save the manual upsell rules
-            handleApiUpdate('/api/upsell', {
-              ...upsellSettings,
-              manualRules: manualUpsellRules,
-            });
-            setShowManualUpsellModal(false);
-          },
-          disabled: !isUpsellConfigValid(),
-        }}
-        secondaryActions={[
-          {
-            content: 'Cancel',
-            onAction: () => setShowManualUpsellModal(false),
-          },
-        ]}
-      >
-        <Modal.Section>
-          <BlockStack gap="400">
-            {/* Two Column Header */}
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: '1fr 1fr', 
-              gap: '20px',
-              paddingBottom: '12px',
-              borderBottom: '2px solid #e5e7eb',
-            }}>
-              <Text variant="headingMd" as="h3" alignment="center">Trigger Product</Text>
-              <Text variant="headingMd" as="h3" alignment="center">Upsell Product</Text>
-            </div>
-
-            {/* Add New Upsell Button */}
-            <Button
-              variant="primary"
-              size="large"
-              fullWidth
-              onClick={handleAddUpsellRule}
-            >
-              Add New Upsell
-            </Button>
-
-            {/* Upsell Rules List */}
-            {manualUpsellRules.length === 0 && (
-              <div style={{ 
-                padding: '40px 20px', 
-                textAlign: 'center', 
-                backgroundColor: '#f9fafb',
-                borderRadius: '8px',
-              }}>
-                <Text tone="subdued" as="p">
-                  No upsell rules configured yet. Click "Add New Upsell" to create your first rule.
-                </Text>
-              </div>
-            )}
-
-            {manualUpsellRules.map((rule, index) => (
-              <div
-                key={rule.id}
-                style={{
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  padding: '16px',
-                  backgroundColor: '#fff',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', fontSize: '16px' }}>
-                    <span style={{ cursor: 'grab' }}>⋮⋮</span>
-                    <Text as="span" variant="bodySm" tone="subdued">Priority #{index + 1}</Text>
-                  </div>
-                  <button
-                    onClick={() => handleRemoveUpsellRule(rule.id)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontSize: '18px',
-                      color: '#6b7280',
-                    }}
-                    aria-label="Remove rule"
-                  >
-                    ×
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'start' }}>
-                  {/* LEFT: Trigger Product Section */}
-                  <div>
-                    <BlockStack gap="300">
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                          onClick={() => handleUpdateUpsellRule(rule.id, { triggerType: 'specific' })}
-                          style={{
-                            flex: 1,
-                            padding: '8px 12px',
-                            border: `2px solid ${rule.triggerType === 'specific' ? '#2c6ecb' : '#e5e7eb'}`,
-                            borderRadius: '6px',
-                            backgroundColor: rule.triggerType === 'specific' ? '#f0f7ff' : '#fff',
-                            cursor: 'pointer',
-                            fontSize: '13px',
-                            fontWeight: rule.triggerType === 'specific' ? '600' : '400',
-                          }}
-                        >
-                          Specific Trigger
-                        </button>
-                        <button
-                          onClick={() => handleUpdateUpsellRule(rule.id, { triggerType: 'all' })}
-                          style={{
-                            flex: 1,
-                            padding: '8px 12px',
-                            border: `2px solid ${rule.triggerType === 'all' ? '#2c6ecb' : '#e5e7eb'}`,
-                            borderRadius: '6px',
-                            backgroundColor: rule.triggerType === 'all' ? '#f0f7ff' : '#fff',
-                            cursor: 'pointer',
-                            fontSize: '13px',
-                            fontWeight: rule.triggerType === 'all' ? '600' : '400',
-                          }}
-                        >
-                          All Products
-                        </button>
-                      </div>
-
-                      {rule.triggerType === 'specific' && (
-                        <>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button
-                              onClick={() => handleUpdateUpsellRule(rule.id, { triggerSource: 'products', triggerCollectionIds: [] })}
-                              style={{
-                                flex: 1,
-                                padding: '8px 12px',
-                                border: `2px solid ${rule.triggerSource === 'products' ? '#2c6ecb' : '#e5e7eb'}`,
-                                borderRadius: '6px',
-                                backgroundColor: rule.triggerSource === 'products' ? '#f0f7ff' : '#fff',
-                                cursor: 'pointer',
-                                fontSize: '12px',
-                                fontWeight: rule.triggerSource === 'products' ? '600' : '400',
-                              }}
-                            >
-                              Products
-                            </button>
-                            <button
-                              onClick={() => handleUpdateUpsellRule(rule.id, { triggerSource: 'collections', triggerProductIds: [] })}
-                              style={{
-                                flex: 1,
-                                padding: '8px 12px',
-                                border: `2px solid ${rule.triggerSource === 'collections' ? '#2c6ecb' : '#e5e7eb'}`,
-                                borderRadius: '6px',
-                                backgroundColor: rule.triggerSource === 'collections' ? '#f0f7ff' : '#fff',
-                                cursor: 'pointer',
-                                fontSize: '12px',
-                                fontWeight: rule.triggerSource === 'collections' ? '600' : '400',
-                              }}
-                            >
-                              Collections
-                            </button>
-                          </div>
-
-                          {rule.triggerSource === 'products' && (
-                            <>
-                              <Button
-                                onClick={() => handleOpenTriggerPicker(rule.id)}
-                                size="medium"
-                              >
-                                {rule.triggerProductIds.length > 0
-                                  ? `${rule.triggerProductIds.length} Product${rule.triggerProductIds.length !== 1 ? 's' : ''} Selected`
-                                  : 'Select Trigger Products'}
-                              </Button>
-
-                              {rule.triggerProductIds.length > 0 && (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                  {rule.triggerProductIds.map(productId => {
-                                    const product = shopifyProducts.find(p => p.id === productId);
-                                    if (!product) return null;
-                                    return (
-                                      <div
-                                        key={productId}
-                                        style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '6px',
-                                          padding: '4px 8px',
-                                          backgroundColor: '#f3f4f6',
-                                          borderRadius: '4px',
-                                          fontSize: '12px',
-                                        }}
-                                      >
-                                        <span>{product.image}</span>
-                                        <span>{product.title}</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </>
-                          )}
-
-                          {rule.triggerSource === 'collections' && (
-                            <>
-                              <Button
-                                onClick={() => handleOpenCollectionPicker(rule.id)}
-                                size="medium"
-                              >
-                                {rule.triggerCollectionIds.length > 0
-                                  ? `${rule.triggerCollectionIds.length} Collection${rule.triggerCollectionIds.length !== 1 ? 's' : ''} Selected`
-                                  : 'Select Trigger Collections'}
-                              </Button>
-
-                              {rule.triggerCollectionIds.length > 0 && (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                  {rule.triggerCollectionIds.map(collectionId => {
-                                    const collection = mockCollections.find(c => c.id === collectionId);
-                                    if (!collection) return null;
-                                    return (
-                                      <div
-                                        key={collectionId}
-                                        style={{
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '6px',
-                                          padding: '4px 8px',
-                                          backgroundColor: '#f3f4f6',
-                                          borderRadius: '4px',
-                                          fontSize: '12px',
-                                        }}
-                                      >
-                                        <span>🏷️</span>
-                                        <span>{collection.title}</span>
-                                        <button
-                                          onClick={() => {
-                                            const updated = rule.triggerCollectionIds.filter(id => id !== collectionId);
-                                            handleUpdateUpsellRule(rule.id, { triggerCollectionIds: updated });
-                                          }}
-                                          style={{
-                                            background: 'none',
-                                            border: 'none',
-                                            cursor: 'pointer',
-                                            fontSize: '14px',
-                                            color: '#6b7280',
-                                          }}
-                                        >
-                                          ×
-                                        </button>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </>
-                      )}
-
-                      {rule.triggerType === 'all' && (
-                        <div style={{
-                          padding: '12px',
-                          backgroundColor: '#f0f7ff',
-                          borderRadius: '6px',
-                          border: '1px solid #2c6ecb',
-                        }}>
-                          <Text tone="info" as="p" variant="bodySm">
-                            This upsell will trigger for any product added to cart
-                          </Text>
-                        </div>
-                      )}
                     </BlockStack>
-                  </div>
 
-                  {/* RIGHT: Upsell Product Section */}
-                  <div>
-                    <BlockStack gap="300">
+                    {rule.triggerType === 'specific' && (
                       <Button
-                        onClick={() => handleOpenUpsellPicker(rule.id)}
-                        size="medium"
+                        onClick={() => openProductPicker(rule.id, 'trigger')}
+                        variant="secondary"
                       >
-                        {rule.upsellProductIds.length > 0
-                          ? `${rule.upsellProductIds.length} Product${rule.upsellProductIds.length !== 1 ? 's' : ''} Selected`
-                          : 'Add Upsell Product'}
+                        Choose Trigger Products
                       </Button>
+                    )}
 
-                      {rule.upsellProductIds.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {rule.upsellProductIds.map(productId => {
-                            const product = shopifyProducts.find(p => p.id === productId);
-                            if (!product) return null;
-                            return (
-                              <div
-                                key={productId}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  padding: '4px 8px',
-                                  backgroundColor: '#f3f4f6',
-                                  borderRadius: '4px',
-                                  fontSize: '12px',
-                                }}
-                              >
-                                <span>{product.image}</span>
-                                <span>{product.title}</span>
-                                <button
-                                  onClick={() => {
-                                    const updated = rule.upsellProductIds.filter(id => id !== productId);
-                                    handleUpdateUpsellRule(rule.id, { upsellProductIds: updated });
-                                  }}
-                                  style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    fontSize: '14px',
-                                    color: '#6b7280',
-                                  }}
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                    <BlockStack gap="100">
+                      <Text variant="bodySm" fontWeight="semibold">Upsell Products</Text>
+                      <Button
+                        onClick={() => openProductPicker(rule.id, 'upsell')}
+                        variant="secondary"
+                      >
+                        Choose Upsell Products
+                      </Button>
                     </BlockStack>
-                  </div>
-                </div>
 
-                {(() => {
-                  const errors = getRuleValidation(rule);
-                  if (!errors.triggerMissing && !errors.upsellMissing) return null;
-                  return (
-                    <div style={{ marginTop: '12px', padding: '8px 10px', borderRadius: '6px', backgroundColor: '#fef2f2', border: '1px solid #fecaca' }}>
-                      {errors.triggerMissing && (
-                        <Text tone="critical" as="p" variant="bodySm">Select a trigger product or collection.</Text>
-                      )}
-                      {errors.upsellMissing && (
-                        <Text tone="critical" as="p" variant="bodySm">Select at least one upsell product.</Text>
-                      )}
-                    </div>
-                  );
-                })()}
-
-                {/* Row Actions */}
-                <div style={{ 
-                  display: 'flex', 
-                  gap: '8px', 
-                  marginTop: '16px', 
-                  paddingTop: '16px',
-                  borderTop: '1px solid #e5e7eb',
-                  justifyContent: 'space-between',
-                }}>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <Button
-                      size="slim"
-                      onClick={() => handleMoveRule(rule.id, 'up')}
-                      disabled={index === 0}
-                    >
-                      ↑ Move Up
-                    </Button>
-                    <Button
-                      size="slim"
-                      onClick={() => handleMoveRule(rule.id, 'down')}
-                      disabled={index === manualUpsellRules.length - 1}
-                    >
-                      ↓ Move Down
-                    </Button>
-                  </div>
-                  <Button
-                    size="slim"
-                    tone="critical"
-                    onClick={() => handleRemoveUpsellRule(rule.id)}
-                  >
-                    Remove Rule
-                  </Button>
-                </div>
-              </div>
+                    <Card tone="info">
+                      <Text variant="bodySm">
+                        Trigger: {getTriggerSummary(rule)}
+                      </Text>
+                      <Text variant="bodySm">
+                        Upsell: {getUpsellSummary(rule)}
+                      </Text>
+                    </Card>
+                  </BlockStack>
+                </BlockStack>
+              </Card>
             ))}
+
+            <Button
+              onClick={addManualUpsellRule}
+              variant="secondary"
+              fullWidth
+            >
+              + Add Rule
+            </Button>
           </BlockStack>
         </Modal.Section>
       </Modal>
 
-      {/* Collection Picker Modal */}
+      {/* Modal: Product Picker */}
       <Modal
-        open={showCollectionPicker}
-        onClose={() => {
-          setShowCollectionPicker(false);
-          setCurrentUpsellRule(null);
-          setSelectedCollectionIds([]);
-          setCollectionSearchQuery('');
-          setShowOnlySelectedCollections(false);
-        }}
-        title="Select Collections"
+        open={showProductPickerModal}
+        onClose={() => setShowProductPickerModal(false)}
+        title={productPickerMode === 'trigger' ? 'Select Trigger Products' : 'Select Upsell Products'}
         primaryAction={{
-          content: 'Save',
-          onAction: handleSaveSelectedCollections,
+          content: 'Done',
+          onAction: saveProductPickerSelection,
         }}
         secondaryActions={[
           {
-            content: 'Close',
-            onAction: () => {
-              setShowCollectionPicker(false);
-              setCurrentUpsellRule(null);
-              setSelectedCollectionIds([]);
-              setCollectionSearchQuery('');
-              setShowOnlySelectedCollections(false);
-            },
+            content: 'Cancel',
+            onAction: () => setShowProductPickerModal(false),
           },
         ]}
       >
         <Modal.Section>
-          <BlockStack gap="400">
+          <BlockStack gap="300">
             <TextField
-              label=""
-              placeholder="Search Collections..."
-              value={collectionSearchQuery}
-              onChange={setCollectionSearchQuery}
-              autoComplete="off"
-            />
-
-            <InlineStack align="space-between" blockAlign="center">
-              <Text as="span" tone="subdued">{selectedCollectionIds.length} collection selected</Text>
-              <Checkbox
-                label="Show only selected"
-                checked={showOnlySelectedCollections}
-                onChange={setShowOnlySelectedCollections}
-              />
-            </InlineStack>
-
-            <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
-              {filteredCollections.map((collection) => (
-                <div
-                  key={collection.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '12px',
-                    borderBottom: '1px solid #e5e7eb',
-                    backgroundColor: selectedCollectionIds.includes(collection.id) ? '#f0f9ff' : '#fff',
-                  }}
-                >
-                  <Checkbox
-                    checked={selectedCollectionIds.includes(collection.id)}
-                    onChange={() => toggleCollectionSelection(collection.id)}
-                    label={collection.title}
-                  />
-                </div>
-              ))}
-            </div>
-          </BlockStack>
-        </Modal.Section>
-      </Modal>
-
-      {/* Product Picker Modal */}
-      <Modal
-        open={showProductPicker}
-        onClose={() => {
-          setShowProductPicker(false);
-          setCurrentTierForProducts(null);
-          setCurrentUpsellRule(null);
-          setUpsellPickerMode(null);
-          setSelectedProductIds([]);
-          setProductSearchQuery('');
-          setShowOnlySelected(false);
-        }}
-        title="Select Product"
-        primaryAction={{
-          content: 'Save',
-          onAction: handleSaveSelectedProducts,
-        }}
-        secondaryActions={[
-          {
-            content: 'Close',
-            onAction: () => {
-              setShowProductPicker(false);
-              setCurrentTierForProducts(null);
-              setCurrentUpsellRule(null);
-              setUpsellPickerMode(null);
-              setSelectedProductIds([]);
-              setProductSearchQuery('');
-              setShowOnlySelected(false);
-            },
-          },
-        ]}
-      >
-        <Modal.Section>
-          <BlockStack gap="400">
-            {/* Search Bar */}
-            <TextField
-              label=""
-              placeholder="Search Products..."
+              label="Search"
+              placeholder="Search products..."
               value={productSearchQuery}
               onChange={setProductSearchQuery}
-              autoComplete="off"
             />
 
-            <InlineStack gap="300" blockAlign="center" wrap={false}>
-              <Checkbox
-                label="Exclude archived"
-                checked={excludeArchived}
-                onChange={setExcludeArchived}
-              />
-              <Checkbox
-                label="Exclude draft"
-                checked={excludeDraft}
-                onChange={setExcludeDraft}
-              />
-              <Checkbox
-                label="Exclude out of stock"
-                checked={excludeOutOfStock}
-                onChange={setExcludeOutOfStock}
-              />
-            </InlineStack>
+            {productPickerMode === 'trigger' && (
+              <BlockStack gap="200">
+                <Text variant="bodySm" fontWeight="semibold">Collections</Text>
+                <BlockStack gap="100">
+                  {mockCollections.map(col => (
+                    <Checkbox
+                      key={col.id}
+                      label={`${col.title} (${col.productCount})`}
+                      checked={tempSelectedCollectionIds.includes(col.id)}
+                      onChange={(checked) => {
+                        if (checked) {
+                          setTempSelectedCollectionIds([...tempSelectedCollectionIds, col.id]);
+                        } else {
+                          setTempSelectedCollectionIds(
+                            tempSelectedCollectionIds.filter(id => id !== col.id)
+                          );
+                        }
+                      }}
+                    />
+                  ))}
+                </BlockStack>
+              </BlockStack>
+            )}
 
-            {/* Selection Info */}
-            <InlineStack align="space-between" blockAlign="center">
-              <Text as="span" tone="subdued">{selectedProductIds.length} item selected</Text>
-              <Checkbox
-                label="Show only selected"
-                checked={showOnlySelected}
-                onChange={setShowOnlySelected}
-              />
-            </InlineStack>
-
-            {/* Product List */}
-            <div style={{ maxHeight: '400px', overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: '6px' }}>
-              {filteredProducts.map((product) => (
-                <div
-                  key={product.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '12px',
-                    borderBottom: '1px solid #e5e7eb',
-                    backgroundColor: selectedProductIds.includes(product.id) ? '#f0f9ff' : '#fff',
-                  }}
-                >
+            <BlockStack gap="200">
+              <Text variant="bodySm" fontWeight="semibold">Products</Text>
+              <BlockStack gap="100">
+                {SAMPLE_UPSELL_PRODUCTS.map(prod => (
                   <Checkbox
-                    checked={selectedProductIds.includes(product.id)}
-                    onChange={() => toggleProductSelection(product.id)}
+                    key={prod.id}
+                    label={`${prod.title} ($${prod.price})`}
+                    checked={tempSelectedProductIds.includes(prod.id)}
+                    onChange={(checked) => {
+                      if (checked) {
+                        setTempSelectedProductIds([...tempSelectedProductIds, prod.id]);
+                      } else {
+                        setTempSelectedProductIds(
+                          tempSelectedProductIds.filter(id => id !== prod.id)
+                        );
+                      }
+                    }}
                   />
-                  <div style={{ marginLeft: '12px', flex: 1 }}>
-                    <InlineStack align="space-between" blockAlign="start">
-                      <BlockStack gap="100">
-                        <Text variant="bodyMd" fontWeight="semibold">{product.image} {product.title}</Text>
-                        <Text as="span" tone="subdued" variant="bodySm">{product.variants} variant{product.variants !== 1 ? 's' : ''}</Text>
-                      </BlockStack>
-                      <InlineStack gap="200" blockAlign="center">
-                        {getStatusBadge(product.status)}
-                        <Text variant="bodyMd" fontWeight="semibold">${product.price}</Text>
-                      </InlineStack>
-                    </InlineStack>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </BlockStack>
+            </BlockStack>
 
-            {filteredProducts.length === 0 && (
-              <Text as="p" tone="subdued" alignment="center">No products found</Text>
+            {(tempSelectedProductIds.length > 0 || tempSelectedCollectionIds.length > 0) && (
+              <BlockStack gap="100">
+                <Text variant="bodySm" fontWeight="semibold">Selected ({tempSelectedProductIds.length + tempSelectedCollectionIds.length})</Text>
+                <InlineStack gap="100" wrap>
+                  {tempSelectedCollectionIds.map(id => {
+                    const collection = mockCollections.find(c => c.id === id);
+                    return (
+                      <Badge key={id} onRemove={() =>
+                        setTempSelectedCollectionIds(
+                          tempSelectedCollectionIds.filter(cid => cid !== id)
+                        )
+                      }>
+                        {collection?.title || id}
+                      </Badge>
+                    );
+                  })}
+                  {tempSelectedProductIds.map(id => {
+                    const product = SAMPLE_UPSELL_PRODUCTS.find(p => p.id === id);
+                    return (
+                      <Badge key={id} onRemove={() =>
+                        setTempSelectedProductIds(
+                          tempSelectedProductIds.filter(pid => pid !== id)
+                        )
+                      }>
+                        {product?.title || id}
+                      </Badge>
+                    );
+                  })}
+                </InlineStack>
+              </BlockStack>
             )}
           </BlockStack>
         </Modal.Section>

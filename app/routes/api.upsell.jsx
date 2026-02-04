@@ -7,12 +7,21 @@
 
 import {
   DEFAULT_UPSELL_CONFIG,
-  SAMPLE_UPSELL_PRODUCTS,
   getProductsByIds,
+  validateUpsellRulesConfig,
 } from '../services/api.upsell';
 
 // In-memory storage (in production, use a database)
 let currentUpsellConfig = { ...DEFAULT_UPSELL_CONFIG };
+
+const collectUpsellProductIds = (config) => {
+  const ids = [
+    ...(config?.rule1?.enabled ? (config.rule1.upsellProducts || []) : []),
+    ...(config?.rule2?.enabled ? (config.rule2.upsellProducts || []) : []),
+    ...(config?.rule3?.enabled ? (config.rule3.upsellProducts || []) : []),
+  ];
+  return [...new Set(ids)];
+};
 
 /**
  * GET /api/upsell
@@ -36,7 +45,7 @@ export async function loader({ request }) {
       success: true,
       data: {
         config: currentUpsellConfig,
-        products: getProductsByIds(currentUpsellConfig.products),
+        products: getProductsByIds(collectUpsellProductIds(currentUpsellConfig)),
       },
     };
 
@@ -87,27 +96,12 @@ export async function action({ request }) {
       const body = await request.json();
 
       // Validate configuration
-      if (body.limit < 1 || body.limit > 4) {
+      const validation = validateUpsellRulesConfig(body);
+      if (!validation.valid) {
         return new Response(
           JSON.stringify({
             success: false,
-            error: 'Upsell limit must be between 1 and 4',
-          }),
-          {
-            status: 400,
-            headers: {
-              'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': '*',
-            },
-          }
-        );
-      }
-
-      if (body.products.length === 0 && body.enabled) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            error: 'At least one product must be selected',
+            error: validation.error || 'Invalid upsell configuration',
           }),
           {
             status: 400,
@@ -134,7 +128,7 @@ export async function action({ request }) {
           message: 'Upsell configuration saved successfully',
           data: {
             config: currentUpsellConfig,
-            products: getProductsByIds(currentUpsellConfig.products),
+            products: getProductsByIds(collectUpsellProductIds(currentUpsellConfig)),
           },
         }),
         {

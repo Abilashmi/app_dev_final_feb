@@ -94,3 +94,163 @@ export const sampleCoupons = [
     },
   },
 ];
+
+// ==========================================
+// SHOPIFY PRODUCTS & COLLECTIONS
+// ==========================================
+
+export const shopifyProducts = [
+  {
+    id: 'sp-1',
+    title: 'Gift Card',
+    price: '10.00',
+    image: '🎁',
+    variants: 4,
+    status: 'outofstock',
+  },
+  {
+    id: 'sp-2',
+    title: 'The Inventory Not Tracked Snowboard',
+    price: '949.95',
+    image: '🏂',
+    variants: 1,
+    status: 'active',
+  },
+  {
+    id: 'sp-3',
+    title: 'The Archived Snowboard',
+    price: '629.95',
+    image: '🏂',
+    variants: 1,
+    status: 'archived',
+  },
+  {
+    id: 'sp-4',
+    title: 'The Draft Snowboard',
+    price: '2629.95',
+    image: '🏂',
+    variants: 1,
+    status: 'draft',
+  },
+  {
+    id: 'sp-5',
+    title: 'The Out of Stock Snowboard',
+    price: '885.95',
+    image: '🏂',
+    variants: 1,
+    status: 'outofstock',
+  },
+  {
+    id: 'sp-6',
+    title: 'Premium Hoodie',
+    price: '129.99',
+    image: '🧥',
+    variants: 3,
+    status: 'active',
+  },
+  {
+    id: 'sp-7',
+    title: 'Classic Jeans',
+    price: '89.99',
+    image: '👖',
+    variants: 5,
+    status: 'active',
+  },
+  {
+    id: 'sp-8',
+    title: 'Sports Cap',
+    price: '39.99',
+    image: '🧢',
+    variants: 2,
+    status: 'active',
+  },
+];
+
+export const mockCollections = [
+  { id: 'col-1', title: 'Winter Gear', productCount: 15 },
+  { id: 'col-2', title: 'Gifts & Bundles', productCount: 8 },
+  { id: 'col-3', title: 'Premium Accessories', productCount: 12 },
+  { id: 'col-4', title: 'Discountable Items', productCount: 20 },
+  { id: 'col-5', title: 'New Arrivals', productCount: 10 },
+];
+
+// ==========================================
+// UPSELL CONFIGURATION API
+// ==========================================
+
+// In-memory storage (replace with database in production)
+let upsellConfigStore = {};
+
+/**
+ * Get upsell configuration for a shop
+ * SECURITY: Does not return config in response body
+ * Config only visible via Network tab API inspection
+ */
+export const getUpsellConfig = async (shopId) => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const config = upsellConfigStore[shopId] || {
+        shopId,
+        useAI: false,
+        manualRules: [],
+        updatedAt: null,
+      };
+      // Return only status, not config in response
+      resolve({ status: 'success', shopId });
+    }, 300);
+  });
+};
+
+/**
+ * Save upsell configuration for a shop
+ * SECURITY: Config stored server-side, not exposed to frontend
+ */
+export const saveUpsellConfig = async (shopId, configData) => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      // Validate config
+      if (!configData.manualRules || configData.manualRules.length === 0) {
+        if (!configData.useAI) {
+          reject(new Error('At least one rule or AI mode must be enabled'));
+          return;
+        }
+      }
+
+      // Validate each rule
+      const validRules = configData.manualRules.every(rule => {
+        if (rule.triggerType === 'specific') {
+          const hasTrigger = (rule.triggerProductIds?.length > 0) || (rule.triggerCollectionIds?.length > 0);
+          const hasUpsell = rule.upsellProductIds?.length > 0;
+          return hasTrigger && hasUpsell;
+        }
+        if (rule.triggerType === 'all') {
+          return rule.upsellProductIds?.length > 0;
+        }
+        return false;
+      });
+
+      if (!validRules) {
+        reject(new Error('Each rule must have trigger products and upsell products'));
+        return;
+      }
+
+      // Store config (secure: not in frontend state)
+      upsellConfigStore[shopId] = {
+        shopId,
+        useAI: configData.useAI,
+        manualRules: configData.manualRules.map((rule, idx) => ({
+          ...rule,
+          priority: idx,
+        })),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Return only status
+      resolve({
+        status: 'success',
+        message: 'Upsell configuration saved',
+        shopId,
+      });
+    }, 500);
+  });
+};

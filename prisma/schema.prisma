@@ -52,6 +52,9 @@ model UpsellRule {
   // Exclusion configuration (for GLOBAL_EXCEPT rule)
   excludedProducts  String?  // JSON array of product IDs
   excludedCollections String? // JSON array of collection IDs
+
+  // Cart condition configuration (for CART_CONDITIONS rule)
+  cartValueThreshold Int?     @default(0)
   
   // UI Configuration
   displayLimit      Int      @default(3)
