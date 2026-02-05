@@ -25,7 +25,7 @@ import {
   saveUpsellConfig,
   SAMPLE_UPSELL_PRODUCTS,
   trackUpsellEvent,
-} from '../services/api.upsell';
+} from './api.cart-settings';
 
 /**
  * Rule Card Component - Reusable for all three rules

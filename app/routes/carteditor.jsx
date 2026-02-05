@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useLoaderData, useFetcher } from 'react-router-dom';
 import classNames from 'classnames';
-import { sampleCoupons } from '../services/api.cart-settings';
+import { sampleCoupons } from './api.cart-settings';
 
 // The loader now gets the initial sample coupons
 export async function loader() {

@@ -9,7 +9,7 @@ import {
   DEFAULT_UPSELL_CONFIG,
   getProductsByIds,
   validateUpsellRulesConfig,
-} from '../services/api.upsell';
+} from './api.cart-settings';
 
 // In-memory storage (in production, use a database)
 let currentUpsellConfig = { ...DEFAULT_UPSELL_CONFIG };

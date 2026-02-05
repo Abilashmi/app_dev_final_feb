@@ -23,13 +23,13 @@ import {
   ResourceItem,
   Thumbnail,
 } from '@shopify/polaris';
-import { sampleCoupons, COUPON_STYLES, COUPON_STYLE_METADATA, globalCouponStyle, saveUpsellConfig, shopifyProducts, mockCollections } from '../services/api.cart-settings';
+import { sampleCoupons, COUPON_STYLES, COUPON_STYLE_METADATA, globalCouponStyle, saveUpsellConfig, shopifyProducts, mockCollections } from './api.cart-settings';
 import { 
   getUpsellConfig, 
   evaluateUpsellRules, 
   SAMPLE_UPSELL_PRODUCTS,
   trackUpsellEvent 
-} from '../services/api.upsell';
+} from './api.cart-settings';
 
 // ==========================================
 // MOCK API FUNCTIONS
@@ -107,39 +107,59 @@ const mockProducts = [
   { id: 104, title: 'Surprise Mystery Gift', price: 0, image: '🎉' },
 ];
 
-// Mock API functions
+// Mock API functions - fetches from route endpoints
 const mockApi = {
   getCartData: async () => {
-    return fetch('/api/cart-settings/cart-data', {
-      headers: {
-        'X-Shop-ID': SHOP_ID,
-      },
-    }).then(() => mockCartData).catch(() => mockCartData);
+    try {
+      const response = await fetch('/api/cart-settings/cart-data', {
+        headers: {
+          'X-Shop-ID': SHOP_ID,
+        },
+      });
+      return response.json();
+    } catch {
+      return mockCartData;
+    }
   },
   getMilestones: async (mode = 'amount') => {
-    return fetch('/api/cart-settings/milestones', {
-      headers: {
-        'X-Shop-ID': SHOP_ID,
-        'X-Mode': mode,
-      },
-    }).then(() => mode === 'amount' ? mockMilestones : mockQuantityMilestones).catch(() => mode === 'amount' ? mockMilestones : mockQuantityMilestones);
+    try {
+      const response = await fetch('/api/cart-settings/milestones', {
+        headers: {
+          'X-Shop-ID': SHOP_ID,
+          'X-Mode': mode,
+        },
+      });
+      return response.json();
+    } catch {
+      return mode === 'amount' ? mockMilestones : mockQuantityMilestones;
+    }
   },
   getProducts: async (productIds) => {
-    return fetch('/api/cart-settings/products', {
-      method: 'POST',
-      headers: {
-        'X-Shop-ID': SHOP_ID,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ productIds }),
-    }).then(() => mockProducts.filter(p => productIds.includes(p.id))).catch(() => mockProducts.filter(p => productIds.includes(p.id)));
+    try {
+      const response = await fetch('/api/cart-settings/products', {
+        method: 'POST',
+        headers: {
+          'X-Shop-ID': SHOP_ID,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ productIds }),
+      });
+      return response.json();
+    } catch {
+      return mockProducts.filter(p => productIds.includes(p.id));
+    }
   },
   getShopifyProducts: async () => {
-    return fetch('/api/cart-settings/shopify-products', {
-      headers: {
-        'X-Shop-ID': SHOP_ID,
-      },
-    }).then(() => shopifyProducts).catch(() => shopifyProducts);
+    try {
+      const response = await fetch('/api/cart-settings/shopify-products', {
+        headers: {
+          'X-Shop-ID': SHOP_ID,
+        },
+      });
+      return response.json();
+    } catch {
+      return shopifyProducts;
+    }
   },
 };
 
@@ -464,6 +484,11 @@ export default function CartDrawerAdmin() {
   const [saveToastMessage, setSaveToastMessage] = useState('Saved');
   const [isSaving, setIsSaving] = useState(false);
   const couponSliderRef = React.useRef(null);
+  
+  // Coupon Display Settings
+  const [couponPosition, setCouponPosition] = useState('top'); // 'top' or 'bottom'
+  const [couponLayout, setCouponLayout] = useState('grid'); // 'grid' or 'carousel'
+  const [couponAlignment, setCouponAlignment] = useState('horizontal'); // 'horizontal' or 'vertical'
 
   // ==========================================
   // UPSELL EDITOR STATE (RULE 1/2/3 CONFIG)
@@ -806,6 +831,7 @@ export default function CartDrawerAdmin() {
   const handleSaveCoupon = async () => {
     if (editingCoupon) {
       setIsSaving(true);
+      console.log('[Coupon] Save initiated for coupon:', editingCoupon.id);
 
       // Update in allCoupons state
       const updated = allCoupons.map(c =>
@@ -813,12 +839,33 @@ export default function CartDrawerAdmin() {
       );
       setAllCoupons(updated);
       
-      // Update in sample data
-      const index = sampleCoupons.findIndex(c => c.id === editingCoupon.id);
-      if (index !== -1) {
-        sampleCoupons[index] = JSON.parse(JSON.stringify(editingCoupon));
+      // Save to API route
+      try {
+        console.log('[Coupon] Sending POST to /api/cart-settings/coupons');
+        const response = await fetch('/api/cart-settings/coupons', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shop-ID': SHOP_ID,
+          },
+          body: JSON.stringify({
+            coupon: editingCoupon,
+            allCoupons: updated,
+          }),
+        });
+
+        console.log('[Coupon] Response status:', response.status);
+
+        if (!response.ok) {
+          throw new Error(`Failed to save coupon: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('[Coupon] Saved successfully:', result);
+      } catch (error) {
+        console.error('[Coupon] Save error:', error);
       }
-      
+
       setOriginalCoupon(JSON.parse(JSON.stringify(editingCoupon)));
 
       const messageByTab = {
@@ -970,8 +1017,26 @@ export default function CartDrawerAdmin() {
         manualRules: manualUpsellRules,
       };
       
-      const response = await saveUpsellConfig(SHOP_ID, configToSave);
-      console.log('✅ Upsell rules saved:', response);
+      console.log('[Upsell] Saving upsell rules via API');
+      
+      // Save to API route
+      const response = await fetch('/api/cart-settings/upsell', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shop-ID': SHOP_ID,
+        },
+        body: JSON.stringify(configToSave),
+      });
+
+      console.log('[Upsell] Response status:', response.status);
+
+      if (!response.ok) {
+        throw new Error(`Failed to save upsell rules: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Upsell rules saved:', result);
       setInitialUpsellConfig(upsellConfig);
       setSaveToastMessage('✅ Upsell rules saved successfully');
       setShowSaveToast(true);
@@ -1092,7 +1157,7 @@ export default function CartDrawerAdmin() {
 
     setUpsellSaving(true);
     try {
-      const { saveUpsellConfig } = await import('../services/api.cart-settings.jsx');
+      // saveUpsellConfig is now called via API fetch
       const shopId = SHOP_ID;
       const configData = {
         useAI: useAIUpsells,
@@ -1651,28 +1716,29 @@ export default function CartDrawerAdmin() {
 
             {/* TAB 1: Coupon Styles */}
             {couponSubTab === 'global-style' && (
-              <Card>
-                <BlockStack gap="300">
-                  <Text variant="headingMd" as="h2">Select Coupon Style</Text>
-                  <Text tone="subdued" as="p">Choose one style that applies to all coupons</Text>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                    {Object.entries(COUPON_STYLE_METADATA).map(([styleKey, metadata]) => (
-                      <div
-                        key={styleKey}
-                        onClick={() => handleStyleSelect(styleKey)}
-                        style={{
-                          border: `2px solid ${selectedCouponStyle === styleKey ? '#2c6ecb' : '#e5e7eb'}`,
-                          borderRadius: '8px',
-                          padding: '12px',
-                          cursor: 'pointer',
-                          backgroundColor: selectedCouponStyle === styleKey ? '#f0f7ff' : '#fff',
-                          transition: 'all 0.2s',
-                        }}
-                      >
-                        <BlockStack gap="200">
-                          <img 
-                            src={metadata.previewImage} 
+              <BlockStack gap="400">
+                <Card>
+                  <BlockStack gap="300">
+                    <Text variant="headingMd" as="h2">Select Coupon Style</Text>
+                    <Text tone="subdued" as="p">Choose one style that applies to all coupons</Text>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                      {Object.entries(COUPON_STYLE_METADATA).map(([styleKey, metadata]) => (
+                        <div
+                          key={styleKey}
+                          onClick={() => handleStyleSelect(styleKey)}
+                          style={{
+                            border: `2px solid ${selectedCouponStyle === styleKey ? '#2c6ecb' : '#e5e7eb'}`,
+                            borderRadius: '8px',
+                            padding: '12px',
+                            cursor: 'pointer',
+                            backgroundColor: selectedCouponStyle === styleKey ? '#f0f7ff' : '#fff',
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          <BlockStack gap="200">
+                            <img 
+                              src={metadata.previewImage} 
                             alt={metadata.name}
                             style={{ width: '100%', borderRadius: '4px', border: '1px solid #e5e7eb' }}
                           />
@@ -1701,9 +1767,69 @@ export default function CartDrawerAdmin() {
                         </BlockStack>
                       </div>
                     ))}
-                  </div>
-                </BlockStack>
-              </Card>
+                    </div>
+                  </BlockStack>
+                </Card>
+
+                {/* Display Settings Card */}
+                <Card>
+                  <BlockStack gap="300">
+                    <Text variant="headingMd" as="h2">Display Settings</Text>
+                    <Text tone="subdued" as="p">Configure how coupons appear in your cart</Text>
+
+                    {/* Position in Cart */}
+                    <BlockStack gap="200">
+                      <Text variant="bodyMd" fontWeight="semibold">Position in Cart</Text>
+                      <InlineStack gap="200">
+                        <Checkbox
+                          label="Top of cart"
+                          checked={couponPosition === 'top'}
+                          onChange={() => setCouponPosition('top')}
+                        />
+                        <Checkbox
+                          label="Bottom of cart"
+                          checked={couponPosition === 'bottom'}
+                          onChange={() => setCouponPosition('bottom')}
+                        />
+                      </InlineStack>
+                    </BlockStack>
+
+                    {/* Layout */}
+                    <BlockStack gap="200">
+                      <Text variant="bodyMd" fontWeight="semibold">Layout</Text>
+                      <InlineStack gap="200">
+                        <Checkbox
+                          label="Grid (2 columns)"
+                          checked={couponLayout === 'grid'}
+                          onChange={() => setCouponLayout('grid')}
+                        />
+                        <Checkbox
+                          label="Carousel"
+                          checked={couponLayout === 'carousel'}
+                          onChange={() => setCouponLayout('carousel')}
+                        />
+                      </InlineStack>
+                    </BlockStack>
+
+                    {/* Alignment */}
+                    <BlockStack gap="200">
+                      <Text variant="bodyMd" fontWeight="semibold">Alignment</Text>
+                      <InlineStack gap="200">
+                        <Checkbox
+                          label="Horizontal"
+                          checked={couponAlignment === 'horizontal'}
+                          onChange={() => setCouponAlignment('horizontal')}
+                        />
+                        <Checkbox
+                          label="Vertical"
+                          checked={couponAlignment === 'vertical'}
+                          onChange={() => setCouponAlignment('vertical')}
+                        />
+                      </InlineStack>
+                    </BlockStack>
+                  </BlockStack>
+                </Card>
+              </BlockStack>
             )}
 
             {/* TAB 2: Manage Coupons */}
@@ -2570,7 +2696,10 @@ export default function CartDrawerAdmin() {
 
             {/* Coupon Feature */}
             {featureStates.couponSliderEnabled && allCoupons.length > 0 && (
-              <div style={{ padding: '12px' }}>
+              <div style={{ 
+                padding: '12px',
+                order: couponPosition === 'top' ? -1 : 999,
+              }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <p style={{ margin: 0, fontSize: '12px', fontWeight: '600', color: '#1f2937' }}>
                     🎟️ Available Coupons ({allCoupons.filter(c => c.enabled).length})
@@ -2636,7 +2765,16 @@ export default function CartDrawerAdmin() {
                     </button>
                   </div>
                 </div>
-                <div ref={couponSliderRef} style={{ display: 'flex', gap: '8px', paddingBottom: '4px', scrollBehavior: 'smooth', overflowX: 'hidden' }}>
+                <div ref={couponSliderRef} style={{ 
+                  display: couponLayout === 'grid' ? 'grid' : 'flex',
+                  gridTemplateColumns: couponLayout === 'grid' ? (couponAlignment === 'horizontal' ? 'repeat(2, 1fr)' : '1fr') : undefined,
+                  flexDirection: couponLayout === 'carousel' ? (couponAlignment === 'horizontal' ? 'row' : 'column') : undefined,
+                  gap: '8px', 
+                  paddingBottom: '4px', 
+                  scrollBehavior: 'smooth', 
+                  overflowX: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? 'auto' : 'hidden',
+                  overflowY: couponLayout === 'carousel' && couponAlignment === 'vertical' ? 'auto' : 'hidden',
+                }}>
                 {allCoupons.filter(c => c.enabled).map((coupon, idx) => {
                   // Use editingCoupon if this is the currently editing coupon for live preview
                   const displayCoupon = editingCoupon && editingCoupon.id === coupon.id ? editingCoupon : coupon;
@@ -2649,7 +2787,8 @@ export default function CartDrawerAdmin() {
                         key={coupon.id}
                         onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
                         style={{ 
-                          minWidth: '280px',
+                          minWidth: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? '280px' : undefined,
+                          width: couponLayout === 'grid' ? '100%' : undefined,
                           padding: '10px 14px',
                           backgroundColor: displayCoupon.backgroundColor,
                           borderRadius: `${displayCoupon.borderRadius}px`,
@@ -2690,8 +2829,8 @@ export default function CartDrawerAdmin() {
                           </p>
                         </div>
                         
-                        {/* Main content - horizontal layout */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                        {/* Main content - layout based on coupon alignment */}
+                        <div style={{ display: 'flex', alignItems: couponAlignment === 'horizontal' ? 'center' : 'flex-start', flexDirection: couponAlignment === 'horizontal' ? 'row' : 'column', justifyContent: 'space-between', gap: '12px' }}>
                           <div style={{ flex: 1 }}>
                             <p style={{ margin: '0 0 4px 0', fontSize: '22px', fontWeight: '800', color: displayCoupon.textColor, lineHeight: '1' }}>
                               {displayCoupon.code}
@@ -2732,7 +2871,8 @@ export default function CartDrawerAdmin() {
                         key={coupon.id}
                         onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
                         style={{ 
-                          minWidth: '280px',
+                          minWidth: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? '280px' : undefined,
+                          width: couponLayout === 'grid' ? '100%' : undefined,
                           padding: '14px 16px',
                           backgroundColor: displayCoupon.backgroundColor,
                           borderRadius: `${displayCoupon.borderRadius}px`,
@@ -2818,7 +2958,8 @@ export default function CartDrawerAdmin() {
                         key={coupon.id}
                         onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
                         style={{ 
-                          minWidth: '280px',
+                          minWidth: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? '280px' : undefined,
+                          width: couponLayout === 'grid' ? '100%' : undefined,
                           display: 'flex',
                           backgroundColor: displayCoupon.backgroundColor,
                           borderRadius: `${displayCoupon.borderRadius}px`,
