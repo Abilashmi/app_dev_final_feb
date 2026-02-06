@@ -177,6 +177,73 @@ export const mockCollections = [
 // ==========================================
 // UPSELL CONFIGURATION API
 // ==========================================
+// ==========================================
+// COUPON MOCK API (single source of truth)
+// ==========================================
+
+// In-memory coupon store (multi-shop safe)
+let couponStore = {};
+
+/**
+ * Get coupons for a shop (includes both app and Shopify-created)
+ * Returns array of coupons with required fields only
+ */
+export const getCoupons = async (shopId) => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      // Example: Shopify-created coupons (simulate)
+      const shopifyCoupons = [
+        {
+          id: 'shopify-1',
+          code: 'WELCOME10',
+          type: 'amount_off_order',
+          status: 'active',
+          source: 'SHOPIFY',
+        },
+        {
+          id: 'shopify-2',
+          code: 'FREESHIP',
+          type: 'free_shipping',
+          status: 'expired',
+          source: 'SHOPIFY',
+        },
+      ];
+      // App-created coupons
+      const appCoupons = couponStore[shopId] || [];
+      resolve({
+        shopId,
+        coupons: [...shopifyCoupons, ...appCoupons],
+      });
+    }, 300);
+  });
+};
+
+/**
+ * Save a new coupon for a shop (app-created only)
+ * Only required fields are stored
+ */
+export const saveCoupon = async (shopId, couponData) => {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      // Validate required fields
+      const { code, type, status } = couponData;
+      if (!code || !type || !status) {
+        reject(new Error('Missing required coupon fields'));
+        return;
+      }
+      const newCoupon = {
+        id: `app-${Date.now()}`,
+        code,
+        type,
+        status,
+        source: 'APP',
+      };
+      if (!couponStore[shopId]) couponStore[shopId] = [];
+      couponStore[shopId].push(newCoupon);
+      resolve({ status: 'success', coupon: newCoupon });
+    }, 400);
+  });
+};
 
 // In-memory storage (replace with database in production)
 let upsellConfigStore = {};
