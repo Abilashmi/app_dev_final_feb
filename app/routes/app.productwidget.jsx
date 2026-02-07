@@ -1,363 +1,219 @@
 import React, { useState } from 'react';
 import {
-  Page,
-  Card,
-  InlineStack,
   BlockStack,
+  InlineStack,
   Text,
+  Card,
   Button,
   Badge,
-  Layout,
+  Box,
   Divider,
-  TextField,
-  PageActions,
-  Banner,
-  Image
+  Tag,
+  Icon,
+  InlineGrid,
 } from '@shopify/polaris';
+import { CheckIcon } from '@shopify/polaris-icons';
 
-export default function ProductWidgetConfig() {
-  const [isConnected, setIsConnected] = useState(false);
-  const [selectedStyle, setSelectedStyle] = useState('soft');
-  const [activeTab, setActiveTab] = useState('coupon');
-  const [enabledWidgets, setEnabledWidgets] = useState({
-    coupon: false,
-    fbt: false
-  });
-  const [couponSettings, setCouponSettings] = useState({
-    title: 'Special Offer',
-    description: 'Get your discount now',
-    code: 'SAVE20',
-    cta: 'Copy Code'
-  });
-  const [fbtSettings, setFbtSettings] = useState({
-    title: 'Frequently Bought Together',
-    description: 'Complete your purchase',
-    offer: 'Bundle & Save'
-  });
 
-  const handleConnect = () => {
-    setIsConnected(true);
-  };
+/**
+ * @typedef {Object} Coupon
+ * @property {string} code
+ * @property {string} emoji
+ * @property {string} title
+ * @property {string} description
+ * @property {'style1' | 'style2' | 'style3'} style
+ */
 
-  const handleDisconnect = () => {
-    setIsConnected(false);
-    setEnabledWidgets({
-      coupon: false,
-      fbt: false
-    });
-  };
+function CouponScroller() {
+  const [appliedCode, setAppliedCode] = useState(null);
+  const [selectedStyle, setSelectedStyle] = useState('all');
 
-  const handleStyleSelect = (style) => {
-    if (isConnected) {
-      setSelectedStyle(style);
-    }
-  };
-
-  const handleWidgetToggle = (widget) => {
-    setEnabledWidgets({
-      ...enabledWidgets,
-      [widget]: !enabledWidgets[widget]
-    });
-  };
-
-  const handleCouponChange = (field, value) => {
-    setCouponSettings({
-      ...couponSettings,
-      [field]: value
-    });
-  };
-
-  const handleFbtChange = (field, value) => {
-    setFbtSettings({
-      ...fbtSettings,
-      [field]: value
-    });
-  };
-
-  const handleSave = () => {
-    console.log({
-      isConnected,
-      selectedStyle,
-      enabledWidgets,
-      couponSettings,
-      fbtSettings
-    });
-  };
-
-  const styles = [
-    { id: 'soft', label: 'Soft Card Coupon' },
-    { id: 'ticket', label: 'Ticket / Voucher' },
-    { id: 'conditional', label: 'Conditional Offer' }
+  const coupons = [
+    {
+      code: 'BAWSE30',
+      emoji: '🍼',
+      title: 'BAWSE30',
+      description: 'Flat ₹30 OFF on All Orders – Just for You!',
+      style: 'style1',
+    },
+    {
+      code: 'BABY50',
+      emoji: '👶',
+      title: 'BABY50',
+      description: '50% OFF on First Baby Product Purchase',
+      style: 'style2',
+    },
+    {
+      code: 'NEWBORN25',
+      emoji: '🌟',
+      title: 'NEWBORN25',
+      description: '₹25 OFF sitewide + Free Shipping',
+      style: 'style1',
+    },
+    // Add more styles as needed
   ];
 
-  const renderCouponPreview = () => {
-    if (!enabledWidgets.coupon) return null;
+  const hasItems = true;
+  if (!hasItems) return null;
 
-    switch (selectedStyle) {
-      case 'soft':
-        return (
-          <Card>
-            <BlockStack gap="400">
-              <Text variant="headingSm" as="h3">{couponSettings.title}</Text>
-              <Text variant="bodySm" as="p">{couponSettings.description}</Text>
-              <Badge tone="info">{couponSettings.code}</Badge>
-              <Button>{couponSettings.cta}</Button>
-            </BlockStack>
-          </Card>
-        );
-      case 'ticket':
-        return (
-          <Card>
-            <InlineStack align="space-between">
-              <BlockStack gap="200">
-                <Text variant="headingSm" as="h3">{couponSettings.title}</Text>
-                <Text variant="bodySm" as="p">{couponSettings.description}</Text>
-              </BlockStack>
-              <Badge tone="info">{couponSettings.code}</Badge>
-            </InlineStack>
-          </Card>
-        );
-      case 'conditional':
-        return (
-          <Card>
-            <BlockStack gap="400">
-              <Text variant="headingSm" as="h3">{couponSettings.title}</Text>
-              <Text variant="bodySm" as="p">{couponSettings.description}</Text>
-              <Text variant="bodySm" as="p">Limited time offer</Text>
-              <Badge tone="info">{couponSettings.code}</Badge>
-              <Button>{couponSettings.cta}</Button>
-            </BlockStack>
-          </Card>
-        );
-      default:
-        return null;
-    }
-  };
+  // Filter coupons based on selected style
+  const visibleCoupons = coupons.filter(
+    (c) => selectedStyle === 'all' || c.style === selectedStyle
+  );
 
-  const renderFbtPreview = () => {
-    if (!enabledWidgets.fbt) return null;
+  // Preview: show the first coupon of the selected style (or nothing)
+  const previewCoupon = visibleCoupons.length > 0 ? visibleCoupons[0] : null;
 
-    return (
-      <Card>
-        <BlockStack gap="400">
-          <Text variant="headingSm" as="h3">{fbtSettings.title}</Text>
-          <Text variant="bodySm" as="p">{fbtSettings.description}</Text>
-          <Badge tone="attention">{fbtSettings.offer}</Badge>
-          <Button>Add to Cart</Button>
-        </BlockStack>
-      </Card>
-    );
-  };
-
-  const renderPreview = () => {
-    if (!isConnected) {
-      return (
-        <Text variant="bodyMd" as="p" tone="subdued">
-          Connect your store to enable preview
-        </Text>
-      );
-    }
-
-    if (activeTab === 'coupon') {
-      return enabledWidgets.coupon ? renderCouponPreview() : (
-        <Text variant="bodyMd" as="p" tone="subdued">
-          Widget disabled
-        </Text>
-      );
-    } else {
-      return enabledWidgets.fbt ? renderFbtPreview() : (
-        <Text variant="bodyMd" as="p" tone="subdued">
-          Widget disabled
-        </Text>
-      );
-    }
-  };
+  const isApplied = (code) => appliedCode === code;
 
   return (
-    <Page title="Product Widget">
-      <BlockStack gap="500">
-        <Card>
-          <InlineStack align="space-between" blockAlign="center">
-            <BlockStack gap="200">
-              <Text variant="headingMd" as="h2">Shopify Store</Text>
-              <Text variant="bodyMd" as="p">
-                {isConnected ? 'Connected' : 'Not connected'}
-              </Text>
-            </BlockStack>
-            {!isConnected ? (
-              <Button variant="primary" onClick={handleConnect}>
-                Connect
-              </Button>
-            ) : (
-              <Button tone="critical" onClick={handleDisconnect}>
-                Disconnect
-              </Button>
-            )}
-          </InlineStack>
-        </Card>
+    <BlockStack gap="400">
+      {/* Header */}
+      <Text as="h2" variant="headingMd" alignment="center" tone="success">
+        🎀 Baby Special Offers
+      </Text>
 
-        <Card>
-          <BlockStack gap="400">
-            <Text variant="headingMd" as="h2">Select your style</Text>
-            <InlineStack align="center" gap="400">
-              {styles.map((style) => (
-                <Card 
-                  key={style.id} 
-                  background={selectedStyle === style.id ? 'bg-surface-success' : undefined}
-                >
-                  <BlockStack gap="200">
-                    <Button
-                      variant="plain"
-                      onClick={() => handleStyleSelect(style.id)}
-                      textAlign="center"
-                      disabled={!isConnected}
-                    >
-                      <BlockStack gap="200">
-                        <Text variant="bodyMd" as="p">{style.label}</Text>
-                        {selectedStyle === style.id && (
-                          <Badge tone="success">Selected</Badge>
-                        )}
-                      </BlockStack>
-                    </Button>
-                  </BlockStack>
-                </Card>
-              ))}
+      {/* Style selector */}
+      <InlineStack gap="300" align="center" blockAlign="center" wrap>
+        <Button
+          size="slim"
+          variant={selectedStyle === 'all' ? 'primary' : 'tertiary'}
+          onClick={() => setSelectedStyle('all')}
+        >
+          All Styles
+        </Button>
+
+        <Button
+          size="slim"
+          variant={selectedStyle === 'style1' ? 'primary' : 'tertiary'}
+          onClick={() => setSelectedStyle('style1')}
+        >
+          Style 1 (Classic)
+        </Button>
+
+        <Button
+          size="slim"
+          variant={selectedStyle === 'style2' ? 'primary' : 'tertiary'}
+          onClick={() => setSelectedStyle('style2')}
+        >
+          Style 2 (Bold)
+        </Button>
+
+        {/* Add more style buttons as you define more styles */}
+      </InlineStack>
+
+      <Divider />
+
+      {/* Preview Area – only shows when a specific style is selected */}
+      {selectedStyle !== 'all' && (
+        <Box
+          background="bg-surface-secondary"
+          padding="400"
+          borderWidth="025"
+          borderColor="border"
+          borderRadius="200"
+        >
+          <BlockStack gap="200">
+            <InlineStack align="space-between" blockAlign="start">
+              <Text variant="headingSm">Preview – {selectedStyle}</Text>
             </InlineStack>
+
+            {previewCoupon ? (
+              renderCouponCard(previewCoupon, true, isApplied, setAppliedCode)
+            ) : (
+              <Text tone="subdued" alignment="center">
+                No coupons in this style yet
+              </Text>
+            )}
           </BlockStack>
-        </Card>
+        </Box>
+      )}
 
-        <Layout>
-          <Layout.Section variant="oneThird">
-            <Card>
-              <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">Preview</Text>
-                {renderPreview()}
-              </BlockStack>
-            </Card>
-          </Layout.Section>
+      {/* Actual coupon list */}
+      <InlineGrid columns={{ xs: 1, sm: 2, md: 3 }} gap="300">
+        {visibleCoupons.map((coupon) => (
+          <React.Fragment key={coupon.code}>
+            {renderCouponCard(coupon, false, isApplied, setAppliedCode)}
+          </React.Fragment>
+        ))}
+      </InlineGrid>
 
-          <Layout.Section>
-            <Card>
-              <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">Customize</Text>
-                <Divider />
-                
-                <InlineStack gap="200">
-                  <Button
-                    pressed={activeTab === 'coupon'}
-                    onClick={() => setActiveTab('coupon')}
-                    disabled={!isConnected}
-                  >
-                    Coupon
-                  </Button>
-                  <Button
-                    pressed={activeTab === 'fbt'}
-                    onClick={() => setActiveTab('fbt')}
-                    disabled={!isConnected}
-                  >
-                    Frequently Bought Together
-                  </Button>
-                </InlineStack>
-
-                {activeTab === 'coupon' && (
-                  <BlockStack gap="400">
-                    <BlockStack gap="300">
-                      <Text variant="headingSm" as="h3">Coupon</Text>
-                      <Button
-                        variant={enabledWidgets.coupon ? 'primary' : 'secondary'}
-                        onClick={() => handleWidgetToggle('coupon')}
-                        disabled={!isConnected}
-                      >
-                        {enabledWidgets.coupon ? 'Disable' : 'Enable'}
-                      </Button>
-                    </BlockStack>
-
-                    {enabledWidgets.coupon && (
-                      <BlockStack gap="400">
-                        <TextField
-                          label="Title"
-                          value={couponSettings.title}
-                          onChange={(value) => handleCouponChange('title', value)}
-                          autoComplete="off"
-                        />
-                        <TextField
-                          label="Description"
-                          value={couponSettings.description}
-                          onChange={(value) => handleCouponChange('description', value)}
-                          autoComplete="off"
-                        />
-                        <TextField
-                          label="Coupon Code"
-                          value={couponSettings.code}
-                          onChange={(value) => handleCouponChange('code', value)}
-                          autoComplete="off"
-                        />
-                        <TextField
-                          label="CTA Text"
-                          value={couponSettings.cta}
-                          onChange={(value) => handleCouponChange('cta', value)}
-                          autoComplete="off"
-                        />
-                      </BlockStack>
-                    )}
-                  </BlockStack>
-                )}
-
-                {activeTab === 'fbt' && (
-                  <BlockStack gap="400">
-                    <BlockStack gap="300">
-                      <Text variant="headingSm" as="h3">Frequently Bought Together</Text>
-                      <Button
-                        variant={enabledWidgets.fbt ? 'primary' : 'secondary'}
-                        onClick={() => handleWidgetToggle('fbt')}
-                        disabled={!isConnected}
-                      >
-                        {enabledWidgets.fbt ? 'Disable' : 'Enable'}
-                      </Button>
-                    </BlockStack>
-
-                    {enabledWidgets.fbt && (
-                      <BlockStack gap="400">
-                        <TextField
-                          label="Title"
-                          value={fbtSettings.title}
-                          onChange={(value) => handleFbtChange('title', value)}
-                          autoComplete="off"
-                        />
-                        <TextField
-                          label="Description"
-                          value={fbtSettings.description}
-                          onChange={(value) => handleFbtChange('description', value)}
-                          autoComplete="off"
-                        />
-                        <TextField
-                          label="Offer Text"
-                          value={fbtSettings.offer}
-                          onChange={(value) => handleFbtChange('offer', value)}
-                          autoComplete="off"
-                        />
-                      </BlockStack>
-                    )}
-                  </BlockStack>
-                )}
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        </Layout>
-      </BlockStack>
-
-      <PageActions
-        primaryAction={{
-          content: 'Save',
-          onAction: handleSave
-        }}
-        secondaryActions={[
-          {
-            content: 'Cancel',
-            onAction: () => console.log('Cancelled')
-          }
-        ]}
-      />
-    </Page>
+      {visibleCoupons.length === 0 && selectedStyle !== 'all' && (
+        <Text alignment="center" tone="subdued">
+          No coupons available for the selected style.
+        </Text>
+      )}
+    </BlockStack>
   );
 }
+
+// Helper: render a single coupon card with style-specific look
+function renderCouponCard(
+  coupon,
+  isPreview = false,
+  isApplied,
+  setAppliedCode
+) {
+  const applied = isApplied(coupon.code);
+
+  let cardProps = {
+    background: applied ? 'bg-surface-success' : 'bg-surface',
+    borderWidth: '025',
+  };
+
+  // Style-specific customization
+  if (coupon.style === 'style1') {
+    // Your original style – clean card
+    cardProps = {
+      ...cardProps,
+      roundedAbove: 'sm',
+    };
+  } else if (coupon.style === 'style2') {
+    // Example: bolder look, dashed border, bigger emoji
+    cardProps = {
+      ...cardProps,
+      borderStyle: 'dashed',
+      borderColor: applied ? 'border-success' : 'border-critical',
+      background: applied ? 'bg-surface-success' : 'bg-surface-warning-subdued',
+    };
+  } 
+  // else if (coupon.style === 'style3') { ... add more }
+
+  return (
+    <Card key={coupon.code} {...cardProps}>
+      <BlockStack gap="200" align={isPreview ? 'center' : undefined}>
+        <InlineStack gap="200" align="center" blockAlign="center">
+          <Text variant={isPreview ? 'headingLg' : 'headingMd'}>
+            {coupon.emoji}
+          </Text>
+          <Text variant={isPreview ? 'headingLg' : 'headingSm'}>
+            {coupon.title}
+          </Text>
+        </InlineStack>
+
+        <Text tone="subdued" alignment="center">
+          {coupon.description}
+        </Text>
+
+        {coupon.style && (
+          <Box paddingBlock="100">
+            <Tag size="small">{coupon.style.replace('style', 'Style ')}</Tag>
+          </Box>
+        )}
+
+        <Button
+          fullWidth
+          size="slim"
+          variant={applied ? 'primarySuccess' : 'secondary'}
+          onClick={() => setAppliedCode(coupon.code)}
+          disabled={applied}
+          icon={applied ? CheckIcon : undefined}
+        >
+          {applied ? '✓ Applied' : 'Tap to Apply'}
+        </Button>
+      </BlockStack>
+    </Card>
+  );
+}
+
+export default CouponScroller;
