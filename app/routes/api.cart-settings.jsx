@@ -940,16 +940,64 @@ export const SAMPLE_APP_DATA = {
   ],
 };
 
-// This loader function acts as our GET endpoint for the cart drawer
+// --- SAMPLE COUPONS API ENDPOINT ---
 export async function loader() {
-  // Return sample coupons data
-  return new Response(JSON.stringify({ coupons: SAMPLE_APP_DATA.couponSliderSettings.offers }), {
-    headers: {
-      'Content-Type': 'application/json',
-      // Add CORS headers to allow the storefront to fetch this
-      'Access-Control-Allow-Origin': '*',
+  // Simulate a delay
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  // Sample coupon data
+  const coupons = [
+    {
+      id: 'sample-1',
+      heading: '10% Off All Products',
+      subtext: 'Save 10% on your entire order',
+      code: 'SAVE10',
+      type: 'DiscountCodeBasic',
+      status: 'ACTIVE',
+      starts_at: '2026-01-01T00:00:00Z',
+      ends_at: '2026-12-31T23:59:59Z',
+      sectionBg: '#f6f6f7',
+      headingColor: '#000000',
+      subtextColor: '#6d7175',
+      couponBg: '#000000',
+      codeColor: '#ffffff',
     },
-  });
+    {
+      id: 'sample-2',
+      heading: 'Buy 1 Get 1 Free',
+      subtext: 'BOGO on select items',
+      code: 'BOGO',
+      type: 'DiscountCodeBxgy',
+      status: 'SCHEDULED',
+      starts_at: '2026-03-01T00:00:00Z',
+      ends_at: '2026-03-31T23:59:59Z',
+      sectionBg: '#f6f6f7',
+      headingColor: '#000000',
+      subtextColor: '#6d7175',
+      couponBg: '#000000',
+      codeColor: '#ffffff',
+    },
+    {
+      id: 'sample-3',
+      heading: 'Free Shipping',
+      subtext: 'On orders over $50',
+      code: 'FREESHIP',
+      type: 'DiscountCodeFreeShipping',
+      status: 'EXPIRED',
+      starts_at: '2025-01-01T00:00:00Z',
+      ends_at: '2025-12-31T23:59:59Z',
+      sectionBg: '#f6f6f7',
+      headingColor: '#000000',
+      subtextColor: '#6d7175',
+      couponBg: '#000000',
+      codeColor: '#ffffff',
+    },
+  ];
+
+  return new Response(
+    JSON.stringify({ coupons, success: true }),
+    { headers: { 'Content-Type': 'application/json' } }
+  );
 }
 
 // This action function is the single endpoint for saving settings

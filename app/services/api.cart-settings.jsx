@@ -188,34 +188,33 @@ let couponStore = {};
  * Get coupons for a shop (includes both app and Shopify-created)
  * Returns array of coupons with required fields only
  */
-export const getCoupons = async (shopId) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      // Example: Shopify-created coupons (simulate)
-      const shopifyCoupons = [
-        {
-          id: 'shopify-1',
-          code: 'WELCOME10',
-          type: 'amount_off_order',
-          status: 'active',
-          source: 'SHOPIFY',
-        },
-        {
-          id: 'shopify-2',
-          code: 'FREESHIP',
-          type: 'free_shipping',
-          status: 'expired',
-          source: 'SHOPIFY',
-        },
-      ];
-      // App-created coupons
-      const appCoupons = couponStore[shopId] || [];
-      resolve({
-        shopId,
-        coupons: [...shopifyCoupons, ...appCoupons],
-      });
-    }, 300);
+export const getCoupons = async (shopId, accessToken) => {
+  // Fetch Shopify native discounts
+  const shopifyRes = await fetch('/api/shopify-discounts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shopId, accessToken }),
   });
+  const shopifyData = await shopifyRes.json();
+  // Normalize Shopify discounts
+  const shopifyCoupons = (shopifyData.discountNodes?.edges || []).map(edge => {
+    const d = edge.node.discount;
+    return {
+      id: edge.node.id,
+      title: d.title,
+      code: d.code || null,
+      status: d.status?.toLowerCase() || '',
+      method: d.code ? 'CODE' : 'AUTOMATIC',
+      source: 'shopify',
+      createdAt: d.createdAt,
+    };
+  });
+  // App-created coupons (existing logic)
+  const appCoupons = couponStore[shopId] || [];
+  return {
+    shopId,
+    coupons: [...shopifyCoupons, ...appCoupons],
+  };
 };
 
 /**
@@ -321,3 +320,61 @@ export const saveUpsellConfig = async (shopId, configData) => {
     }, 500);
   });
 };
+
+// --- Sample backend API for debugging Shopify native discounts ---
+// Node.js/Express example
+// Place this in your backend server file (e.g., server.js)
+
+/*
+const express = require('express');
+const fetch = require('node-fetch');
+const app = express();
+app.use(express.json());
+
+app.post('/api/shopify-discounts', async (req, res) => {
+  try {
+    const { shopId, accessToken } = req.body;
+    const url = `https://${shopId}/admin/api/2023-10/graphql.json`;
+    const query = `{
+      discountNodes(first: 100) {
+        edges {
+          node {
+            id
+            discount {
+              ... on DiscountCodeBasic {
+                title
+                code
+                status
+                createdAt
+              }
+              ... on DiscountAutomaticBasic {
+                title
+                status
+                createdAt
+              }
+            }
+          }
+        }
+      }
+    }`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'X-Shopify-Access-Token': accessToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ query })
+    });
+    if (!response.ok) {
+      console.error('Shopify API error:', await response.text());
+      return res.status(500).json({ error: 'Shopify API error' });
+    }
+    const data = await response.json();
+    console.log('Shopify API response:', data);
+    res.json(data.data);
+  } catch (err) {
+    console.error('Backend error:', err);
+    res.status(500).json({ error: 'Backend error' });
+  }
+});
+*/
