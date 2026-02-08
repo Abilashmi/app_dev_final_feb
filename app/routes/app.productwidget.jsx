@@ -159,6 +159,7 @@ const FAKE_FBT_CONFIG = {
     templates: {
         fbt1: {
             name: "Classic Grid",
+            layout: "horizontal",
             bgColor: "#ffffff",
             textColor: "#111827",
             priceColor: "#059669",
@@ -171,6 +172,7 @@ const FAKE_FBT_CONFIG = {
         },
         fbt2: {
             name: "Modern Cards",
+            layout: "horizontal",
             bgColor: "#f9fafb",
             textColor: "#374151",
             priceColor: "#dc2626",
@@ -182,7 +184,8 @@ const FAKE_FBT_CONFIG = {
             showAddAllButton: true,
         },
         fbt3: {
-            name: "Minimal List",
+            name: "Vertical List",
+            layout: "vertical",
             bgColor: "#ffffff",
             textColor: "#1f2937",
             priceColor: "#2563eb",
@@ -190,8 +193,8 @@ const FAKE_FBT_CONFIG = {
             buttonTextColor: "#ffffff",
             borderColor: "#f3f4f6",
             borderRadius: 4,
-            showPrices: false,
-            showAddAllButton: false,
+            showPrices: true,
+            showAddAllButton: true,
         },
     },
     manualRules: [],
@@ -477,7 +480,6 @@ function FBTTemplatePreview({ templateKey, config, isActive, onSelect }) {
 function CouponsSection({ config, onSave, saving }) {
     const [activeTemplate, setActiveTemplate] = useState(config.activeTemplate);
     const [templates, setTemplates] = useState(config.templates);
-    const [editingTemplate, setEditingTemplate] = useState(null);
 
     const handleTemplateSelect = (templateKey) => {
         setActiveTemplate(templateKey);
@@ -486,7 +488,7 @@ function CouponsSection({ config, onSave, saving }) {
     const updateTemplate = (field, value) => {
         setTemplates({
             ...templates,
-            [editingTemplate]: { ...templates[editingTemplate], [field]: value },
+            [activeTemplate]: { ...templates[activeTemplate], [field]: value },
         });
     };
 
@@ -497,143 +499,165 @@ function CouponsSection({ config, onSave, saving }) {
         });
     };
 
-    const currentEdit = editingTemplate ? templates[editingTemplate] : null;
+    const currentTemplate = templates[activeTemplate];
 
     return (
         <BlockStack gap="400">
-            <Text as="h2" variant="headingLg">
-                <InlineStack gap="200" blockAlign="center">
-                    <Icon source={DiscountIcon} />
-                    <span>Coupon Templates</span>
-                </InlineStack>
-            </Text>
-
-            <Text as="p" tone="subdued">
-                Choose and customize a template for displaying coupons.
-            </Text>
-
-            <InlineStack gap="400" wrap={false}>
-                {Object.keys(templates).map((templateKey) => (
-                    <div key={templateKey} style={{ flex: 1 }}>
-                        <BlockStack gap="200">
-                            <CouponTemplatePreview
-                                templateKey={templateKey}
-                                config={templates[templateKey]}
-                                isActive={activeTemplate === templateKey}
-                                onSelect={handleTemplateSelect}
-                            />
-                            <Text as="p" variant="bodySm" fontWeight="semibold" alignment="center">
-                                {templates[templateKey].name}
-                            </Text>
-                            <Button size="slim" onClick={() => setEditingTemplate(templateKey)} fullWidth>
-                                Customize
-                            </Button>
-                        </BlockStack>
-                    </div>
-                ))}
+            {/* Header */}
+            <InlineStack gap="200" align="start" blockAlign="center">
+                <Icon source={DiscountIcon} tone="primary" />
+                <Text as="h2" variant="headingLg">Coupon Templates</Text>
             </InlineStack>
 
-            {editingTemplate && currentEdit && (
+            <Text as="p" tone="subdued">
+                Choose and customize a template for displaying coupons on your store.
+            </Text>
+
+            {/* Template Selector */}
+            <Card>
+                <BlockStack gap="300">
+                    <Text as="h3" variant="headingMd">Select Template</Text>
+                    <InlineStack gap="300">
+                        {Object.keys(templates).map((templateKey) => (
+                            <Button
+                                key={templateKey}
+                                pressed={activeTemplate === templateKey}
+                                onClick={() => handleTemplateSelect(templateKey)}
+                            >
+                                {templates[templateKey].name}
+                            </Button>
+                        ))}
+                    </InlineStack>
+                </BlockStack>
+            </Card>
+
+            {/* Two Column Layout: Preview Left, Customization Right */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+                {/* LEFT: Preview */}
+                <Card>
+                    <BlockStack gap="300">
+                        <Text as="h3" variant="headingMd">Preview</Text>
+                        <div
+                            style={{
+                                padding: `${currentTemplate.padding}px`,
+                                borderRadius: `${currentTemplate.borderRadius}px`,
+                                background: currentTemplate.bgColor,
+                                color: currentTemplate.textColor,
+                                minHeight: "200px",
+                                display: "flex",
+                                flexDirection: "column",
+                                justifyContent: "center",
+                                alignItems: "center",
+                                textAlign: "center",
+                                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                            }}
+                        >
+                            <div style={{ fontSize: `${currentTemplate.fontSize}px`, fontWeight: "bold", marginBottom: "8px" }}>
+                                {currentTemplate.headingText}
+                            </div>
+                            <div style={{ fontSize: `${currentTemplate.fontSize - 2}px`, opacity: 0.8, marginBottom: "16px" }}>
+                                {currentTemplate.subtextText}
+                            </div>
+                            <div
+                                style={{
+                                    padding: "10px 24px",
+                                    background: currentTemplate.buttonColor,
+                                    borderRadius: `${currentTemplate.borderRadius / 2}px`,
+                                    color: currentTemplate.buttonTextColor,
+                                    fontWeight: "bold",
+                                    fontSize: "14px",
+                                    cursor: "pointer",
+                                }}
+                            >
+                                COPY CODE
+                            </div>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                            <Badge tone="success">{currentTemplate.name}</Badge>
+                        </div>
+                    </BlockStack>
+                </Card>
+
+                {/* RIGHT: Customization */}
                 <Card>
                     <BlockStack gap="400">
-                        <InlineStack align="space-between">
-                            <Text as="h3" variant="headingMd">
-                                Customize: {currentEdit.name}
-                            </Text>
-                            <Button onClick={() => setEditingTemplate(null)}>Done</Button>
-                        </InlineStack>
+                        <Text as="h3" variant="headingMd">Customize: {currentTemplate.name}</Text>
 
                         <Divider />
 
                         <Text as="h4" variant="headingSm">Text Content</Text>
-                        <InlineStack gap="300">
-                            <div style={{ flex: 1 }}>
-                                <TextField
-                                    label="Heading Text"
-                                    value={currentEdit.headingText}
-                                    onChange={(v) => updateTemplate("headingText", v)}
-                                />
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <TextField
-                                    label="Subtext"
-                                    value={currentEdit.subtextText}
-                                    onChange={(v) => updateTemplate("subtextText", v)}
-                                />
-                            </div>
-                        </InlineStack>
+                        <TextField
+                            label="Heading Text"
+                            value={currentTemplate.headingText}
+                            onChange={(v) => updateTemplate("headingText", v)}
+                        />
+                        <TextField
+                            label="Subtext"
+                            value={currentTemplate.subtextText}
+                            onChange={(v) => updateTemplate("subtextText", v)}
+                        />
 
                         <Divider />
 
                         <Text as="h4" variant="headingSm">Colors</Text>
-                        <InlineStack gap="300" wrap>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                             <ColorPickerField
                                 label="Background"
-                                value={currentEdit.bgColor}
+                                value={currentTemplate.bgColor}
                                 onChange={(v) => updateTemplate("bgColor", v)}
                             />
                             <ColorPickerField
                                 label="Text Color"
-                                value={currentEdit.textColor}
+                                value={currentTemplate.textColor}
                                 onChange={(v) => updateTemplate("textColor", v)}
                             />
                             <ColorPickerField
                                 label="Accent"
-                                value={currentEdit.accentColor}
+                                value={currentTemplate.accentColor}
                                 onChange={(v) => updateTemplate("accentColor", v)}
                             />
                             <ColorPickerField
                                 label="Button Color"
-                                value={currentEdit.buttonColor}
+                                value={currentTemplate.buttonColor}
                                 onChange={(v) => updateTemplate("buttonColor", v)}
                             />
                             <ColorPickerField
                                 label="Button Text"
-                                value={currentEdit.buttonTextColor}
+                                value={currentTemplate.buttonTextColor}
                                 onChange={(v) => updateTemplate("buttonTextColor", v)}
                             />
-                        </InlineStack>
+                        </div>
 
                         <Divider />
 
                         <Text as="h4" variant="headingSm">Styling</Text>
-                        <InlineStack gap="400">
-                            <div style={{ flex: 1 }}>
-                                <RangeSlider
-                                    label={`Border Radius: ${currentEdit.borderRadius}px`}
-                                    value={currentEdit.borderRadius}
-                                    onChange={(v) => updateTemplate("borderRadius", v)}
-                                    min={0}
-                                    max={24}
-                                    output
-                                />
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <RangeSlider
-                                    label={`Font Size: ${currentEdit.fontSize}px`}
-                                    value={currentEdit.fontSize}
-                                    onChange={(v) => updateTemplate("fontSize", v)}
-                                    min={12}
-                                    max={24}
-                                    output
-                                />
-                            </div>
-                            <div style={{ flex: 1 }}>
-                                <RangeSlider
-                                    label={`Padding: ${currentEdit.padding}px`}
-                                    value={currentEdit.padding}
-                                    onChange={(v) => updateTemplate("padding", v)}
-                                    min={8}
-                                    max={32}
-                                    output
-                                />
-                            </div>
-                        </InlineStack>
+                        <RangeSlider
+                            label={`Border Radius: ${currentTemplate.borderRadius}px`}
+                            value={currentTemplate.borderRadius}
+                            onChange={(v) => updateTemplate("borderRadius", v)}
+                            min={0}
+                            max={24}
+                            output
+                        />
+                        <RangeSlider
+                            label={`Font Size: ${currentTemplate.fontSize}px`}
+                            value={currentTemplate.fontSize}
+                            onChange={(v) => updateTemplate("fontSize", v)}
+                            min={12}
+                            max={24}
+                            output
+                        />
+                        <RangeSlider
+                            label={`Padding: ${currentTemplate.padding}px`}
+                            value={currentTemplate.padding}
+                            onChange={(v) => updateTemplate("padding", v)}
+                            min={8}
+                            max={32}
+                            output
+                        />
                     </BlockStack>
                 </Card>
-            )}
-
-            <Divider />
+            </div>
 
             <Button variant="primary" onClick={handleSave} loading={saving}>
                 Save Coupon Settings
@@ -647,7 +671,6 @@ function CouponsSection({ config, onSave, saving }) {
 function FBTSection({ config, products, onSave, saving }) {
     const [activeTemplate, setActiveTemplate] = useState(config.activeTemplate);
     const [templates, setTemplates] = useState(config.templates);
-    const [editingTemplate, setEditingTemplate] = useState(null);
     const [mode, setMode] = useState(config.mode);
     const [openaiKey, setOpenaiKey] = useState(config.openaiKey);
     const [manualRules, setManualRules] = useState(config.manualRules);
@@ -661,7 +684,7 @@ function FBTSection({ config, products, onSave, saving }) {
     const updateTemplate = (field, value) => {
         setTemplates({
             ...templates,
-            [editingTemplate]: { ...templates[editingTemplate], [field]: value },
+            [activeTemplate]: { ...templates[activeTemplate], [field]: value },
         });
     };
 
@@ -699,101 +722,154 @@ function FBTSection({ config, products, onSave, saving }) {
     }));
 
     const getProductById = (id) => products.find((p) => p.id === id);
-    const currentEdit = editingTemplate ? templates[editingTemplate] : null;
+    const currentTemplate = templates[activeTemplate];
 
     return (
         <BlockStack gap="400">
-            <Text as="h2" variant="headingLg">
-                <InlineStack gap="200" blockAlign="center">
-                    <Icon source={ProductIcon} />
-                    <span>Frequently Bought Together</span>
-                </InlineStack>
-            </Text>
+            {/* Header */}
+            <InlineStack gap="200" align="start" blockAlign="center">
+                <Icon source={ProductIcon} tone="primary" />
+                <Text as="h2" variant="headingLg">Frequently Bought Together</Text>
+            </InlineStack>
 
             <Text as="p" tone="subdued">
                 Choose a template and configure product recommendations.
             </Text>
 
-            {/* Templates */}
+            {/* Template Selector */}
             <Card>
                 <BlockStack gap="300">
-                    <Text as="h3" variant="headingMd">Display Templates</Text>
-                    <InlineStack gap="300" wrap={false}>
+                    <Text as="h3" variant="headingMd">Select Template</Text>
+                    <InlineStack gap="300">
                         {Object.keys(templates).map((templateKey) => (
-                            <div key={templateKey} style={{ flex: 1 }}>
-                                <BlockStack gap="200">
-                                    <FBTTemplatePreview
-                                        templateKey={templateKey}
-                                        config={templates[templateKey]}
-                                        isActive={activeTemplate === templateKey}
-                                        onSelect={setActiveTemplate}
-                                    />
-                                    <Text as="p" variant="bodySm" fontWeight="semibold" alignment="center">
-                                        {templates[templateKey].name}
-                                    </Text>
-                                    <Button size="slim" onClick={() => setEditingTemplate(templateKey)} fullWidth>
-                                        Customize
-                                    </Button>
-                                </BlockStack>
-                            </div>
+                            <Button
+                                key={templateKey}
+                                pressed={activeTemplate === templateKey}
+                                onClick={() => setActiveTemplate(templateKey)}
+                            >
+                                {templates[templateKey].name}
+                            </Button>
                         ))}
                     </InlineStack>
                 </BlockStack>
             </Card>
 
-            {/* Template Editor */}
-            {editingTemplate && currentEdit && (
+            {/* Two Column Layout: Preview Left, Customization Right */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
+                {/* LEFT: Preview */}
+                <Card>
+                    <BlockStack gap="300">
+                        <Text as="h3" variant="headingMd">Preview</Text>
+                        <div
+                            style={{
+                                padding: "16px",
+                                borderRadius: `${currentTemplate.borderRadius}px`,
+                                background: currentTemplate.bgColor,
+                                border: `2px solid ${currentTemplate.borderColor}`,
+                                minHeight: "200px",
+                            }}
+                        >
+                            <BlockStack gap="200">
+                                <div style={{ color: currentTemplate.textColor, fontWeight: "bold", fontSize: "16px" }}>
+                                    Frequently Bought Together
+                                </div>
+                                <div style={{ display: "flex", flexDirection: currentTemplate.layout === "vertical" ? "column" : "row", gap: "8px" }}>
+                                    {[1, 2, 3].map((i) => (
+                                        <div
+                                            key={i}
+                                            style={{
+                                                width: currentTemplate.layout === "vertical" ? "100%" : "80px",
+                                                height: currentTemplate.layout === "vertical" ? "40px" : "80px",
+                                                background: currentTemplate.borderColor,
+                                                borderRadius: `${currentTemplate.borderRadius / 2}px`,
+                                                display: "flex",
+                                                alignItems: "center",
+                                                justifyContent: currentTemplate.layout === "vertical" ? "flex-start" : "center",
+                                                paddingLeft: currentTemplate.layout === "vertical" ? "12px" : "0",
+                                                color: currentTemplate.textColor,
+                                                fontSize: "12px",
+                                            }}
+                                        >
+                                            Product {i}
+                                        </div>
+                                    ))}
+                                </div>
+                                {currentTemplate.showPrices && (
+                                    <div style={{ color: currentTemplate.priceColor, fontWeight: "bold", fontSize: "18px" }}>
+                                        Total: $99.99
+                                    </div>
+                                )}
+                                {currentTemplate.showAddAllButton && (
+                                    <div
+                                        style={{
+                                            padding: "10px 20px",
+                                            background: currentTemplate.buttonColor,
+                                            borderRadius: `${currentTemplate.borderRadius / 2}px`,
+                                            color: currentTemplate.buttonTextColor,
+                                            fontWeight: "bold",
+                                            fontSize: "14px",
+                                            textAlign: "center",
+                                            cursor: "pointer",
+                                        }}
+                                    >
+                                        Add All to Cart
+                                    </div>
+                                )}
+                            </BlockStack>
+                        </div>
+                        <div style={{ textAlign: "center" }}>
+                            <Badge tone="success">{currentTemplate.name}</Badge>
+                        </div>
+                    </BlockStack>
+                </Card>
+
+                {/* RIGHT: Customization */}
                 <Card>
                     <BlockStack gap="400">
-                        <InlineStack align="space-between">
-                            <Text as="h3" variant="headingMd">
-                                Customize: {currentEdit.name}
-                            </Text>
-                            <Button onClick={() => setEditingTemplate(null)}>Done</Button>
-                        </InlineStack>
+                        <Text as="h3" variant="headingMd">Customize: {currentTemplate.name}</Text>
 
                         <Divider />
 
                         <Text as="h4" variant="headingSm">Colors</Text>
-                        <InlineStack gap="300" wrap>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                             <ColorPickerField
                                 label="Background"
-                                value={currentEdit.bgColor}
+                                value={currentTemplate.bgColor}
                                 onChange={(v) => updateTemplate("bgColor", v)}
                             />
                             <ColorPickerField
                                 label="Text Color"
-                                value={currentEdit.textColor}
+                                value={currentTemplate.textColor}
                                 onChange={(v) => updateTemplate("textColor", v)}
                             />
                             <ColorPickerField
                                 label="Price Color"
-                                value={currentEdit.priceColor}
+                                value={currentTemplate.priceColor}
                                 onChange={(v) => updateTemplate("priceColor", v)}
                             />
                             <ColorPickerField
                                 label="Button Color"
-                                value={currentEdit.buttonColor}
+                                value={currentTemplate.buttonColor}
                                 onChange={(v) => updateTemplate("buttonColor", v)}
                             />
                             <ColorPickerField
                                 label="Button Text"
-                                value={currentEdit.buttonTextColor}
+                                value={currentTemplate.buttonTextColor}
                                 onChange={(v) => updateTemplate("buttonTextColor", v)}
                             />
                             <ColorPickerField
                                 label="Border Color"
-                                value={currentEdit.borderColor}
+                                value={currentTemplate.borderColor}
                                 onChange={(v) => updateTemplate("borderColor", v)}
                             />
-                        </InlineStack>
+                        </div>
 
                         <Divider />
 
                         <Text as="h4" variant="headingSm">Styling</Text>
                         <RangeSlider
-                            label={`Border Radius: ${currentEdit.borderRadius}px`}
-                            value={currentEdit.borderRadius}
+                            label={`Border Radius: ${currentTemplate.borderRadius}px`}
+                            value={currentTemplate.borderRadius}
                             onChange={(v) => updateTemplate("borderRadius", v)}
                             min={0}
                             max={24}
@@ -806,18 +882,18 @@ function FBTSection({ config, products, onSave, saving }) {
                         <InlineStack gap="400">
                             <Checkbox
                                 label="Show Prices"
-                                checked={currentEdit.showPrices}
+                                checked={currentTemplate.showPrices}
                                 onChange={(v) => updateTemplate("showPrices", v)}
                             />
                             <Checkbox
                                 label="Show 'Add All' Button"
-                                checked={currentEdit.showAddAllButton}
+                                checked={currentTemplate.showAddAllButton}
                                 onChange={(v) => updateTemplate("showAddAllButton", v)}
                             />
                         </InlineStack>
                     </BlockStack>
                 </Card>
-            )}
+            </div>
 
             {/* Mode Selection */}
             <Card>
@@ -960,9 +1036,7 @@ function FBTSection({ config, products, onSave, saving }) {
                 </Card>
             )}
 
-            <Divider />
-
-            <Button variant="primary" onClick={handleSave} loading={saving}>
+            <Button variant="primary" onClick={handleSave} loading={saving} fullWidth>
                 Save FBT Settings
             </Button>
         </BlockStack>
