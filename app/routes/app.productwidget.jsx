@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { useLoaderData, useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import db from "../db.server";
 import {
     Page,
     Layout,
@@ -112,40 +113,40 @@ const FAKE_COUPON_CONFIG = {
     templates: {
         template1: {
             name: "Classic Banner",
-            headingText: "Use code for 10% OFF!",
-            subtextText: "Limited time offer",
-            bgColor: "#1a1a2e",
-            textColor: "#ffffff",
-            accentColor: "#e94560",
-            buttonColor: "#e94560",
+            headingText: "GET 10% OFF!",
+            subtextText: "Apply at checkout for savings",
+            bgColor: "#ffffff",
+            textColor: "#111827",
+            accentColor: "#3b82f6",
+            buttonColor: "#3b82f6",
             buttonTextColor: "#ffffff",
-            borderRadius: 8,
+            borderRadius: 12,
             fontSize: 16,
             padding: 16,
         },
         template2: {
             name: "Minimal Card",
-            headingText: "Special Discount",
-            subtextText: "Apply at checkout",
-            bgColor: "#ffffff",
-            textColor: "#333333",
-            accentColor: "#0070f3",
-            buttonColor: "#0070f3",
+            headingText: "SPECIAL OFFER",
+            subtextText: "Free shipping on orders over ₹500",
+            bgColor: "#f9fafb",
+            textColor: "#374151",
+            accentColor: "#10b981",
+            buttonColor: "#10b981",
             buttonTextColor: "#ffffff",
-            borderRadius: 4,
+            borderRadius: 8,
             fontSize: 14,
-            padding: 12,
+            padding: 14,
         },
         template3: {
             name: "Bold & Vibrant",
-            headingText: "Exclusive Savings!",
-            subtextText: "Don't miss out",
-            bgColor: "#6366f1",
+            headingText: "FLASH SALE!",
+            subtextText: "Use code: BOLD25 for extra 25% OFF",
+            bgColor: "#4f46e5",
             textColor: "#ffffff",
-            accentColor: "#fbbf24",
-            buttonColor: "#fbbf24",
-            buttonTextColor: "#1f2937",
-            borderRadius: 12,
+            accentColor: "#f59e0b",
+            buttonColor: "#f59e0b",
+            buttonTextColor: "#111827",
+            borderRadius: 16,
             fontSize: 18,
             padding: 20,
         },
@@ -203,7 +204,8 @@ const FAKE_FBT_CONFIG = {
 // --- LOADER ---
 
 export async function loader({ request }) {
-    const { admin } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
+    const shop = session.shop;
 
     let products = [];
     try {
@@ -240,9 +242,26 @@ export async function loader({ request }) {
         console.error("Failed to fetch products:", e);
     }
 
+    // Fetch real settings from DB
+    let couponConfig = FAKE_COUPON_CONFIG;
+    let fbtConfig = FAKE_FBT_CONFIG;
+
+    try {
+        const settings = await db.widgetSettings.findUnique({
+            where: { shop }
+        });
+
+        if (settings) {
+            couponConfig = JSON.parse(settings.coupons);
+            fbtConfig = JSON.parse(settings.fbt);
+        }
+    } catch (e) {
+        console.error("Failed to fetch settings from DB:", e);
+    }
+
     return {
-        couponConfig: FAKE_COUPON_CONFIG,
-        fbtConfig: FAKE_FBT_CONFIG,
+        couponConfig,
+        fbtConfig,
         products,
     };
 }
@@ -250,7 +269,7 @@ export async function loader({ request }) {
 // --- ACTION ---
 
 export async function action({ request }) {
-    await authenticate.admin(request);
+    const { session } = await authenticate.admin(request);
     const formData = await request.formData();
     const actionType = formData.get("actionType");
 
@@ -263,33 +282,73 @@ export async function action({ request }) {
         }
 
         try {
-            JSON.parse(templateData);
-        } catch (e) {
-            return { success: false, error: "Invalid template data" };
-        }
+            const parsedTemplates = JSON.parse(templateData);
+            const couponConfig = { activeTemplate, templates: parsedTemplates };
 
-        console.log("[FAKE API] Saving Coupon Config:", { activeTemplate, templateData });
-        return { success: true, message: "Coupon configuration saved!" };
+            // Fetch current settings to preserve FBT
+            const currentSettings = await db.widgetSettings.findUnique({ where: { shop: session.shop } });
+            const fbtConfig = currentSettings ? currentSettings.fbt : JSON.stringify(FAKE_FBT_CONFIG);
+
+            await db.widgetSettings.upsert({
+                where: { shop: session.shop },
+                update: { coupons: JSON.stringify(couponConfig) },
+                create: {
+                    shop: session.shop,
+                    coupons: JSON.stringify(couponConfig),
+                    fbt: fbtConfig
+                }
+            });
+
+            return { success: true, message: "Coupon configuration saved!" };
+        } catch (e) {
+            console.error("Save Coupon Failure:", e);
+            return { success: false, error: "Failed to save to database" };
+        }
     }
 
     if (actionType === "saveFBTConfig") {
         const mode = formData.get("mode");
         const configData = formData.get("configData");
         const activeTemplate = formData.get("activeTemplate");
+        const openaiKey = formData.get("openaiKey");
+        const templateData = formData.get("templateData"); // The serialized templates object
 
         if (!mode || !["manual", "ai"].includes(mode)) {
             return { success: false, error: "Invalid mode" };
         }
 
-        if (mode === "ai") {
-            const openaiKey = formData.get("openaiKey");
-            if (!openaiKey || openaiKey.trim() === "") {
-                return { success: false, error: "OpenAI API Key is required for AI mode" };
-            }
+        if (mode === "ai" && (!openaiKey || openaiKey.trim() === "")) {
+            return { success: false, error: "OpenAI API Key is required for AI mode" };
         }
 
-        console.log("[FAKE API] Saving FBT Config:", { mode, activeTemplate, configData });
-        return { success: true, message: "Frequently Bought Together configuration saved!" };
+        try {
+            const fbtConfig = {
+                activeTemplate,
+                mode,
+                openaiKey,
+                templates: JSON.parse(templateData),
+                manualRules: configData ? JSON.parse(configData) : []
+            };
+
+            // Fetch current settings to preserve Coupons
+            const currentSettings = await db.widgetSettings.findUnique({ where: { shop: session.shop } });
+            const couponConfig = currentSettings ? currentSettings.coupons : JSON.stringify(FAKE_COUPON_CONFIG);
+
+            await db.widgetSettings.upsert({
+                where: { shop: session.shop },
+                update: { fbt: JSON.stringify(fbtConfig) },
+                create: {
+                    shop: session.shop,
+                    fbt: JSON.stringify(fbtConfig),
+                    coupons: couponConfig
+                }
+            });
+
+            return { success: true, message: "Frequently Bought Together configuration saved!" };
+        } catch (e) {
+            console.error("Save FBT Failure:", e);
+            return { success: false, error: "Failed to save to database" };
+        }
     }
 
     return { success: false, error: "Unknown action type" };
@@ -381,23 +440,22 @@ function CouponTemplatePreview({ templateKey, config, isActive, onSelect }) {
             }}
             onClick={() => onSelect(templateKey)}
         >
-            <Text as="h3" variant="headingMd" fontWeight="bold">
-                <span style={{ color: t.textColor, fontSize: `${t.fontSize}px` }}>
-                    {t.headingText}
-                </span>
-            </Text>
-            <Text as="p" variant="bodySm">
-                <span style={{ color: t.textColor, opacity: 0.8 }}>{t.subtextText}</span>
-            </Text>
+            <div style={{ fontSize: `${t.fontSize}px`, fontWeight: "bold", color: t.textColor, marginBottom: "4px" }}>
+                {t.headingText}
+            </div>
+            <div style={{ fontSize: `${t.fontSize - 3}px`, opacity: 0.7, color: t.textColor, marginBottom: "12px" }}>
+                {t.subtextText}
+            </div>
             <div
                 style={{
-                    marginTop: "12px",
-                    padding: "8px 16px",
+                    padding: "6px 14px",
                     background: t.buttonColor,
-                    borderRadius: `${t.borderRadius / 2}px`,
+                    borderRadius: "6px",
                     color: t.buttonTextColor,
                     fontWeight: "bold",
-                    fontSize: "12px",
+                    fontSize: "11px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px"
                 }}
             >
                 COPY CODE
@@ -425,51 +483,65 @@ function FBTTemplatePreview({ templateKey, config, isActive, onSelect }) {
                 border: isActive ? "3px solid #0070f3" : `2px solid ${t.borderColor}`,
                 cursor: "pointer",
                 transition: "all 0.2s ease",
+                position: "relative"
             }}
             onClick={() => onSelect(templateKey)}
         >
             <BlockStack gap="200">
-                <Text as="h4" variant="headingSm">
-                    <span style={{ color: t.textColor }}>Frequently Bought Together</span>
+                <Text as="h4" variant="bodyMd" fontWeight="bold">
+                    <span style={{ color: t.textColor, fontSize: "14px" }}>Frequently Bought Together</span>
                 </Text>
-                <InlineStack gap="200">
+                <InlineStack gap="150" blockAlign="center">
                     {[1, 2, 3].map((i) => (
-                        <div
-                            key={i}
-                            style={{
-                                width: "50px",
-                                height: "50px",
-                                background: t.borderColor,
-                                borderRadius: `${t.borderRadius / 2}px`,
-                            }}
-                        />
+                        <React.Fragment key={i}>
+                            <div
+                                style={{
+                                    width: "56px",
+                                    height: "56px",
+                                    background: `${t.borderColor}44`,
+                                    borderRadius: "8px",
+                                    border: `1px solid ${t.borderColor}`,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontSize: "10px",
+                                    color: t.textColor,
+                                    opacity: 0.6
+                                }}
+                            >
+                                P{i}
+                            </div>
+                            {i < 3 && <span style={{ color: t.textColor, opacity: 0.5, fontSize: "14px" }}>+</span>}
+                        </React.Fragment>
                     ))}
                 </InlineStack>
-                {t.showPrices && (
-                    <Text variant="bodySm">
-                        <span style={{ color: t.priceColor, fontWeight: "bold" }}>$99.99</span>
-                    </Text>
-                )}
-                {t.showAddAllButton && (
-                    <div
-                        style={{
-                            padding: "6px 12px",
-                            background: t.buttonColor,
-                            borderRadius: `${t.borderRadius / 2}px`,
-                            color: t.buttonTextColor,
-                            fontSize: "11px",
-                            fontWeight: "bold",
-                            textAlign: "center",
-                        }}
-                    >
-                        Add All to Cart
-                    </div>
-                )}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+                    {t.showPrices && (
+                        <Text variant="bodySm" fontWeight="bold">
+                            <span style={{ color: t.priceColor }}>₹1,499.00</span>
+                        </Text>
+                    )}
+                    {t.showAddAllButton && (
+                        <div
+                            style={{
+                                padding: "4px 10px",
+                                background: t.buttonColor,
+                                borderRadius: "6px",
+                                color: t.buttonTextColor,
+                                fontSize: "10px",
+                                fontWeight: "700",
+                                textTransform: "uppercase"
+                            }}
+                        >
+                            Add All
+                        </div>
+                    )}
+                </div>
             </BlockStack>
             {isActive && (
-                <Box paddingBlockStart="100">
+                <div style={{ position: "absolute", top: "8px", right: "8px" }}>
                     <Badge tone="success" size="small">Active</Badge>
-                </Box>
+                </div>
             )}
         </div>
     );
@@ -478,8 +550,8 @@ function FBTTemplatePreview({ templateKey, config, isActive, onSelect }) {
 // --- COUPONS SECTION ---
 
 function CouponsSection({ config, onSave, saving }) {
-    const [activeTemplate, setActiveTemplate] = useState(config.activeTemplate);
-    const [templates, setTemplates] = useState(config.templates);
+    const [activeTemplate, setActiveTemplate] = useState(config?.activeTemplate || "template1");
+    const [templates, setTemplates] = useState(config?.templates || FAKE_COUPON_CONFIG.templates);
 
     const handleTemplateSelect = (templateKey) => {
         setActiveTemplate(templateKey);
@@ -549,24 +621,34 @@ function CouponsSection({ config, onSave, saving }) {
                                 justifyContent: "center",
                                 alignItems: "center",
                                 textAlign: "center",
-                                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                                boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
+                                border: `2px dashed ${currentTemplate.accentColor || currentTemplate.textColor}44`,
+                                position: "relative",
+                                overflow: "hidden"
                             }}
                         >
-                            <div style={{ fontSize: `${currentTemplate.fontSize}px`, fontWeight: "bold", marginBottom: "8px" }}>
+                            {/* Decorative Cutouts for Ticket Look */}
+                            <div style={{ position: "absolute", left: "-10px", top: "50%", transform: "translateY(-50%)", width: "20px", height: "20px", borderRadius: "50%", background: "#fff", border: "1px solid rgba(0,0,0,0.05)" }} />
+                            <div style={{ position: "absolute", right: "-10px", top: "50%", transform: "translateY(-50%)", width: "20px", height: "20px", borderRadius: "50%", background: "#fff", border: "1px solid rgba(0,0,0,0.05)" }} />
+
+                            <div style={{ fontSize: `${currentTemplate.fontSize + 4}px`, fontWeight: "800", marginBottom: "8px", color: currentTemplate.textColor }}>
                                 {currentTemplate.headingText}
                             </div>
-                            <div style={{ fontSize: `${currentTemplate.fontSize - 2}px`, opacity: 0.8, marginBottom: "16px" }}>
+                            <div style={{ fontSize: `${currentTemplate.fontSize}px`, opacity: 0.8, marginBottom: "20px", color: currentTemplate.textColor }}>
                                 {currentTemplate.subtextText}
                             </div>
                             <div
                                 style={{
-                                    padding: "10px 24px",
+                                    padding: "12px 32px",
                                     background: currentTemplate.buttonColor,
-                                    borderRadius: `${currentTemplate.borderRadius / 2}px`,
+                                    borderRadius: "8px",
                                     color: currentTemplate.buttonTextColor,
                                     fontWeight: "bold",
-                                    fontSize: "14px",
+                                    fontSize: "16px",
                                     cursor: "pointer",
+                                    boxShadow: `0 4px 14px ${currentTemplate.buttonColor}44`,
+                                    textTransform: "uppercase",
+                                    letterSpacing: "1px"
                                 }}
                             >
                                 COPY CODE
@@ -669,13 +751,14 @@ function CouponsSection({ config, onSave, saving }) {
 // --- FBT SECTION ---
 
 function FBTSection({ config, products, onSave, saving }) {
-    const [activeTemplate, setActiveTemplate] = useState(config.activeTemplate);
-    const [templates, setTemplates] = useState(config.templates);
-    const [mode, setMode] = useState(config.mode);
-    const [openaiKey, setOpenaiKey] = useState(config.openaiKey);
-    const [manualRules, setManualRules] = useState(config.manualRules);
+    const [activeTemplate, setActiveTemplate] = useState(config?.activeTemplate || "fbt1");
+    const [templates, setTemplates] = useState(config?.templates || FAKE_FBT_CONFIG.templates);
+    const [mode, setMode] = useState(config?.mode || "manual");
+    const [openaiKey, setOpenaiKey] = useState(config?.openaiKey || "");
+    const [manualRules, setManualRules] = useState(config?.manualRules || []);
     const [selectedTriggerProduct, setSelectedTriggerProduct] = useState("");
     const [selectedUpsellProducts, setSelectedUpsellProducts] = useState([]);
+    const [simulatedTriggerId, setSimulatedTriggerId] = useState("");
 
     const handleModeChange = useCallback((value) => {
         setMode(value[0]);
@@ -754,69 +837,135 @@ function FBTSection({ config, products, onSave, saving }) {
                 </BlockStack>
             </Card>
 
+            {/* Simulation Card */}
+            <Card>
+                <BlockStack gap="300">
+                    <Text variant="headingMd" as="h3">Interactive Simulation</Text>
+                    <Text as="p" tone="subdued">Select a product to see how FBT suggests items based on your rules.</Text>
+                    <Select
+                        label="View product page as customer:"
+                        options={[{ label: "Select a product to simulate", value: "" }, ...products.map(p => ({ label: p.title, value: p.id }))]}
+                        value={simulatedTriggerId}
+                        onChange={setSimulatedTriggerId}
+                    />
+                </BlockStack>
+            </Card>
+
             {/* Two Column Layout: Preview Left, Customization Right */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
                 {/* LEFT: Preview */}
                 <Card>
                     <BlockStack gap="300">
                         <Text as="h3" variant="headingMd">Preview</Text>
-                        <div
-                            style={{
-                                padding: "16px",
-                                borderRadius: `${currentTemplate.borderRadius}px`,
-                                background: currentTemplate.bgColor,
-                                border: `2px solid ${currentTemplate.borderColor}`,
-                                minHeight: "200px",
-                            }}
-                        >
-                            <BlockStack gap="200">
-                                <div style={{ color: currentTemplate.textColor, fontWeight: "bold", fontSize: "16px" }}>
-                                    Frequently Bought Together
-                                </div>
-                                <div style={{ display: "flex", flexDirection: currentTemplate.layout === "vertical" ? "column" : "row", gap: "8px" }}>
-                                    {[1, 2, 3].map((i) => (
-                                        <div
-                                            key={i}
-                                            style={{
-                                                width: currentTemplate.layout === "vertical" ? "100%" : "80px",
-                                                height: currentTemplate.layout === "vertical" ? "40px" : "80px",
-                                                background: currentTemplate.borderColor,
-                                                borderRadius: `${currentTemplate.borderRadius / 2}px`,
-                                                display: "flex",
-                                                alignItems: "center",
-                                                justifyContent: currentTemplate.layout === "vertical" ? "flex-start" : "center",
-                                                paddingLeft: currentTemplate.layout === "vertical" ? "12px" : "0",
-                                                color: currentTemplate.textColor,
-                                                fontSize: "12px",
-                                            }}
-                                        >
-                                            Product {i}
+                        {(() => {
+                            const activeRule = manualRules.find(r => r.triggerProductId === simulatedTriggerId);
+                            const displayProducts = activeRule
+                                ? activeRule.upsellProductIds.map(id => products.find(p => p.id === id)).filter(Boolean)
+                                : products.slice(0, 3);
+
+                            const totalPrice = displayProducts.reduce((sum, p) => sum + parseFloat(p.price), 0);
+
+                            return (
+                                <div
+                                    style={{
+                                        padding: "20px",
+                                        borderRadius: `${currentTemplate.borderRadius}px`,
+                                        background: currentTemplate.bgColor,
+                                        border: `1px solid ${currentTemplate.borderColor}`,
+                                        minHeight: "220px",
+                                        boxShadow: "0 4px 20px -2px rgba(0,0,0,0.05), 0 2px 10px -2px rgba(0,0,0,0.05)",
+                                        transition: "transform 0.3s ease",
+                                    }}
+                                >
+                                    <BlockStack gap="400">
+                                        <div style={{ color: currentTemplate.textColor, fontWeight: "800", fontSize: "18px", letterSpacing: "-0.5px" }}>
+                                            Frequently Bought Together
                                         </div>
-                                    ))}
+                                        {simulatedTriggerId && !activeRule && (
+                                            <Banner tone="info">No rules found for this product. Showing defaults.</Banner>
+                                        )}
+                                        <div style={{
+                                            display: "flex",
+                                            flexDirection: currentTemplate.layout === "vertical" ? "column" : "row",
+                                            gap: "16px",
+                                            alignItems: "center",
+                                            justifyContent: "center"
+                                        }}>
+                                            {displayProducts.map((p, i) => (
+                                                <React.Fragment key={p.id}>
+                                                    <div
+                                                        style={{
+                                                            width: currentTemplate.layout === "vertical" ? "100%" : "120px",
+                                                            display: "flex",
+                                                            flexDirection: currentTemplate.layout === "vertical" ? "row" : "column",
+                                                            alignItems: "center",
+                                                            gap: "12px",
+                                                            padding: "8px",
+                                                            borderRadius: "12px",
+                                                            background: `${currentTemplate.borderColor}22`,
+                                                            border: `1px solid ${currentTemplate.borderColor}44`,
+                                                        }}
+                                                    >
+                                                        <div style={{
+                                                            width: "60px",
+                                                            height: "60px",
+                                                            background: currentTemplate.borderColor,
+                                                            backgroundImage: p.image ? `url(${p.image})` : "none",
+                                                            backgroundSize: "cover",
+                                                            backgroundPosition: "center",
+                                                            borderRadius: "8px",
+                                                            flexShrink: 0
+                                                        }} />
+                                                        <div style={{ textAlign: currentTemplate.layout === "vertical" ? "left" : "center", flex: 1, minWidth: 0 }}>
+                                                            <div style={{ color: currentTemplate.textColor, fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</div>
+                                                            {currentTemplate.showPrices && <div style={{ color: currentTemplate.priceColor, fontSize: "12px", fontWeight: "bold" }}>₹{p.price}</div>}
+                                                        </div>
+                                                    </div>
+                                                    {i < displayProducts.length - 1 && currentTemplate.layout === "horizontal" && (
+                                                        <div style={{ fontSize: "24px", color: currentTemplate.textColor, opacity: 0.3, fontWeight: "300" }}>+</div>
+                                                    )}
+                                                </React.Fragment>
+                                            ))}
+                                        </div>
+
+                                        <div style={{
+                                            display: "flex",
+                                            justifyContent: "space-between",
+                                            alignItems: "center",
+                                            paddingTop: "12px",
+                                            borderTop: `1px solid ${currentTemplate.borderColor}33`
+                                        }}>
+                                            {currentTemplate.showPrices && (
+                                                <BlockStack gap="050">
+                                                    <Text variant="bodySm" tone="subdued">Total Price</Text>
+                                                    <div style={{ color: currentTemplate.priceColor, fontWeight: "900", fontSize: "22px" }}>
+                                                        ₹{totalPrice.toLocaleString("en-IN")}
+                                                    </div>
+                                                </BlockStack>
+                                            )}
+                                            {currentTemplate.showAddAllButton && (
+                                                <div
+                                                    style={{
+                                                        padding: "12px 24px",
+                                                        background: currentTemplate.buttonColor,
+                                                        borderRadius: "100px",
+                                                        color: currentTemplate.buttonTextColor,
+                                                        fontWeight: "800",
+                                                        fontSize: "15px",
+                                                        textAlign: "center",
+                                                        cursor: "pointer",
+                                                        boxShadow: `0 8px 20px ${currentTemplate.buttonColor}44`,
+                                                        transition: "all 0.2s ease"
+                                                    }}
+                                                >
+                                                    Add All to Cart
+                                                </div>
+                                            )}
+                                        </div>
+                                    </BlockStack>
                                 </div>
-                                {currentTemplate.showPrices && (
-                                    <div style={{ color: currentTemplate.priceColor, fontWeight: "bold", fontSize: "18px" }}>
-                                        Total: $99.99
-                                    </div>
-                                )}
-                                {currentTemplate.showAddAllButton && (
-                                    <div
-                                        style={{
-                                            padding: "10px 20px",
-                                            background: currentTemplate.buttonColor,
-                                            borderRadius: `${currentTemplate.borderRadius / 2}px`,
-                                            color: currentTemplate.buttonTextColor,
-                                            fontWeight: "bold",
-                                            fontSize: "14px",
-                                            textAlign: "center",
-                                            cursor: "pointer",
-                                        }}
-                                    >
-                                        Add All to Cart
-                                    </div>
-                                )}
-                            </BlockStack>
-                        </div>
+                            );
+                        })()}
                         <div style={{ textAlign: "center" }}>
                             <Badge tone="success">{currentTemplate.name}</Badge>
                         </div>
@@ -968,7 +1117,7 @@ function FBTSection({ config, products, onSave, saving }) {
                                     <Thumbnail source={product.image || ""} alt={product.title} size="small" />
                                     <div style={{ marginLeft: "12px" }}>
                                         <Text as="span" fontWeight="semibold">{product.title}</Text>
-                                        <Text as="p" tone="subdued" variant="bodySm">${product.price}</Text>
+                                        <Text as="p" tone="subdued" variant="bodySm">₹{product.price}</Text>
                                     </div>
                                 </div>
                             ))}

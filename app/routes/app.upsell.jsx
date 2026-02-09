@@ -24,19 +24,22 @@ import {
   getUpsellConfig,
   saveUpsellConfig,
   SAMPLE_UPSELL_PRODUCTS,
+  mockCollections,
+  UPSELL_STYLES,
+  UPSELL_STYLE_METADATA,
   trackUpsellEvent,
-} from './api.cart-settings';
+} from '../services/api.cart-settings.shared';
 
 /**
  * Rule Card Component - Reusable for all three rules
  */
-function RuleCard({ 
-  title, 
-  description, 
-  ruleKey, 
-  config, 
+function RuleCard({
+  title,
+  description,
+  ruleKey,
+  config,
   onConfigChange,
-  children 
+  children
 }) {
   const isEnabled = config[ruleKey]?.enabled || false;
 
@@ -84,11 +87,9 @@ function ProductPicker({
   onChange,
   maxSelect = null,
   showCount = true,
+  items = SAMPLE_UPSELL_PRODUCTS,
+  isCollection = false
 }) {
-  const selectedProducts = selected
-    .map((id) => SAMPLE_UPSELL_PRODUCTS.find((p) => p.id === id))
-    .filter((p) => p !== undefined);
-
   return (
     <BlockStack gap="200">
       <InlineStack align="space-between" blockAlign="center">
@@ -103,37 +104,44 @@ function ProductPicker({
         )}
       </InlineStack>
 
-      <BlockStack gap="150">
-        {SAMPLE_UPSELL_PRODUCTS.map((product) => (
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+        gap: '12px'
+      }}>
+        {items.map((item) => (
           <div
-            key={product.id}
+            key={item.id}
             style={{
               padding: '12px',
-              border: selected.includes(product.id)
+              border: selected.includes(item.id)
                 ? '2px solid #0070f3'
                 : '1px solid #e5e7eb',
-              borderRadius: '6px',
-              backgroundColor: selected.includes(product.id)
+              borderRadius: '8px',
+              backgroundColor: selected.includes(item.id)
                 ? '#f0f7ff'
                 : '#ffffff',
               cursor: 'pointer',
               transition: 'all 0.2s ease',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
             }}
             onClick={() => {
-              if (selected.includes(product.id)) {
-                onChange(selected.filter((id) => id !== product.id));
+              if (selected.includes(item.id)) {
+                onChange(selected.filter((id) => id !== item.id));
               } else {
                 if (maxSelect === null || selected.length < maxSelect) {
-                  onChange([...selected, product.id]);
+                  onChange([...selected, item.id]);
                 }
               }
             }}
           >
-            <InlineStack gap="200" align="center">
+            <InlineStack gap="200" align="center" wrap={false}>
               <div
                 style={{
-                  width: '50px',
-                  height: '50px',
+                  width: '40px',
+                  height: '40px',
                   backgroundColor: '#f3f4f6',
                   borderRadius: '4px',
                   display: 'flex',
@@ -143,10 +151,12 @@ function ProductPicker({
                   flexShrink: 0,
                 }}
               >
-                {product.image ? (
+                {isCollection ? (
+                  <Text variant="bodySm">📁</Text>
+                ) : item.image ? (
                   <img
-                    src={product.image}
-                    alt={product.title}
+                    src={item.image}
+                    alt={item.title}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
@@ -155,15 +165,22 @@ function ProductPicker({
                   </Text>
                 )}
               </div>
-              <BlockStack gap="050" style={{ flex: 1 }}>
-                <Text fontWeight="semibold" variant="bodySm">
-                  {product.title}
+              <BlockStack gap="050" style={{ flex: 1, minWidth: 0 }}>
+                <Text fontWeight="semibold" variant="bodySm" breakWord truncate>
+                  {item.title}
                 </Text>
-                <Text tone="subdued" variant="bodySm">
-                  ₹{product.price}
-                </Text>
+                {!isCollection && (
+                  <Text tone="subdued" variant="bodySm">
+                    ₹{item.price}
+                  </Text>
+                )}
+                {isCollection && (
+                  <Text tone="subdued" variant="bodySm">
+                    {item.productCount} products
+                  </Text>
+                )}
               </BlockStack>
-              {selected.includes(product.id) && (
+              {selected.includes(item.id) && (
                 <Text as="span" tone="success">
                   ✓
                 </Text>
@@ -171,94 +188,79 @@ function ProductPicker({
             </InlineStack>
           </div>
         ))}
-      </BlockStack>
+      </div>
     </BlockStack>
   );
 }
 
 /**
- * Selected Products Display
+ * Template Selection Component
  */
-function SelectedProductsDisplay({ productIds, label }) {
-  const selectedProducts = productIds
-    .map((id) => SAMPLE_UPSELL_PRODUCTS.find((p) => p.id === id))
+function TemplateSelector({ activeTemplate, onTemplateSelect }) {
+  const templates = [
+    { id: UPSELL_STYLES.GRID, name: 'Classic Grid', icon: '⊞' },
+    { id: UPSELL_STYLES.CAROUSEL, name: 'Horizontal Carousel', icon: '↔' },
+    { id: UPSELL_STYLES.LIST, name: 'Vertical List', icon: '≡' },
+  ];
+
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <Text as="h3" variant="headingMd">Choose Layout Template</Text>
+        <InlineStack gap="300">
+          {templates.map((t) => (
+            <div
+              key={t.id}
+              onClick={() => onTemplateSelect(t.id)}
+              style={{
+                flex: 1,
+                padding: '16px',
+                border: activeTemplate === t.id ? '2px solid #0070f3' : '1px solid #e5e7eb',
+                borderRadius: '8px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                backgroundColor: activeTemplate === t.id ? '#f0f7ff' : '#ffffff',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <Text variant="headingLg" as="p" style={{ marginBottom: '8px', fontSize: '24px' }}>
+                {t.icon}
+              </Text>
+              <Text fontWeight={activeTemplate === t.id ? 'bold' : 'regular'}>
+                {t.name}
+              </Text>
+              <Badge tone={activeTemplate === t.id ? 'success' : 'subdued'}>
+                {activeTemplate === t.id ? 'Selected' : 'Select'}
+              </Badge>
+            </div>
+          ))}
+        </InlineStack>
+      </BlockStack>
+    </Card>
+  );
+}
+
+/**
+ * Selected Resource Display
+ */
+function SelectedResourceDisplay({ ids, label, items, isCollection = false }) {
+  const selectedItems = ids
+    .map((id) => items.find((p) => p.id === id))
     .filter((p) => p !== undefined);
 
-  if (selectedProducts.length === 0) {
-    return (
-      <div
-        style={{
-          padding: '16px',
-          backgroundColor: '#f9fafb',
-          borderRadius: '6px',
-          textAlign: 'center',
-        }}
-      >
-        <Text tone="subdued">{label}: No products selected</Text>
-      </div>
-    );
+  if (selectedItems.length === 0) {
+    return null;
   }
 
   return (
-    <BlockStack gap="200">
-      <Text as="p" fontWeight="semibold">
-        {label}:
+    <BlockStack gap="100">
+      <Text as="p" variant="bodySm" tone="subdued">
+        {label}: {selectedItems.map(i => i.title).join(', ')}
       </Text>
-      <BlockStack gap="100">
-        {selectedProducts.map((product) => (
-          <div
-            key={product.id}
-            style={{
-              padding: '12px',
-              backgroundColor: '#f0f7ff',
-              border: '1px solid #0070f3',
-              borderRadius: '6px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <InlineStack gap="200" align="center">
-              <div
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  backgroundColor: '#e5eeff',
-                  borderRadius: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                }}
-              >
-                {product.image ? (
-                  <img
-                    src={product.image}
-                    alt={product.title}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <Text tone="subdued" variant="bodySm">
-                    No Image
-                  </Text>
-                )}
-              </div>
-              <BlockStack gap="050">
-                <Text fontWeight="semibold" variant="bodySm">
-                  {product.title}
-                </Text>
-                <Text tone="subdued" variant="bodySm">
-                  ₹{product.price}
-                </Text>
-              </BlockStack>
-            </InlineStack>
-            <Badge>{product.sku}</Badge>
-          </div>
-        ))}
-      </BlockStack>
     </BlockStack>
   );
 }
+
 
 /**
  * Main Upsell Configuration Page
@@ -266,6 +268,8 @@ function SelectedProductsDisplay({ productIds, label }) {
 export default function UpsellPage() {
   const [config, setConfig] = useState(null);
   const [initialConfig, setInitialConfig] = useState(null);
+  const [allProducts, setAllProducts] = useState([]);
+  const [allCollections, setAllCollections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -278,32 +282,42 @@ export default function UpsellPage() {
   async function loadConfig() {
     try {
       setLoading(true);
-      const data = await getUpsellConfig();
+      const response = await getUpsellConfig();
+      const configData = response.config || {};
+
+      // Update store products and collections
+      setAllProducts(response.allProducts || []);
+      setAllCollections(response.allCollections || []);
 
       const loadedConfig = {
+        activeTemplate: configData.activeTemplate || UPSELL_STYLES.GRID,
         rule1: {
-          enabled: data.config?.rule1?.enabled ?? true,
-          upsellProducts: data.config?.rule1?.upsellProducts || ['sp-1', 'sp-2'],
+          enabled: configData.rule1?.enabled ?? true,
+          upsellProducts: configData.rule1?.upsellProducts || [],
+          upsellCollections: configData.rule1?.upsellCollections || [],
         },
         rule2: {
-          enabled: data.config?.rule2?.enabled ?? false,
-          triggerProducts: data.config?.rule2?.triggerProducts || [],
-          upsellProducts: data.config?.rule2?.upsellProducts || [],
+          enabled: configData.rule2?.enabled ?? false,
+          triggerProducts: configData.rule2?.triggerProducts || [],
+          triggerCollections: configData.rule2?.triggerCollections || [],
+          upsellProducts: configData.rule2?.upsellProducts || [],
+          upsellCollections: configData.rule2?.upsellCollections || [],
         },
         rule3: {
-          enabled: data.config?.rule3?.enabled ?? false,
-          cartValueThreshold: data.config?.rule3?.cartValueThreshold ?? 1000,
-          upsellProducts: data.config?.rule3?.upsellProducts || [],
+          enabled: configData.rule3?.enabled ?? false,
+          cartValueThreshold: configData.rule3?.cartValueThreshold ?? 1000,
+          upsellProducts: configData.rule3?.upsellProducts || [],
+          upsellCollections: configData.rule3?.upsellCollections || [],
         },
       };
 
       console.log('✅ Config loaded:', loadedConfig);
       setConfig(loadedConfig);
       setInitialConfig(loadedConfig);
-    } catch (error) {
+    } catch (err) {
+      console.error('Config load error:', err);
       setToastError(true);
       setToastMessage('Failed to load configuration');
-      console.error('Error loading config:', error);
     } finally {
       setLoading(false);
     }
@@ -325,16 +339,20 @@ export default function UpsellPage() {
       return 'Please enable at least one rule';
     }
 
-    if (config.rule1?.enabled && (!config.rule1?.upsellProducts || config.rule1.upsellProducts.length === 0)) {
-      return 'Rule #1: Select at least one upsell product';
+    if (config.rule1?.enabled &&
+      (!config.rule1?.upsellProducts || config.rule1.upsellProducts.length === 0) &&
+      (!config.rule1?.upsellCollections || config.rule1.upsellCollections.length === 0)) {
+      return 'Rule #1: Select at least one upsell product or collection';
     }
 
     if (config.rule2?.enabled) {
-      if (!config.rule2?.triggerProducts || config.rule2.triggerProducts.length === 0) {
-        return 'Rule #2: Select at least one trigger product';
+      if ((!config.rule2?.triggerProducts || config.rule2.triggerProducts.length === 0) &&
+        (!config.rule2?.triggerCollections || config.rule2.triggerCollections.length === 0)) {
+        return 'Rule #2: Select at least one trigger product or collection';
       }
-      if (!config.rule2?.upsellProducts || config.rule2.upsellProducts.length === 0) {
-        return 'Rule #2: Select at least one upsell product';
+      if ((!config.rule2?.upsellProducts || config.rule2.upsellProducts.length === 0) &&
+        (!config.rule2?.upsellCollections || config.rule2.upsellCollections.length === 0)) {
+        return 'Rule #2: Select at least one upsell product or collection';
       }
     }
 
@@ -342,8 +360,9 @@ export default function UpsellPage() {
       if (!config.rule3?.cartValueThreshold || config.rule3.cartValueThreshold <= 0) {
         return 'Rule #3: Set a valid cart value threshold';
       }
-      if (!config.rule3?.upsellProducts || config.rule3.upsellProducts.length === 0) {
-        return 'Rule #3: Select at least one upsell product';
+      if ((!config.rule3?.upsellProducts || config.rule3.upsellProducts.length === 0) &&
+        (!config.rule3?.upsellCollections || config.rule3.upsellCollections.length === 0)) {
+        return 'Rule #3: Select at least one upsell product or collection';
       }
     }
 
@@ -374,9 +393,10 @@ export default function UpsellPage() {
       setToastError(false);
       setToastMessage('✅ Upsell configuration saved successfully!');
       setInitialConfig(config);
-      
+
       try {
         trackUpsellEvent('upsell_config_saved', {
+          activeTemplate: config.activeTemplate,
           rule1Enabled: config.rule1?.enabled,
           rule2Enabled: config.rule2?.enabled,
           rule3Enabled: config.rule3?.enabled,
@@ -429,6 +449,14 @@ export default function UpsellPage() {
       backAction={{ content: 'Back', onAction: () => window.history.back() }}
     >
       <Layout>
+        {/* Template Selection Section */}
+        <Layout.Section>
+          <TemplateSelector
+            activeTemplate={config.activeTemplate}
+            onTemplateSelect={(id) => setConfig({ ...config, activeTemplate: id })}
+          />
+        </Layout.Section>
+
         {/* Main Settings Section */}
         <Layout.Section variant="twoThirds">
           <BlockStack gap="400">
@@ -447,10 +475,11 @@ export default function UpsellPage() {
               config={config}
               onConfigChange={setConfig}
             >
-              <BlockStack gap="300">
+              <BlockStack gap="400">
                 <ProductPicker
                   label="Upsell Products"
                   selected={config.rule1?.upsellProducts || []}
+                  items={allProducts}
                   onChange={(selected) =>
                     setConfig({
                       ...config,
@@ -458,9 +487,17 @@ export default function UpsellPage() {
                     })
                   }
                 />
-                <SelectedProductsDisplay
-                  productIds={config.rule1?.upsellProducts || []}
-                  label="Selected Upsells"
+                <ProductPicker
+                  label="Upsell Collections"
+                  selected={config.rule1?.upsellCollections || []}
+                  items={allCollections}
+                  isCollection={true}
+                  onChange={(selected) =>
+                    setConfig({
+                      ...config,
+                      rule1: { ...config.rule1, upsellCollections: selected },
+                    })
+                  }
                 />
               </BlockStack>
             </RuleCard>
@@ -468,40 +505,67 @@ export default function UpsellPage() {
             {/* Rule #2: Triggered Products */}
             <RuleCard
               title="Rule #2: Triggered Products"
-              description="Show upsells when specific products in cart"
+              description="Show upsells when specific products or collections in cart"
               ruleKey="rule2"
               config={config}
               onConfigChange={setConfig}
             >
-              <BlockStack gap="300">
-                <ProductPicker
-                  label="Trigger Products"
-                  selected={config.rule2?.triggerProducts || []}
-                  onChange={(selected) =>
-                    setConfig({
-                      ...config,
-                      rule2: { ...config.rule2, triggerProducts: selected },
-                    })
-                  }
-                />
+              <BlockStack gap="400">
+                <BlockStack gap="300">
+                  <Text as="h3" variant="headingSm">Triggers</Text>
+                  <ProductPicker
+                    label="Trigger Products"
+                    selected={config.rule2?.triggerProducts || []}
+                    items={allProducts}
+                    onChange={(selected) =>
+                      setConfig({
+                        ...config,
+                        rule2: { ...config.rule2, triggerProducts: selected },
+                      })
+                    }
+                  />
+                  <ProductPicker
+                    label="Trigger Collections"
+                    selected={config.rule2?.triggerCollections || []}
+                    items={allCollections}
+                    isCollection={true}
+                    onChange={(selected) =>
+                      setConfig({
+                        ...config,
+                        rule2: { ...config.rule2, triggerCollections: selected },
+                      })
+                    }
+                  />
+                </BlockStack>
 
                 <Divider />
 
-                <ProductPicker
-                  label="Upsell Products"
-                  selected={config.rule2?.upsellProducts || []}
-                  onChange={(selected) =>
-                    setConfig({
-                      ...config,
-                      rule2: { ...config.rule2, upsellProducts: selected },
-                    })
-                  }
-                />
-
-                <SelectedProductsDisplay
-                  productIds={config.rule2?.upsellProducts || []}
-                  label="Selected Upsells"
-                />
+                <BlockStack gap="300">
+                  <Text as="h3" variant="headingSm">Upsells</Text>
+                  <ProductPicker
+                    label="Upsell Products"
+                    selected={config.rule2?.upsellProducts || []}
+                    items={allProducts}
+                    onChange={(selected) =>
+                      setConfig({
+                        ...config,
+                        rule2: { ...config.rule2, upsellProducts: selected },
+                      })
+                    }
+                  />
+                  <ProductPicker
+                    label="Upsell Collections"
+                    selected={config.rule2?.upsellCollections || []}
+                    items={allCollections}
+                    isCollection={true}
+                    onChange={(selected) =>
+                      setConfig({
+                        ...config,
+                        rule2: { ...config.rule2, upsellCollections: selected },
+                      })
+                    }
+                  />
+                </BlockStack>
               </BlockStack>
             </RuleCard>
 
@@ -513,7 +577,7 @@ export default function UpsellPage() {
               config={config}
               onConfigChange={setConfig}
             >
-              <BlockStack gap="300">
+              <BlockStack gap="400">
                 <BlockStack gap="100">
                   <Text as="p" fontWeight="semibold">
                     Cart Value Condition
@@ -542,21 +606,32 @@ export default function UpsellPage() {
 
                 <Divider />
 
-                <ProductPicker
-                  label="Upsell Products"
-                  selected={config.rule3?.upsellProducts || []}
-                  onChange={(selected) =>
-                    setConfig({
-                      ...config,
-                      rule3: { ...config.rule3, upsellProducts: selected },
-                    })
-                  }
-                />
-
-                <SelectedProductsDisplay
-                  productIds={config.rule3?.upsellProducts || []}
-                  label="Selected Upsells"
-                />
+                <BlockStack gap="300">
+                  <Text as="h3" variant="headingSm">Upsells</Text>
+                  <ProductPicker
+                    label="Upsell Products"
+                    selected={config.rule3?.upsellProducts || []}
+                    items={allProducts}
+                    onChange={(selected) =>
+                      setConfig({
+                        ...config,
+                        rule3: { ...config.rule3, upsellProducts: selected },
+                      })
+                    }
+                  />
+                  <ProductPicker
+                    label="Upsell Collections"
+                    selected={config.rule3?.upsellCollections || []}
+                    items={allCollections}
+                    isCollection={true}
+                    onChange={(selected) =>
+                      setConfig({
+                        ...config,
+                        rule3: { ...config.rule3, upsellCollections: selected },
+                      })
+                    }
+                  />
+                </BlockStack>
               </BlockStack>
             </RuleCard>
 
@@ -590,13 +665,20 @@ export default function UpsellPage() {
 
               <BlockStack gap="200">
                 <div>
+                  <Text fontWeight="semibold">Layout</Text>
+                  <Badge tone="info">
+                    {UPSELL_STYLE_METADATA[config.activeTemplate]?.name || config.activeTemplate}
+                  </Badge>
+                </div>
+
+                <div>
                   <Text fontWeight="semibold">Rule #1</Text>
                   <Badge tone={config.rule1?.enabled ? 'success' : 'subdued'}>
                     {config.rule1?.enabled ? 'Enabled' : 'Disabled'}
                   </Badge>
                   {config.rule1?.enabled && (
                     <Text tone="subdued" variant="bodySm">
-                      {config.rule1?.upsellProducts?.length || 0} products
+                      {config.rule1?.upsellProducts?.length || 0} products, {config.rule1?.upsellCollections?.length || 0} collections
                     </Text>
                   )}
                 </div>
@@ -608,8 +690,8 @@ export default function UpsellPage() {
                   </Badge>
                   {config.rule2?.enabled && (
                     <Text tone="subdued" variant="bodySm">
-                      {config.rule2?.triggerProducts?.length || 0} triggers →{' '}
-                      {config.rule2?.upsellProducts?.length || 0} upsells
+                      {config.rule2?.triggerProducts?.length + (config.rule2?.triggerCollections?.length || 0)} triggers →{' '}
+                      {config.rule2?.upsellProducts?.length + (config.rule2?.upsellCollections?.length || 0)} upsells
                     </Text>
                   )}
                 </div>
@@ -622,7 +704,7 @@ export default function UpsellPage() {
                   {config.rule3?.enabled && (
                     <Text tone="subdued" variant="bodySm">
                       ₹{config.rule3?.cartValueThreshold} →{' '}
-                      {config.rule3?.upsellProducts?.length || 0} upsells
+                      {config.rule3?.upsellProducts?.length + (config.rule3?.upsellCollections?.length || 0)} upsells
                     </Text>
                   )}
                 </div>

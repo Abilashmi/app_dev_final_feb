@@ -11,6 +11,7 @@ import {
   ChoiceList,
   Divider,
   Badge,
+  Tag,
   Modal,
   Checkbox,
   TextField,
@@ -22,14 +23,28 @@ import {
   ResourceList,
   ResourceItem,
   Thumbnail,
+  ColorPicker,
+  Popover,
+  hsbToRgb,
+  rgbToHsb,
+  rgbToHex,
 } from '@shopify/polaris';
-import { sampleCoupons, COUPON_STYLES, COUPON_STYLE_METADATA, globalCouponStyle, saveUpsellConfig, shopifyProducts, mockCollections } from './api.cart-settings';
-import { 
-  getUpsellConfig, 
-  evaluateUpsellRules, 
+import {
+  sampleCoupons,
+  COUPON_STYLES,
+  COUPON_STYLE_METADATA,
+  globalCouponStyle,
+  saveUpsellConfig,
+  shopifyProducts,
+  mockCollections,
+  UPSELL_STYLES,
+  UPSELL_STYLE_METADATA,
+  DEFAULT_UPSELL_CONFIG,
+  getUpsellConfig,
+  evaluateUpsellRules,
   SAMPLE_UPSELL_PRODUCTS,
-  trackUpsellEvent 
-} from './api.cart-settings';
+  trackUpsellEvent
+} from '../services/api.cart-settings.shared';
 
 // ==========================================
 // MOCK API FUNCTIONS
@@ -57,6 +72,62 @@ const mockCartData = {
     { id: 1, title: 'Premium Hoodie', price: 50, qty: 1 },
     { id: 2, title: 'Classic T-Shirt', price: 25, qty: 2 },
   ],
+};
+
+// ==========================================
+// COLOR UTILITIES
+// ==========================================
+const hexToHsb = (hex) => {
+  let fullHex = hex;
+  if (hex.length === 4) {
+    fullHex = '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+  }
+  const r = parseInt(fullHex.slice(1, 3), 16);
+  const g = parseInt(fullHex.slice(3, 5), 16);
+  const b = parseInt(fullHex.slice(5, 7), 16);
+  return rgbToHsb({ r, g, b });
+};
+
+const ColorPickerField = ({ label, value, onChange }) => {
+  const [popoverActive, setPopoverActive] = useState(false);
+  const hsbValue = hexToHsb(value || '#000000');
+
+  const handleColorChange = (hsb) => {
+    const rgb = hsbToRgb(hsb);
+    const hex = rgbToHex(rgb);
+    onChange(hex);
+  };
+
+  const activator = (
+    <Button onClick={() => setPopoverActive(!popoverActive)}>
+      <InlineStack gap="200" align="center">
+        <div style={{
+          width: '20px',
+          height: '20px',
+          backgroundColor: value,
+          border: '1px solid #c9cccf',
+          borderRadius: '4px'
+        }} />
+        <Text variant="bodyMd">{value}</Text>
+      </InlineStack>
+    </Button>
+  );
+
+  return (
+    <BlockStack gap="100">
+      <Text variant="bodyMd" fontWeight="semibold">{label}</Text>
+      <Popover
+        active={popoverActive}
+        activator={activator}
+        onClose={() => setPopoverActive(false)}
+        preferredAlignment="left"
+      >
+        <div style={{ padding: '16px' }}>
+          <ColorPicker onChange={handleColorChange} color={hsbValue} fullWidth />
+        </div>
+      </Popover>
+    </BlockStack>
+  );
 };
 
 // Mock milestones
@@ -167,13 +238,13 @@ const mockApi = {
 // UPSELL COMPONENTS - Rule Card, Product Picker, Display
 // ==========================================
 
-function RuleCard({ 
-  title, 
-  description, 
-  ruleKey, 
-  config, 
+function RuleCard({
+  title,
+  description,
+  ruleKey,
+  config,
   onConfigChange,
-  children 
+  children
 }) {
   const isEnabled = config[ruleKey]?.enabled || false;
 
@@ -220,7 +291,7 @@ function ProductPicker({
   showCount = true,
 }) {
   const selectedProducts = selected
-    .map((id) => SAMPLE_UPSELL_PRODUCTS.find((p) => p.id === id))
+    .map((id) => (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find((p) => p.id === id))
     .filter((p) => p !== undefined);
 
   return (
@@ -238,7 +309,7 @@ function ProductPicker({
       </InlineStack>
 
       <BlockStack gap="150">
-        {SAMPLE_UPSELL_PRODUCTS.map((product) => (
+        {(loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).map((product) => (
           <div
             key={product.id}
             style={{
@@ -310,9 +381,197 @@ function ProductPicker({
   );
 }
 
+// --- HELPER COMPONENT FOR VISUAL PREVIEW ---
+
+const CouponPreview = ({ styleKey }) => {
+  const dummyCoupon = {
+    id: 'preview',
+    code: 'SAVE20',
+    label: styleKey === COUPON_STYLES.STYLE_3 ? 'Special Offer' : 'Summer Sale',
+    description: 'Get 20% off your entire order',
+    discountValue: 20,
+    backgroundColor: styleKey === COUPON_STYLES.STYLE_1 ? '#1a1a2e' :
+      styleKey === COUPON_STYLES.STYLE_2 ? '#ffffff' : '#6366f1',
+    textColor: styleKey === COUPON_STYLES.STYLE_1 ? '#ffffff' :
+      styleKey === COUPON_STYLES.STYLE_2 ? '#333333' : '#ffffff',
+    iconUrl: styleKey === COUPON_STYLES.STYLE_1 ? '☀️' :
+      styleKey === COUPON_STYLES.STYLE_2 ? '🎁' : '⚡',
+  };
+
+  // STYLE 1: Classic Banner
+  if (styleKey === COUPON_STYLES.STYLE_1) {
+    return (
+      <div
+        style={{
+          minWidth: '220px',
+          width: '100%',
+          padding: '10px',
+          backgroundColor: '#fff',
+          borderRadius: '12px',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          position: 'relative',
+          overflow: 'hidden'
+        }}
+      >
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: dummyCoupon.backgroundColor }}></div>
+        <div style={{
+          width: '40px',
+          height: '40px',
+          borderRadius: '8px',
+          backgroundColor: dummyCoupon.backgroundColor + '20',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '20px',
+          color: dummyCoupon.backgroundColor,
+          flexShrink: 0
+        }}>
+          {dummyCoupon.iconUrl}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#1e293b' }}>{dummyCoupon.code}</p>
+          <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>{dummyCoupon.label}</p>
+        </div>
+        <div
+          style={{
+            padding: '4px 8px',
+            backgroundColor: '#f8fafc',
+            color: '#475569',
+            borderRadius: '6px',
+            fontSize: '10px',
+            fontWeight: '600',
+            border: '1px solid #e2e8f0',
+            whiteSpace: 'nowrap'
+          }}
+        >
+          Apply
+        </div>
+      </div>
+    );
+  }
+
+  // STYLE 2: Minimal Card
+  if (styleKey === COUPON_STYLES.STYLE_2) {
+    return (
+      <div
+        style={{
+          minWidth: '160px',
+          width: '100%',
+          padding: '12px',
+          backgroundColor: '#fff',
+          borderRadius: '16px',
+          border: '1px solid #e2e8f0',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+          gap: '8px',
+          position: 'relative'
+        }}
+      >
+        <div style={{
+          width: '48px',
+          height: '48px',
+          borderRadius: '14px',
+          backgroundColor: dummyCoupon.backgroundColor,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '24px',
+          color: '#333',
+          border: '1px solid #f1f5f9',
+          boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
+        }}>
+          {dummyCoupon.iconUrl}
+        </div>
+        <div>
+          <p style={{ margin: '0 0 2px 0', fontSize: '14px', fontWeight: '800', color: '#1e293b' }}>{dummyCoupon.code}</p>
+          <p style={{ margin: 0, fontSize: '10px', color: '#64748b' }}>{dummyCoupon.description}</p>
+        </div>
+        <div
+          style={{
+            width: '100%',
+            padding: '6px',
+            marginTop: '4px',
+            backgroundColor: '#1e293b',
+            color: '#fff',
+            borderRadius: '8px',
+            fontSize: '11px',
+            fontWeight: '600',
+            textAlign: 'center'
+          }}
+        >
+          Apply Coupon
+        </div>
+      </div>
+    );
+  }
+
+  // STYLE 3: Bold & Vibrant
+  return (
+    <div
+      style={{
+        minWidth: '220px',
+        width: '100%',
+        padding: '0',
+        backgroundColor: '#fff',
+        borderRadius: '12px',
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden'
+      }}
+    >
+      <div style={{
+        backgroundColor: dummyCoupon.backgroundColor,
+        padding: '10px 12px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        color: dummyCoupon.textColor
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontSize: '16px' }}>{dummyCoupon.iconUrl}</span>
+          <span style={{ fontSize: '13px', fontWeight: '700' }}>{dummyCoupon.label}</span>
+        </div>
+        <div style={{
+          backgroundColor: 'rgba(255,255,255,0.2)',
+          padding: '2px 6px',
+          borderRadius: '4px',
+          fontSize: '10px',
+          fontWeight: '600'
+        }}>
+          {dummyCoupon.discountValue}% OFF
+        </div>
+      </div>
+      <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+        <div style={{ flex: 1, border: '1px dashed #cbd5e1', borderRadius: '6px', padding: '4px 8px', backgroundColor: '#f8fafc' }}>
+          <p style={{ margin: 0, fontSize: '12px', fontWeight: '700', color: '#334155', fontFamily: 'monospace' }}>{dummyCoupon.code}</p>
+        </div>
+        <div
+          style={{
+            color: '#2563eb',
+            fontSize: '11px',
+            fontWeight: '700',
+            padding: '4px'
+          }}
+        >
+          APPLY
+        </div>
+      </div>
+    </div>
+  );
+};
+
 function SelectedProductsDisplay({ productIds, label }) {
   const selectedProducts = productIds
-    .map((id) => SAMPLE_UPSELL_PRODUCTS.find((p) => p.id === id))
+    .map((id) => (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find((p) => p.id === id))
     .filter((p) => p !== undefined);
 
   if (selectedProducts.length === 0) {
@@ -404,7 +663,7 @@ const getActiveMilestone = (currentValue, milestones, mode = 'amount') => {
   const value = mode === 'amount' ? currentValue : currentValue;
   const completed = milestones.filter(m => m.target <= value);
   const upcoming = milestones.find(m => m.target > value);
-  
+
   return {
     completed,
     upcoming,
@@ -441,7 +700,7 @@ export default function CartDrawerAdmin() {
   const [progressBarSettings, setProgressBarSettings] = useState({
     showOnEmpty: true,
     barBackgroundColor: '#E2E2E2',
-    barForegroundColor: '#93D3FF',
+    borderRadius: 8,
     completionText: 'Free shipping unlocked!',
     rewardsCalculation: ['cartTotal'], // 'cartTotal' or 'cartQuantity'
     tiers: [
@@ -484,16 +743,30 @@ export default function CartDrawerAdmin() {
   const [saveToastMessage, setSaveToastMessage] = useState('Saved');
   const [isSaving, setIsSaving] = useState(false);
   const couponSliderRef = React.useRef(null);
-  
+
   // Coupon Display Settings
   const [couponPosition, setCouponPosition] = useState('top'); // 'top' or 'bottom'
   const [couponLayout, setCouponLayout] = useState('grid'); // 'grid' or 'carousel'
   const [couponAlignment, setCouponAlignment] = useState('horizontal'); // 'horizontal' or 'vertical'
+  const [initialCouponSettings, setInitialCouponSettings] = useState({
+    style: COUPON_STYLES.STYLE_2,
+    position: 'top',
+    layout: 'grid',
+    alignment: 'horizontal'
+  });
 
   // ==========================================
   // UPSELL EDITOR STATE (RULE 1/2/3 CONFIG)
   // ==========================================
   const [upsellConfig, setUpsellConfig] = useState({
+    enabled: true,
+    showOnEmptyCart: false,
+    activeTemplate: UPSELL_STYLES.GRID,
+    upsellTitle: {
+      text: 'Recommended for you',
+      color: '#111827',
+      formatting: { bold: false, italic: false, underline: false },
+    },
     rule1: {
       enabled: true,
       upsellProducts: ['sp-1', 'sp-2'],
@@ -554,32 +827,73 @@ export default function CartDrawerAdmin() {
   const [tempSelectedCollectionIds, setTempSelectedCollectionIds] = useState([]);
 
   // ==========================================
-  // LOAD UPSELL DATA FROM API
+  // LOAD APP CONFIGURATION FROM DB
   // ==========================================
   useEffect(() => {
-    async function loadUpsellData() {
+    async function loadAppConfig() {
       try {
-        const response = await getUpsellConfig();
-        console.log('✅ Upsell config loaded:', response);
+        console.log('[App] Loading initial configuration from /api/cart-settings');
+        const response = await fetch(`/api/cart-settings?shop=${SHOP_ID}`, {
+          headers: { 'X-Shop-ID': SHOP_ID }
+        });
 
-        if (response?.config) {
-          setUpsellRulesConfig(response.config);
-          setUpsellConfig(response.config);
-          setInitialUpsellConfig(response.config);
-        }
-        
-        // Display data in console for verification
-        if (response.products && response.products.length > 0) {
-          console.log(`✨ Loaded ${response.products.length} upsell products:`, 
-            response.products.map(p => `${p.title} (₹${p.price})`).join(', ')
-          );
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+        const data = await response.json();
+        console.log('✅ App configuration loaded:', data);
+
+        if (data.success && data.settings) {
+          const { settings, coupons } = data;
+
+          // 1. Update Coupons
+          if (coupons && coupons.length > 0) {
+            setAllCoupons(coupons);
+            setActiveCouponTab(coupons[0].id);
+            setEditingCoupon(JSON.parse(JSON.stringify(coupons[0])));
+            setOriginalCoupon(JSON.parse(JSON.stringify(coupons[0])));
+          }
+
+          // 2. Update Feature States
+          setFeatureStates({
+            progressBarEnabled: settings.progressBar?.enabled ?? true,
+            couponSliderEnabled: settings.coupons?.enabled ?? false,
+            upsellEnabled: settings.upsell?.enabled ?? false,
+          });
+
+          // 3. Update Progress Bar
+          if (settings.progressBar) {
+            setProgressBarSettings(settings.progressBar);
+          }
+
+          // 4. Update Upsell
+          if (settings.upsell) {
+            setUpsellConfig(settings.upsell);
+            setUpsellRulesConfig(settings.upsell);
+            setInitialUpsellConfig(settings.upsell);
+            setManualUpsellRules(settings.upsell.manualRules || []);
+            setInitialManualUpsellRules(JSON.parse(JSON.stringify(settings.upsell.manualRules || [])));
+          }
+
+          // 5. Update Style Settings
+          if (settings.coupons) {
+            setInitialCouponSettings({
+              style: settings.coupons.selectedStyle || COUPON_STYLES.STYLE_2,
+              position: settings.coupons.position || 'top',
+              layout: settings.coupons.layout || 'grid',
+              alignment: settings.coupons.alignment || 'horizontal'
+            });
+            setSelectedCouponStyle(settings.coupons.selectedStyle || COUPON_STYLES.STYLE_2);
+            setCouponPosition(settings.coupons.position || 'top');
+            setCouponLayout(settings.coupons.layout || 'grid');
+            setCouponAlignment(settings.coupons.alignment || 'horizontal');
+          }
         }
       } catch (error) {
-        console.error('❌ Error loading upsell config:', error);
+        console.error('❌ Error loading app config:', error);
       }
     }
-    
-    loadUpsellData();
+
+    loadAppConfig();
   }, []);
 
   // Mock cart items for preview
@@ -649,12 +963,12 @@ export default function CartDrawerAdmin() {
 
   const removeTier = (tierIndex) => {
     if (progressBarSettings.tiers.length === 1) return; // Keep at least one tier
-    
+
     setProgressBarSettings(prev => ({
       ...prev,
       tiers: prev.tiers.filter((_, idx) => idx !== tierIndex),
     }));
-    
+
     if (activeTierIndex >= tierIndex && activeTierIndex > 0) {
       setActiveTierIndex(activeTierIndex - 1);
     }
@@ -685,16 +999,6 @@ export default function CartDrawerAdmin() {
     }
   }, [featureStates.couponSliderEnabled, appliedCouponIds.length]);
 
-  // Load Sample Coupons
-  React.useEffect(() => {
-    const coupons = JSON.parse(JSON.stringify(sampleCoupons));
-    setAllCoupons(coupons);
-    if (coupons.length > 0) {
-      setActiveCouponTab(coupons[0].id);
-      setEditingCoupon(JSON.parse(JSON.stringify(coupons[0])));
-      setOriginalCoupon(JSON.parse(JSON.stringify(coupons[0])));
-    }
-  }, []);
 
   const handleAddToCart = async (product) => {
     // Update mock cart data
@@ -810,7 +1114,7 @@ export default function CartDrawerAdmin() {
 
   const updateCouponField = (path, value) => {
     if (!editingCoupon) return;
-    
+
     const updateNestedField = (obj, keys, val) => {
       const lastKey = keys.pop();
       const target = keys.reduce((o, k) => o[k], obj);
@@ -821,9 +1125,9 @@ export default function CartDrawerAdmin() {
     const updatedCoupon = JSON.parse(JSON.stringify(editingCoupon));
     updateNestedField(updatedCoupon, keys, value);
     setEditingCoupon(updatedCoupon);
-    
+
     // Also update in allCoupons immediately for live preview
-    setAllCoupons(prev => prev.map(c => 
+    setAllCoupons(prev => prev.map(c =>
       c.id === updatedCoupon.id ? JSON.parse(JSON.stringify(updatedCoupon)) : c
     ));
   };
@@ -838,7 +1142,7 @@ export default function CartDrawerAdmin() {
         c.id === editingCoupon.id ? JSON.parse(JSON.stringify(editingCoupon)) : c
       );
       setAllCoupons(updated);
-      
+
       // Save to API route
       try {
         console.log('[Coupon] Sending POST to /api/cart-settings/coupons');
@@ -887,13 +1191,57 @@ export default function CartDrawerAdmin() {
     }
   };
 
+  const handleSaveStyle = async () => {
+    setIsSaving(true);
+    try {
+      console.log('[Style] Saving selected style:', selectedCouponStyle);
+      const url = `/api/cart-settings?action=save-style`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shop-ID': SHOP_ID,
+        },
+        body: JSON.stringify({ style: selectedCouponStyle }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to save style: ${response.status}`);
+      }
+
+      setInitialCouponSettings({
+        style: selectedCouponStyle,
+        position: couponPosition,
+        layout: couponLayout,
+        alignment: couponAlignment
+      });
+      setSaveToastMessage('Coupon style saved successfully');
+      setShowSaveToast(true);
+    } catch (error) {
+      console.error('[Style] Save error:', error);
+      setSaveToastMessage('Failed to save coupon style');
+      setShowSaveToast(true);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelStyle = () => {
+    setSelectedCouponStyle(initialCouponSettings.style);
+    setCouponPosition(initialCouponSettings.position);
+    setCouponLayout(initialCouponSettings.layout);
+    setCouponAlignment(initialCouponSettings.alignment);
+    setSaveToastMessage('Changes discarded');
+    setShowSaveToast(true);
+  };
+
   const handleCopyCouponCode = (code, couponId) => {
     if (!featureStates.couponSliderEnabled) return;
     const coupon = allCoupons.find(c => c.id === couponId);
     if (!coupon || !coupon.enabled) return;
     // Only allow one coupon at a time
-    setAppliedCouponIds(prev => 
-      prev.includes(couponId) 
+    setAppliedCouponIds(prev =>
+      prev.includes(couponId)
         ? [] // Remove if already applied
         : [couponId] // Replace any existing coupon with this one
     );
@@ -992,6 +1340,36 @@ export default function CartDrawerAdmin() {
     return '';
   };
 
+  const handleSaveProgressBarSettings = async () => {
+    try {
+      console.log('[Progress] Saving settings:', progressBarSettings);
+      const response = await fetch(`/api/cart-settings/progress-bar?shop=${SHOP_ID}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shop-ID': SHOP_ID
+        },
+        body: JSON.stringify({
+          settings: progressBarSettings,
+          enabled: featureStates.progressBarEnabled,
+          mode: progressMode
+        })
+      });
+
+      if (response.ok) {
+        setSaveToastMessage('Progress bar settings saved successfully!');
+        setShowSaveToast(true);
+      } else {
+        setSaveToastMessage('Failed to save settings.');
+        setShowSaveToast(true);
+      }
+    } catch (err) {
+      console.error('[Progress] Save error:', err);
+      setSaveToastMessage('Error saving settings.');
+      setShowSaveToast(true);
+    }
+  };
+
   const isUpsellConfigDirty = JSON.stringify(upsellConfig) !== JSON.stringify(initialUpsellConfig);
 
   const handleSaveUpsellRules = async () => {
@@ -1011,14 +1389,15 @@ export default function CartDrawerAdmin() {
         position: upsellConfig.position,
         layout: upsellConfig.layout,
         alignment: upsellConfig.alignment,
+        activeTemplate: upsellConfig.activeTemplate,
         showOnEmptyCart: upsellConfig.showOnEmptyCart,
         upsellMode: upsellConfig.upsellMode,
         useAI: upsellConfig.upsellMode === 'ai',
         manualRules: manualUpsellRules,
       };
-      
+
       console.log('[Upsell] Saving upsell rules via API');
-      
+
       // Save to API route
       const response = await fetch('/api/cart-settings/upsell', {
         method: 'POST',
@@ -1040,7 +1419,7 @@ export default function CartDrawerAdmin() {
       setInitialUpsellConfig(upsellConfig);
       setSaveToastMessage('✅ Upsell rules saved successfully');
       setShowSaveToast(true);
-      
+
       try {
         trackUpsellEvent('upsell_config_saved', {
           enabled: configToSave.enabled,
@@ -1125,7 +1504,7 @@ export default function CartDrawerAdmin() {
         upsellProductIds: tempSelectedProductIds,
       });
     }
-    
+
     setShowProductPickerModal(false);
     setEditingRuleId(null);
     setProductPickerMode(null);
@@ -1142,9 +1521,9 @@ export default function CartDrawerAdmin() {
     }
 
     const allValid = manualUpsellRules.every(rule => {
-      const hasTrigger = rule.triggerType === 'all' || 
-                        rule.triggerProductIds.length > 0 || 
-                        rule.triggerCollectionIds.length > 0;
+      const hasTrigger = rule.triggerType === 'all' ||
+        rule.triggerProductIds.length > 0 ||
+        rule.triggerCollectionIds.length > 0;
       const hasUpsell = rule.upsellProductIds.length > 0;
       return hasTrigger && hasUpsell;
     });
@@ -1163,10 +1542,10 @@ export default function CartDrawerAdmin() {
         useAI: useAIUpsells,
         manualRules: manualUpsellRules,
       };
-      
+
       const response = await saveUpsellConfig(shopId, configData);
       console.log('✅ Manual upsell rules saved:', response);
-      
+
       setInitialManualUpsellRules(JSON.parse(JSON.stringify(manualUpsellRules)));
       setSaveToastMessage('✅ Upsell rules saved successfully');
       setShowSaveToast(true);
@@ -1308,9 +1687,19 @@ export default function CartDrawerAdmin() {
 
       // Calculate current progress based on mode
       const currentValue = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
-      const highestMilestone = milestones.length > 0 ? milestones[milestones.length - 1].target : 1000;
+
+      // Derive milestones for LIVE editor updates
+      const liveMilestones = progressBarSettings.tiers.map(tier => ({
+        id: tier.id,
+        target: tier.minValue,
+        label: progressMode === 'amount' ? `₹${tier.minValue}` : `${tier.minValue} items`,
+        rewardText: tier.description,
+        associatedProducts: tier.products || []
+      })).sort((a, b) => a.target - b.target);
+
+      const highestMilestone = liveMilestones.length > 0 ? liveMilestones[liveMilestones.length - 1].target : 1000;
       const progressPercent = calculateProgress(currentValue, highestMilestone);
-      const milestone = getActiveMilestone(currentValue, milestones, progressMode);
+      const milestone = getActiveMilestone(currentValue, liveMilestones, progressMode);
 
       return (
         <div style={{ padding: '20px', height: '100%', overflowY: 'auto' }}>
@@ -1329,7 +1718,7 @@ export default function CartDrawerAdmin() {
             <Card>
               <BlockStack gap="400">
                 <Text variant="headingMd" as="h2">General settings</Text>
-                
+
                 <Checkbox
                   label="Show reward like the progress bar on empty cart"
                   checked={progressBarSettings.showOnEmpty}
@@ -1337,40 +1726,29 @@ export default function CartDrawerAdmin() {
                 />
 
                 <BlockStack gap="200">
-                  <TextField
+                  <ColorPickerField
                     label="Bar background color"
                     value={progressBarSettings.barBackgroundColor}
                     onChange={(value) => updateProgressBarSetting('barBackgroundColor', value)}
-                    type="text"
-                    autoComplete="off"
-                    connectedRight={
-                      <div style={{ 
-                        width: '36px', 
-                        height: '36px', 
-                        backgroundColor: progressBarSettings.barBackgroundColor, 
-                        border: '1px solid #c9cccf',
-                        borderRadius: '4px',
-                      }} />
-                    }
                   />
                 </BlockStack>
 
                 <BlockStack gap="200">
-                  <TextField
+                  <ColorPickerField
                     label="Bar foreground color"
                     value={progressBarSettings.barForegroundColor}
                     onChange={(value) => updateProgressBarSetting('barForegroundColor', value)}
-                    type="text"
+                  />
+                </BlockStack>
+
+                <BlockStack gap="200">
+                  <Text variant="bodyMd" fontWeight="semibold">Bar border radius</Text>
+                  <TextField
+                    type="number"
+                    value={progressBarSettings.borderRadius}
+                    onChange={(value) => updateProgressBarSetting('borderRadius', Number(value))}
+                    suffix="px"
                     autoComplete="off"
-                    connectedRight={
-                      <div style={{ 
-                        width: '36px', 
-                        height: '36px', 
-                        backgroundColor: progressBarSettings.barForegroundColor, 
-                        border: '1px solid #c9cccf',
-                        borderRadius: '4px',
-                      }} />
-                    }
                   />
                 </BlockStack>
 
@@ -1400,7 +1778,7 @@ export default function CartDrawerAdmin() {
             <Card>
               <BlockStack gap="400">
                 <Text variant="headingMd" as="h2">Progress calculation mode</Text>
-                
+
                 <ChoiceList
                   title=""
                   choices={[
@@ -1425,10 +1803,10 @@ export default function CartDrawerAdmin() {
             <Card>
               <BlockStack gap="300">
                 <Text variant="headingMd" as="h2">Active milestones</Text>
-                
-                {milestones.length > 0 ? (
+
+                {liveMilestones.length > 0 ? (
                   <BlockStack gap="200">
-                    {milestones.map((ms, idx) => (
+                    {liveMilestones.map((ms, idx) => (
                       <InlineStack gap="200" blockAlign="center" key={ms.id}>
                         <Badge tone={milestone.completed.some(c => c.id === ms.id) ? 'success' : 'info'}>
                           {ms.label}
@@ -1456,30 +1834,57 @@ export default function CartDrawerAdmin() {
             <Card>
               <BlockStack gap="300">
                 <Text variant="headingMd" as="h2">Current progress</Text>
-                
-                <BlockStack gap="200">
-                  <InlineStack align="space-between">
-                    <Text as="span" variant="bodyMd" fontWeight="semibold">
-                      {progressMode === 'amount' ? `₹${currentValue}` : `${currentValue} items`} / {progressMode === 'amount' ? `₹${highestMilestone}` : `${highestMilestone} items`}
-                    </Text>
-                    <Text as="span" variant="bodyMd" fontWeight="semibold">{Math.round(progressPercent)}%</Text>
-                  </InlineStack>
-                  
-                  <ProgressBar progress={progressPercent} />
 
-                  {milestone.upcoming && (
-                    <Text as="p" tone="subdued">
-                      {progressMode === 'amount' 
-                        ? `You're ₹${milestone.nextAmount} away from ${milestone.upcoming.rewardText}` 
-                        : `You need ${milestone.nextAmount} more item${milestone.nextAmount !== 1 ? 's' : ''} for ${milestone.upcoming.rewardText}`}
-                    </Text>
-                  )}
+                <BlockStack gap="400">
+                  <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px dashed #d1d5db' }}>
+                    <BlockStack gap="200">
+                      <Text variant="bodyMd" fontWeight="semibold">Simulate customer cart</Text>
+                      {progressMode === 'amount' ? (
+                        <TextField
+                          label="Simulated Cart Value"
+                          type="number"
+                          prefix="₹"
+                          value={cartData.cartValue}
+                          onChange={(v) => setCartData({ ...cartData, cartValue: Number(v) })}
+                          autoComplete="off"
+                        />
+                      ) : (
+                        <TextField
+                          label="Simulated Item Quantity"
+                          type="number"
+                          suffix="items"
+                          value={cartData.totalQuantity}
+                          onChange={(v) => setCartData({ ...cartData, totalQuantity: Number(v) })}
+                          autoComplete="off"
+                        />
+                      )}
+                    </BlockStack>
+                  </div>
 
-                  {milestone.completed.length > 0 && milestone.upcoming === undefined && (
-                    <Text as="p" tone="success" fontWeight="semibold">
-                      🎉 {progressBarSettings.completionText}
-                    </Text>
-                  )}
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between">
+                      <Text as="span" variant="bodyMd" fontWeight="semibold">
+                        {progressMode === 'amount' ? `₹${currentValue}` : `${currentValue} items`} / {progressMode === 'amount' ? `₹${highestMilestone}` : `${highestMilestone} items`}
+                      </Text>
+                      <Text as="span" variant="bodyMd" fontWeight="semibold">{Math.round(progressPercent)}%</Text>
+                    </InlineStack>
+
+                    <ProgressBar progress={progressPercent} />
+
+                    {milestone.upcoming && (
+                      <Text as="p" tone="subdued">
+                        {progressMode === 'amount'
+                          ? `You're ₹${milestone.nextAmount} away from ${milestone.upcoming.rewardText}`
+                          : `You need ${milestone.nextAmount} more item${milestone.nextAmount !== 1 ? 's' : ''} for ${milestone.upcoming.rewardText}`}
+                      </Text>
+                    )}
+
+                    {milestone.completed.length > 0 && milestone.upcoming === undefined && (
+                      <Text as="p" tone="success" fontWeight="semibold">
+                        🎉 {progressBarSettings.completionText}
+                      </Text>
+                    )}
+                  </BlockStack>
                 </BlockStack>
               </BlockStack>
             </Card>
@@ -1526,7 +1931,7 @@ export default function CartDrawerAdmin() {
                     <BlockStack gap="200">
                       <InlineStack align="space-between" blockAlign="center">
                         <Text as="label" variant="bodyMd" fontWeight="semibold">
-                          Minimum spending
+                          {progressMode === 'amount' ? 'Minimum spending' : 'Minimum item count'}
                         </Text>
                       </InlineStack>
                       <TextField
@@ -1562,7 +1967,7 @@ export default function CartDrawerAdmin() {
                     <BlockStack gap="200">
                       <InlineStack align="space-between" blockAlign="center">
                         <Text as="label" variant="bodyMd" fontWeight="semibold">
-                          Products — {activeTier.products?.length || 0} of {(loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).length} products added
+                          {progressMode === 'amount' ? 'Reward products' : 'Items included'} — {activeTier.products?.length || 0} of {(loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).length} products added
                         </Text>
                         <Button
                           onClick={() => handleOpenProductPicker(activeTierIndex)}
@@ -1572,7 +1977,7 @@ export default function CartDrawerAdmin() {
                           + Add product
                         </Button>
                       </InlineStack>
-                      
+
                       {activeTier.products && activeTier.products.length > 0 ? (
                         <BlockStack gap="150">
                           {activeTier.products.map(productId => {
@@ -1651,8 +2056,19 @@ export default function CartDrawerAdmin() {
                 )}
               </BlockStack>
             </Card>
-          </BlockStack>
-        </div>
+
+            <div style={{ marginTop: '20px', paddingBottom: '40px' }}>
+              <Button
+                primary
+                fullWidth
+                size="large"
+                onClick={handleSaveProgressBarSettings}
+              >
+                Save Settings
+              </Button>
+            </div>
+          </BlockStack >
+        </div >
       );
     }
 
@@ -1672,8 +2088,8 @@ export default function CartDrawerAdmin() {
             </InlineStack>
 
             {/* Tab Navigation */}
-            <div style={{ 
-              display: 'flex', 
+            <div style={{
+              display: 'flex',
               gap: '4px',
               borderBottom: '2px solid #e5e7eb',
               marginBottom: '16px',
@@ -1721,55 +2137,39 @@ export default function CartDrawerAdmin() {
                   <BlockStack gap="300">
                     <Text variant="headingMd" as="h2">Select Coupon Style</Text>
                     <Text tone="subdued" as="p">Choose one style that applies to all coupons</Text>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+
+                    {/* Selection Buttons */}
+                    <InlineStack gap="300">
                       {Object.entries(COUPON_STYLE_METADATA).map(([styleKey, metadata]) => (
-                        <div
+                        <Button
                           key={styleKey}
+                          pressed={selectedCouponStyle === styleKey}
                           onClick={() => handleStyleSelect(styleKey)}
-                          style={{
-                            border: `2px solid ${selectedCouponStyle === styleKey ? '#2c6ecb' : '#e5e7eb'}`,
-                            borderRadius: '8px',
-                            padding: '12px',
-                            cursor: 'pointer',
-                            backgroundColor: selectedCouponStyle === styleKey ? '#f0f7ff' : '#fff',
-                            transition: 'all 0.2s',
-                          }}
+                          size="large"
                         >
-                          <BlockStack gap="200">
-                            <img 
-                              src={metadata.previewImage} 
-                            alt={metadata.name}
-                            style={{ width: '100%', borderRadius: '4px', border: '1px solid #e5e7eb' }}
-                          />
-                          <InlineStack align="space-between" blockAlign="center">
-                            <BlockStack gap="100">
-                              <Text variant="bodyMd" fontWeight="semibold">{metadata.name}</Text>
-                              <Text variant="bodySm" tone="subdued">{metadata.description}</Text>
-                            </BlockStack>
-                            {selectedCouponStyle === styleKey && (
-                              <div style={{ 
-                                width: '20px', 
-                                height: '20px', 
-                                borderRadius: '50%', 
-                                backgroundColor: '#2c6ecb',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: '#fff',
-                                fontSize: '12px',
-                                fontWeight: 'bold',
-                              }}>
-                                ✓
-                              </div>
-                            )}
-                          </InlineStack>
-                        </BlockStack>
+                          {metadata.name}
+                        </Button>
+                      ))}
+                    </InlineStack>
+
+                    {/* Active Style Preview */}
+                    <div style={{ marginTop: '16px', padding: '24px', backgroundColor: '#f9fafb', borderRadius: '12px', display: 'flex', justifyContent: 'center', border: '1px dashed #e5e7eb' }}>
+                      <div style={{ maxWidth: '400px', width: '100%' }}>
+                        <CouponPreview styleKey={selectedCouponStyle} />
                       </div>
-                    ))}
+                    </div>
+
+                    <div style={{ marginTop: '8px' }}>
+                      <Text tone="subdued">{COUPON_STYLE_METADATA[selectedCouponStyle].description}</Text>
+                    </div>
+                    {/* Save Button for Style */}
+                    <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
+                      <Button onClick={handleSaveStyle} variant="primary" loading={isSaving}>Save Style</Button>
                     </div>
                   </BlockStack>
                 </Card>
+
+
 
                 {/* Display Settings Card */}
                 <Card>
@@ -1827,299 +2227,276 @@ export default function CartDrawerAdmin() {
                         />
                       </InlineStack>
                     </BlockStack>
+
+
+                    {/* Footer Actions */}
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px', marginBottom: '12px' }}>
+                      <Button onClick={() => setCouponSubTab('manage-coupons')}>Next</Button>
+                      <Button onClick={handleCancelStyle}>Cancel</Button>
+                    </div>
                   </BlockStack>
                 </Card>
               </BlockStack>
             )}
 
             {/* TAB 2: Manage Coupons */}
-            {couponSubTab === 'manage-coupons' && (
-              <BlockStack gap="400">
-                <Card>
-                  <BlockStack gap="400">
-                    <BlockStack gap="200">
-                      <Text variant="headingMd" as="h2">Enable/Disable Coupons</Text>
-                      <Text tone="subdued" as="p">Select which coupons to show in the slider</Text>
-                    </BlockStack>
-
-                    {/* Coupon List with Enable/Disable */}
-                    <BlockStack gap="200">
-                      {allCoupons.map(coupon => (
-                        <div 
-                          key={coupon.id}
-                          onClick={() => handleCouponTabClick(coupon.id)}
-                          style={{
-                            padding: '12px 16px',
-                            backgroundColor: activeCouponTab === coupon.id ? '#f0f7ff' : '#f9fafb',
-                            border: `1px solid ${activeCouponTab === coupon.id ? '#2c6ecb' : '#e5e7eb'}`,
-                            borderRadius: '8px',
-                            transition: 'all 0.2s',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <InlineStack align="space-between" blockAlign="center" gap="200">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                              <span style={{ fontSize: '20px' }}>{coupon.iconUrl}</span>
-                              <BlockStack gap="100">
-                                <Text variant="bodyMd" fontWeight="semibold" truncate>{coupon.code}</Text>
-                                <Text variant="bodySm" tone="subdued" truncate>{coupon.label}</Text>
-                              </BlockStack>
-                            </div>
-                            <Checkbox
-                              checked={coupon.enabled}
-                              onChange={(checked) => {
-                                const updated = allCoupons.map(c =>
-                                  c.id === coupon.id ? { ...c, enabled: checked } : c
-                                );
-                                setAllCoupons(updated);
-                                const idx = sampleCoupons.findIndex(c => c.id === coupon.id);
-                                if (idx !== -1) sampleCoupons[idx].enabled = checked;
-                                if (editingCoupon && editingCoupon.id === coupon.id) {
-                                  setEditingCoupon({ ...editingCoupon, enabled: checked });
-                                }
-                              }}
-                            />
-                          </InlineStack>
-                        </div>
-                      ))}
-                    </BlockStack>
-
-                    <Divider />
-
-                    {/* Coupon Editor */}
-                    {editingCoupon ? (
-                      <div style={{ padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                        <BlockStack gap="400">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <BlockStack gap="100">
-                              <Text variant="headingSm" as="h3">Edit: {editingCoupon.code}</Text>
-                              <Text tone="subdued" variant="bodySm">Configure display and discount settings</Text>
-                            </BlockStack>
-                          </InlineStack>
-
-                          <Divider />
-                  
-                          {/* Compact Single Column Layout */}
-                          <BlockStack gap="300">
-                            <InlineStack gap="300" blockAlign="start">
-                              <div style={{ flex: 1 }}>
-                                <TextField
-                                  label="Coupon Code"
-                                  value={editingCoupon.code}
-                                  disabled
-                                  autoComplete="off"
-                                />
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <TextField
-                                  label="Label Text"
-                                  value={editingCoupon.label}
-                                  onChange={(value) => updateCouponField('label', value)}
-                                  autoComplete="off"
-                                />
-                              </div>
-                            </InlineStack>
-
-                            <TextField
-                              label="Description"
-                              value={editingCoupon.description}
-                              onChange={(value) => updateCouponField('description', value)}
-                              autoComplete="off"
-                            />
-
-                            <InlineStack gap="300">
-                              <div style={{ flex: 1 }}>
-                                <Select
-                                  label="Discount Type"
-                                  options={[
-                                    { label: 'Percentage Off', value: 'percentage' },
-                                    { label: 'Fixed Amount Off', value: 'fixed' },
-                                  ]}
-                                  value={editingCoupon.discountType || 'percentage'}
-                                  onChange={(value) => updateCouponField('discountType', value)}
-                                />
-                              </div>
-                              <div style={{ flex: 1 }}>
-                                <TextField
-                                  label="Discount Value"
-                                  type="number"
-                                  value={String(editingCoupon.discountValue || 0)}
-                                  onChange={(value) => updateCouponField('discountValue', Number(value))}
-                                  autoComplete="off"
-                                  suffix={editingCoupon.discountType === 'percentage' ? '%' : '₹'}
-                                />
-                              </div>
-                            </InlineStack>
-
-                            <TextField
-                              label="Expiry Date (Optional)"
-                              type="date"
-                              value={editingCoupon.expiryDate || ''}
-                              onChange={(value) => updateCouponField('expiryDate', value)}
-                          autoComplete="off"
-                          helpText="Leave empty for no expiry"
-                        />
-
-                        <Divider />
-                        <Text variant="headingSm" as="h4">Appearance</Text>
-
-                        <InlineStack gap="300">
-                          <div style={{ flex: 1 }}>
-                            <TextField
-                              label="Background Color"
-                              value={editingCoupon.backgroundColor}
-                              onChange={(value) => updateCouponField('backgroundColor', value)}
-                              type="text"
-                              autoComplete="off"
-                              connectedRight={
-                                <div style={{ 
-                                  width: '36px', 
-                                  height: '36px', 
-                                  backgroundColor: editingCoupon.backgroundColor, 
-                                  border: '1px solid #c9cccf',
-                                  borderRadius: '4px',
-                                }} />
-                              }
-                            />
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <TextField
-                              label="Text Color"
-                              value={editingCoupon.textColor}
-                              onChange={(value) => updateCouponField('textColor', value)}
-                              type="text"
-                              autoComplete="off"
-                              connectedRight={
-                                <div style={{ 
-                                  width: '36px', 
-                                  height: '36px', 
-                                  backgroundColor: editingCoupon.textColor, 
-                                  border: '1px solid #c9cccf',
-                                  borderRadius: '4px',
-                                }} />
-                              }
-                            />
-                          </div>
-                        </InlineStack>
-
-                        <InlineStack gap="300">
-                          <div style={{ flex: 1 }}>
-                            <TextField
-                              label="Icon (emoji)"
-                              value={editingCoupon.iconUrl}
-                              onChange={(value) => updateCouponField('iconUrl', value)}
-                              autoComplete="off"
-                            />
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <TextField
-                              label="Border Radius"
-                              type="number"
-                              value={String(editingCoupon.borderRadius)}
-                              onChange={(value) => updateCouponField('borderRadius', Number(value))}
-                              autoComplete="off"
-                              suffix="px"
-                            />
-                          </div>
-                        </InlineStack>
-
-                        <Divider />
-                        <Text variant="headingSm" as="h4">Button Settings</Text>
-
-                        <TextField
-                          label="Button Text"
-                          value={editingCoupon.button.text}
-                          onChange={(value) => updateCouponField('button.text', value)}
-                          autoComplete="off"
-                        />
-
-                        <InlineStack gap="300">
-                          <div style={{ flex: 1 }}>
-                            <TextField
-                              label="Button Background"
-                              value={editingCoupon.button.backgroundColor}
-                              onChange={(value) => updateCouponField('button.backgroundColor', value)}
-                              type="text"
-                              autoComplete="off"
-                              connectedRight={
-                                <div style={{ 
-                                  width: '36px', 
-                                  height: '36px', 
-                                  backgroundColor: editingCoupon.button.backgroundColor, 
-                                  border: '1px solid #c9cccf',
-                                  borderRadius: '4px',
-                                }} />
-                              }
-                            />
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <TextField
-                              label="Button Text Color"
-                              value={editingCoupon.button.textColor}
-                              onChange={(value) => updateCouponField('button.textColor', value)}
-                              type="text"
-                              autoComplete="off"
-                              connectedRight={
-                                <div style={{ 
-                                  width: '36px', 
-                                  height: '36px', 
-                                  backgroundColor: editingCoupon.button.textColor, 
-                                  border: '1px solid #c9cccf',
-                                  borderRadius: '4px',
-                                }} />
-                              }
-                            />
-                          </div>
-                        </InlineStack>
-
-                      {/* Save/Cancel Actions */}
-                        <Divider />
-                        <InlineStack align="end" gap="200">
-                          <Button onClick={handleCancelCoupon} disabled={isSaving}>Cancel</Button>
-                          <Button variant="primary" onClick={handleSaveCoupon} loading={isSaving} disabled={isSaving}>Save Changes</Button>
-                        </InlineStack>
+            {
+              couponSubTab === 'manage-coupons' && (
+                <BlockStack gap="400">
+                  <Card>
+                    <BlockStack gap="400">
+                      <BlockStack gap="200">
+                        <Text variant="headingMd" as="h2">Enable/Disable Coupons</Text>
+                        <Text tone="subdued" as="p">Select which coupons to show in the slider</Text>
                       </BlockStack>
+
+                      {/* Coupon List with Enable/Disable */}
+                      <BlockStack gap="200">
+                        {allCoupons.map(coupon => (
+                          <div
+                            key={coupon.id}
+                            onClick={() => handleCouponTabClick(coupon.id)}
+                            style={{
+                              padding: '12px 16px',
+                              backgroundColor: activeCouponTab === coupon.id ? '#f0f7ff' : '#f9fafb',
+                              border: `1px solid ${activeCouponTab === coupon.id ? '#2c6ecb' : '#e5e7eb'}`,
+                              borderRadius: '8px',
+                              transition: 'all 0.2s',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <InlineStack align="space-between" blockAlign="center" gap="200">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                                <span style={{ fontSize: '20px' }}>{coupon.iconUrl}</span>
+                                <BlockStack gap="100">
+                                  <Text variant="bodyMd" fontWeight="semibold" truncate>{coupon.code}</Text>
+                                  <Text variant="bodySm" tone="subdued" truncate>{coupon.label}</Text>
+                                </BlockStack>
+                              </div>
+                              <Checkbox
+                                checked={coupon.enabled}
+                                onChange={(checked) => {
+                                  const updated = allCoupons.map(c =>
+                                    c.id === coupon.id ? { ...c, enabled: checked } : c
+                                  );
+                                  setAllCoupons(updated);
+                                  const idx = sampleCoupons.findIndex(c => c.id === coupon.id);
+                                  if (idx !== -1) sampleCoupons[idx].enabled = checked;
+                                  if (editingCoupon && editingCoupon.id === coupon.id) {
+                                    setEditingCoupon({ ...editingCoupon, enabled: checked });
+                                  }
+                                }}
+                              />
+                            </InlineStack>
+                          </div>
+                        ))}
+                      </BlockStack>
+
+                      <Divider />
+
+                      {/* Coupon Editor */}
+                      {editingCoupon ? (
+                        <div style={{ padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                          <BlockStack gap="400">
+                            <InlineStack align="space-between" blockAlign="center">
+                              <BlockStack gap="100">
+                                <Text variant="headingSm" as="h3">Edit: {editingCoupon.code}</Text>
+                                <Text tone="subdued" variant="bodySm">Configure display and discount settings</Text>
+                              </BlockStack>
+                            </InlineStack>
+
+                            <Divider />
+
+                            {/* Compact Single Column Layout */}
+                            <BlockStack gap="300">
+                              <InlineStack gap="300" blockAlign="start">
+                                <div style={{ flex: 1 }}>
+                                  <TextField
+                                    label="Coupon Code"
+                                    value={editingCoupon.code}
+                                    disabled
+                                    autoComplete="off"
+                                  />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <TextField
+                                    label="Label Text"
+                                    value={editingCoupon.label}
+                                    onChange={(value) => updateCouponField('label', value)}
+                                    autoComplete="off"
+                                  />
+                                </div>
+                              </InlineStack>
+
+                              <TextField
+                                label="Description"
+                                value={editingCoupon.description}
+                                onChange={(value) => updateCouponField('description', value)}
+                                autoComplete="off"
+                              />
+
+                              <InlineStack gap="300">
+                                <div style={{ flex: 1 }}>
+                                  <Select
+                                    label="Discount Type"
+                                    options={[
+                                      { label: 'Percentage Off', value: 'percentage' },
+                                      { label: 'Fixed Amount Off', value: 'fixed' },
+                                    ]}
+                                    value={editingCoupon.discountType || 'percentage'}
+                                    onChange={(value) => updateCouponField('discountType', value)}
+                                  />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <TextField
+                                    label="Discount Value"
+                                    type="number"
+                                    value={String(editingCoupon.discountValue || 0)}
+                                    onChange={(value) => updateCouponField('discountValue', Number(value))}
+                                    autoComplete="off"
+                                    suffix={editingCoupon.discountType === 'percentage' ? '%' : '₹'}
+                                  />
+                                </div>
+                              </InlineStack>
+
+                              <TextField
+                                label="Expiry Date (Optional)"
+                                type="date"
+                                value={editingCoupon.expiryDate || ''}
+                                onChange={(value) => updateCouponField('expiryDate', value)}
+                                autoComplete="off"
+                                helpText="Leave empty for no expiry"
+                              />
+
+                              <Divider />
+                              <Text variant="headingSm" as="h4">Appearance</Text>
+
+                              <InlineStack gap="300">
+                                <div style={{ flex: 1 }}>
+                                  <ColorPickerField
+                                    label="Background Color"
+                                    value={editingCoupon.backgroundColor}
+                                    onChange={(value) => updateCouponField('backgroundColor', value)}
+                                  />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <ColorPickerField
+                                    label="Text Color"
+                                    value={editingCoupon.textColor}
+                                    onChange={(value) => updateCouponField('textColor', value)}
+                                  />
+                                </div>
+                              </InlineStack>
+
+                              <InlineStack gap="300">
+                                <div style={{ flex: 1 }}>
+                                  <TextField
+                                    label="Icon (emoji)"
+                                    value={editingCoupon.iconUrl}
+                                    onChange={(value) => updateCouponField('iconUrl', value)}
+                                    autoComplete="off"
+                                  />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <TextField
+                                    label="Border Radius"
+                                    type="number"
+                                    value={String(editingCoupon.borderRadius)}
+                                    onChange={(value) => updateCouponField('borderRadius', Number(value))}
+                                    autoComplete="off"
+                                    suffix="px"
+                                  />
+                                </div>
+                              </InlineStack>
+
+                              <Divider />
+                              <Text variant="headingSm" as="h4">Button Settings</Text>
+
+                              <TextField
+                                label="Button Text"
+                                value={editingCoupon.button.text}
+                                onChange={(value) => updateCouponField('button.text', value)}
+                                autoComplete="off"
+                              />
+
+                              <InlineStack gap="300">
+                                <div style={{ flex: 1 }}>
+                                  <ColorPickerField
+                                    label="Button Background"
+                                    value={editingCoupon.button.backgroundColor}
+                                    onChange={(value) => updateCouponField('button.backgroundColor', value)}
+                                  />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <ColorPickerField
+                                    label="Button Text Color"
+                                    value={editingCoupon.button.textColor}
+                                    onChange={(value) => updateCouponField('button.textColor', value)}
+                                  />
+                                </div>
+                              </InlineStack>
+
+                              {/* Save/Cancel Actions */}
+                              <Divider />
+                              <InlineStack align="end" gap="200">
+                                <Button onClick={handleCancelCoupon} disabled={isSaving}>Cancel</Button>
+                                <Button variant="primary" onClick={handleSaveCoupon} loading={isSaving} disabled={isSaving}>Save Changes</Button>
+                              </InlineStack>
+                            </BlockStack>
+                          </BlockStack>
+                        </div>
+                      ) : (
+                        <div style={{ padding: '40px 20px', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                          <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#374151' }}>👈 Select a coupon to edit</p>
+                          <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>Click on a coupon above to edit its settings</p>
+                        </div>
+                      )}
                     </BlockStack>
-                    </div>
-                ) : (
-                  <div style={{ padding: '40px 20px', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                    <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#374151' }}>👈 Select a coupon to edit</p>
-                    <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>Click on a coupon above to edit its settings</p>
-                  </div>
-                )}
-              </BlockStack>
-            </Card>
-            </BlockStack>
-            )}
-          </BlockStack>
-        </div>
+                  </Card>
+                </BlockStack>
+              )
+            }
+          </BlockStack >
+        </div >
       );
     }
 
     // Upsell Rules Editor - Manual Upsell Builder
     if (selectedTab === 'upsell') {
       const validationError = getUpsellValidationError();
-      
+
       return (
         <div style={{ padding: '20px', height: '100%', overflowY: 'auto' }}>
           <BlockStack gap="400">
             {/* Header */}
             <BlockStack gap="100">
-              <Text variant="headingLg" as="h1">Upsell Rules</Text>
-              <Text variant="bodySm" tone="subdued">Recommend products to customers based on cart contents</Text>
+              <InlineStack align="space-between" blockAlign="center">
+                <BlockStack gap="100">
+                  <Text variant="headingLg" as="h1">Upsell Rules</Text>
+                  <Text variant="bodySm" tone="subdued">Recommend products to customers based on cart contents</Text>
+                </BlockStack>
+                <Button
+                  variant={upsellConfig.enabled ? 'primary' : 'secondary'}
+                  onClick={() => setUpsellConfig({ ...upsellConfig, enabled: !upsellConfig.enabled })}
+                >
+                  {upsellConfig.enabled ? 'Enabled' : 'Disabled'}
+                </Button>
+              </InlineStack>
             </BlockStack>
 
-            {/* Main Enable/Disable Section */}
+            {/* Show on Empty Cart - NOW AT TOP */}
             <Card>
               <BlockStack gap="200">
                 <InlineStack align="space-between" blockAlign="center">
                   <BlockStack gap="050">
-                    <Text variant="headingSm">Enable Upsell</Text>
-                    <Text variant="bodySm" tone="subdued">Show product recommendations in cart</Text>
+                    <Text variant="headingSm">Show on Empty Cart</Text>
+                    <Text variant="bodySm" tone="subdued">Display recommendations even if cart is empty</Text>
                   </BlockStack>
                   <Checkbox
-                    checked={upsellConfig.enabled}
-                    onChange={(checked) => setUpsellConfig({ ...upsellConfig, enabled: checked })}
+                    checked={upsellConfig.showOnEmptyCart}
+                    onChange={(checked) =>
+                      setUpsellConfig({ ...upsellConfig, showOnEmptyCart: checked })
+                    }
                   />
                 </InlineStack>
               </BlockStack>
@@ -2128,22 +2505,56 @@ export default function CartDrawerAdmin() {
             {/* Settings (only show if enabled) */}
             {upsellConfig.enabled && (
               <>
+                {/* Templates Section */}
+                <Card>
+                  <BlockStack gap="300">
+                    <Text variant="headingSm" as="h2">Select Upsell Template</Text>
+                    <InlineStack gap="300">
+                      {Object.entries(UPSELL_STYLE_METADATA).map(([styleKey, metadata]) => (
+                        <Button
+                          key={styleKey}
+                          pressed={upsellConfig.activeTemplate === styleKey}
+                          onClick={() => setUpsellConfig({ ...upsellConfig, activeTemplate: styleKey })}
+                        >
+                          {metadata.name}
+                        </Button>
+                      ))}
+                    </InlineStack>
+                  </BlockStack>
+                </Card>
+
                 {/* Title & Formatting */}
                 <Card>
-                  <BlockStack gap="200">
-                    <Text variant="headingSm">Upsell Title</Text>
-                    <TextField
-                      label="Title text"
-                      value={upsellConfig.upsellTitle?.text || 'Recommended for you'}
-                      onChange={(value) =>
-                        setUpsellConfig({
-                          ...upsellConfig,
-                          upsellTitle: { ...upsellConfig.upsellTitle, text: value },
-                        })
-                      }
-                      placeholder="e.g., Recommended for you"
-                    />
-                    
+                  <BlockStack gap="300">
+                    <Text variant="headingSm">Upsell Title & Style</Text>
+
+                    <InlineStack gap="400" blockAlign="end">
+                      <div style={{ flex: 1 }}>
+                        <TextField
+                          label="Title text"
+                          value={upsellConfig.upsellTitle?.text || 'Recommended for you'}
+                          onChange={(value) =>
+                            setUpsellConfig({
+                              ...upsellConfig,
+                              upsellTitle: { ...upsellConfig.upsellTitle, text: value },
+                            })
+                          }
+                          placeholder="e.g., Recommended for you"
+                          autoComplete="off"
+                        />
+                      </div>
+                      <ColorPickerField
+                        label="Title Color"
+                        value={upsellConfig.upsellTitle?.color || '#111827'}
+                        onChange={(value) =>
+                          setUpsellConfig({
+                            ...upsellConfig,
+                            upsellTitle: { ...upsellConfig.upsellTitle, color: value },
+                          })
+                        }
+                      />
+                    </InlineStack>
+
                     {/* Text Formatting Buttons */}
                     <BlockStack gap="100">
                       <Text variant="bodySm" fontWeight="semibold">Formatting</Text>
@@ -2211,7 +2622,7 @@ export default function CartDrawerAdmin() {
                 <Card>
                   <BlockStack gap="200">
                     <Text variant="headingSm">Display Settings</Text>
-                    
+
                     <BlockStack gap="150">
                       <BlockStack gap="050">
                         <Text variant="bodySm" fontWeight="semibold">Position in Cart</Text>
@@ -2320,24 +2731,6 @@ export default function CartDrawerAdmin() {
                   </BlockStack>
                 </Card>
 
-                {/* Show on Empty Cart */}
-                <Card>
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between" blockAlign="center">
-                      <BlockStack gap="050">
-                        <Text variant="headingSm">Show on Empty Cart</Text>
-                        <Text variant="bodySm" tone="subdued">Display recommendations even if cart is empty</Text>
-                      </BlockStack>
-                      <Checkbox
-                        checked={upsellConfig.showOnEmptyCart}
-                        onChange={(checked) =>
-                          setUpsellConfig({ ...upsellConfig, showOnEmptyCart: checked })
-                        }
-                      />
-                    </InlineStack>
-                  </BlockStack>
-                </Card>
-
                 {/* Active Rules Summary */}
                 {manualUpsellRules.length > 0 && upsellConfig.upsellMode === 'manual' && (
                   <Card tone="info">
@@ -2377,22 +2770,19 @@ export default function CartDrawerAdmin() {
                   </Card>
                 )}
 
-                {/* Save Buttons */}
-                <Card>
-                  <InlineStack gap="200">
-                    <Button
-                      variant="primary"
-                      onClick={handleSaveUpsellRules}
-                      loading={upsellSaving}
-                      fullWidth
-                    >
-                      Save Settings
-                    </Button>
-                    <Button onClick={handleCancelUpsellRules} fullWidth>
-                      Cancel
-                    </Button>
-                  </InlineStack>
-                </Card>
+                {/* Save Buttons - NOW SMALL AND DEFAULT */}
+                <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '12px', marginTop: '10px' }}>
+                  <Button
+                    variant="primary"
+                    onClick={handleSaveUpsellRules}
+                    loading={upsellSaving}
+                  >
+                    Save Settings
+                  </Button>
+                  <Button onClick={handleCancelUpsellRules}>
+                    Cancel
+                  </Button>
+                </div>
               </>
             )}
           </BlockStack>
@@ -2417,6 +2807,16 @@ export default function CartDrawerAdmin() {
       return product?.collections || [];
     });
 
+    // Derive milestones from current settings for LIVE preview
+    const previewMilestones = progressBarSettings.tiers.map(tier => ({
+      id: tier.id,
+      target: tier.minValue,
+      label: progressMode === 'amount' ? `₹${tier.minValue}` : `${tier.minValue} items`,
+      rewardText: tier.description,
+      associatedProducts: tier.products || []
+    })).sort((a, b) => a.target - b.target);
+
+    const highestTarget = previewMilestones.length > 0 ? previewMilestones[previewMilestones.length - 1].target : 1000;
 
     return (
       <div style={{ position: 'relative', height: '100%', overflow: 'hidden', backgroundColor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -2445,67 +2845,118 @@ export default function CartDrawerAdmin() {
           {/* Body */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* Progress Bar Feature */}
-            {featureStates.progressBarEnabled && (progressBarSettings.showOnEmpty || !showEmpty) && selectedTab !== 'coupon' && (
-              <div style={{ padding: '12px', backgroundColor: '#f3f4f6', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <p style={{ margin: 0, fontSize: '12px', fontWeight: '600', color: '#1f2937' }}>
-                    {progressMode === 'amount' ? '💰 Reward Progress' : '🎯 Item Progress'}
-                  </p>
-                  <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: '#6b7280' }}>
-                    {progressMode === 'amount' ? `₹${cartData.cartValue}` : `${cartData.totalQuantity}`} / {milestones.length > 0 ? milestones[milestones.length - 1].target : 1000}
-                  </p>
+            {featureStates.progressBarEnabled && (progressBarSettings.showOnEmpty || !showEmpty) && (
+              <div style={{
+                padding: '20px',
+                backgroundColor: '#ffffff',
+                borderRadius: '16px',
+                boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.08)',
+                border: 'none',
+                marginBottom: '20px',
+                position: 'relative',
+                overflow: 'hidden'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <Text as="p" fontWeight="bold" variant="headingSm">
+                    {progressMode === 'amount' ? 'Rewards Progress' : 'Item Progress'}
+                  </Text>
+                  <Text as="span" variant="bodySm" tone="subdued" fontWeight="semibold">
+                    {progressMode === 'amount' ? `₹${cartData.cartValue}` : `${cartData.totalQuantity}`} / {highestTarget}
+                  </Text>
                 </div>
-                
-                <div style={{ height: '8px', backgroundColor: progressBarSettings.barBackgroundColor, borderRadius: '4px', overflow: 'hidden', marginBottom: '8px' }}>
-                  <div 
-                    style={{ 
-                      height: '100%', 
-                      width: `${calculateProgress(progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity, milestones.length > 0 ? milestones[milestones.length - 1].target : 1000)}%`, 
-                      backgroundColor: progressBarSettings.barForegroundColor,
-                      transition: 'width 0.3s ease',
-                    }} 
-                  />
+
+                <div style={{
+                  height: '14px',
+                  backgroundColor: progressBarSettings.barBackgroundColor || '#f1f5f9',
+                  borderRadius: `${progressBarSettings.borderRadius || 8}px`,
+                  overflow: 'hidden',
+                  marginBottom: '12px',
+                  boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)',
+                  border: '1px solid rgba(0,0,0,0.05)',
+                  padding: '2px' // Inner spacing for a premium look
+                }}>
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${calculateProgress(progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity, highestTarget)}%`,
+                      backgroundColor: progressBarSettings.barForegroundColor || '#2563eb',
+                      background: `linear-gradient(90deg, ${progressBarSettings.barForegroundColor || '#2563eb'}, ${progressBarSettings.barForegroundColor ? progressBarSettings.barForegroundColor + 'cc' : '#3b82f6'})`,
+                      borderRadius: `${Math.max(0, (progressBarSettings.borderRadius || 8) - 2)}px`,
+                      transition: 'width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)',
+                      boxShadow: `0 0 12px ${progressBarSettings.barForegroundColor}55`,
+                      position: 'relative'
+                    }}
+                  >
+                    {/* Glossy overlay */}
+                    <div style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      height: '50%',
+                      background: 'rgba(255,255,255,0.15)',
+                      borderRadius: '99px'
+                    }} />
+                  </div>
                 </div>
 
                 {(() => {
-                  const milestone = getActiveMilestone(progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity, milestones, progressMode);
-                  if (milestone.upcoming) {
+                  const activeMilestone = getActiveMilestone(progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity, previewMilestones, progressMode);
+                  if (activeMilestone.upcoming) {
                     return (
-                      <p style={{ margin: 0, fontSize: '11px', color: '#6b7280' }}>
-                        {progressMode === 'amount' 
-                          ? `₹${milestone.nextAmount} away from ${milestone.upcoming.rewardText}` 
-                          : `${milestone.nextAmount} item${milestone.nextAmount !== 1 ? 's' : ''} away from ${milestone.upcoming.rewardText}`}
+                      <p style={{ margin: 0, fontSize: '13px', color: '#64748b', fontWeight: '500' }}>
+                        You're only <span style={{ color: '#0f172a', fontWeight: '700' }}>{progressMode === 'amount' ? `₹${activeMilestone.nextAmount}` : `${activeMilestone.nextAmount} items`}</span> away from <span style={{ color: progressBarSettings.barForegroundColor || '#2563eb', fontWeight: '700' }}>{activeMilestone.upcoming.rewardText}</span>
                       </p>
                     );
                   }
                   return (
-                    <p style={{ margin: 0, fontSize: '11px', color: '#059669', fontWeight: '600' }}>
-                      🎉 {progressBarSettings.completionText}
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981' }}>
+                      <span style={{ fontSize: '16px' }}>🎉</span>
+                      <p style={{ margin: 0, fontSize: '13px', fontWeight: '700' }}>
+                        {progressBarSettings.completionText}
+                      </p>
+                    </div>
                   );
                 })()}
 
                 {/* Milestone Badges */}
-                {milestones.length > 0 && (
-                  <div style={{ display: 'flex', gap: '4px', marginTop: '8px', flexWrap: 'wrap' }}>
-                    {milestones.map(ms => {
+                {previewMilestones.length > 0 && (
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap' }}>
+                    {previewMilestones.map(ms => {
                       const isCompleted = (progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity) >= ms.target;
                       return (
-                        <div 
+                        <div
                           key={ms.id}
                           onClick={() => ms.associatedProducts.length > 0 && handleMilestoneProductClick(ms.associatedProducts)}
                           style={{
-                            padding: '4px 8px',
-                            backgroundColor: isCompleted ? '#dcfce7' : '#e5e7eb',
-                            borderRadius: '4px',
-                            fontSize: '10px',
+                            padding: '6px 12px',
+                            backgroundColor: isCompleted ? '#ecfdf5' : '#f8fafc',
+                            borderRadius: `${Math.max(0, (progressBarSettings.borderRadius || 8) - 2)}px`,
+                            fontSize: '11px',
                             fontWeight: '600',
-                            color: isCompleted ? '#166534' : '#374151',
+                            color: isCompleted ? '#059669' : '#64748b',
                             cursor: ms.associatedProducts.length > 0 ? 'pointer' : 'default',
-                            border: `1px solid ${isCompleted ? '#86efac' : '#d1d5db'}`,
+                            border: `1px solid ${isCompleted ? '#a7f3d0' : '#e2e8f0'}`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.2s ease'
                           }}
                         >
-                          {isCompleted ? '✓' : ''} {ms.label}
+                          <div style={{
+                            width: '14px',
+                            height: '14px',
+                            borderRadius: '50%',
+                            backgroundColor: isCompleted ? '#10b981' : '#cbd5e1',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#fff',
+                            fontSize: '9px'
+                          }}>
+                            {isCompleted ? '✓' : ''}
+                          </div>
+                          {ms.label}
                         </div>
                       );
                     })}
@@ -2545,7 +2996,7 @@ export default function CartDrawerAdmin() {
             {upsellConfig.enabled && (!showEmpty || upsellConfig.showOnEmptyCart) && (() => {
               // Get upsell products based on mode with priority system
               let productsToShow = [];
-              
+
               if (upsellConfig.upsellMode === 'manual') {
                 const rulesForEvaluation = [
                   {
@@ -2576,9 +3027,11 @@ export default function CartDrawerAdmin() {
                 // For AI mode, show some default products
                 productsToShow = ['sp-2', 'sp-6', 'sp-8'];
               }
-              
+
+              // Use standard enabled flag
+              if (!upsellConfig.enabled) return null;
               if (productsToShow.length === 0) return null;
-              
+
               return (
                 <div style={{
                   padding: '12px',
@@ -2592,12 +3045,9 @@ export default function CartDrawerAdmin() {
                       margin: 0,
                       fontSize: '12px',
                       fontWeight: '700',
-                      color: upsellConfig.titleStyle?.color || '#111',
-                      textAlign: upsellConfig.titleStyle?.align || 'left',
-                      fontSize: (() => {
-                        const sizes = { small: '11px', medium: '12px', large: '14px' };
-                        return sizes[upsellConfig.titleStyle?.size] || '12px';
-                      })(),
+                      color: upsellConfig.upsellTitle?.color || '#111827',
+                      textAlign: (upsellConfig.activeTemplate === UPSELL_STYLES.CAROUSEL && upsellConfig.alignment === 'horizontal') ? 'left' : 'center',
+                      fontSize: '14px',
                       ...(() => {
                         const styles = {};
                         if (upsellConfig.upsellTitle?.formatting?.bold) styles.fontWeight = '700';
@@ -2608,9 +3058,9 @@ export default function CartDrawerAdmin() {
                     }}>
                       {upsellConfig.upsellTitle?.text || 'Recommended for you'}
                     </p>
-                    {upsellConfig.layout === 'carousel' && upsellConfig.alignment === 'horizontal' && (
+                    {upsellConfig.activeTemplate === UPSELL_STYLES.CAROUSEL && (
                       <div style={{ display: 'flex', gap: '4px' }}>
-                        <button 
+                        <button
                           onClick={() => handleCarouselScroll('left')}
                           style={{
                             width: '24px',
@@ -2621,7 +3071,7 @@ export default function CartDrawerAdmin() {
                             cursor: 'pointer',
                             fontSize: '12px',
                           }}>←</button>
-                        <button 
+                        <button
                           onClick={() => handleCarouselScroll('right')}
                           style={{
                             width: '24px',
@@ -2635,14 +3085,14 @@ export default function CartDrawerAdmin() {
                       </div>
                     )}
                   </div>
-                  <div 
+                  <div
                     ref={carouselRef}
                     style={{
-                      display: upsellConfig.layout === 'grid' ? 'grid' : 'flex',
-                      gridTemplateColumns: upsellConfig.layout === 'grid' ? (upsellConfig.alignment === 'horizontal' ? 'repeat(2, 1fr)' : '1fr') : undefined,
-                      flexDirection: upsellConfig.layout === 'carousel' ? (upsellConfig.alignment === 'horizontal' ? 'row' : 'column') : undefined,
+                      display: upsellConfig.activeTemplate === UPSELL_STYLES.GRID ? 'grid' : 'flex',
+                      gridTemplateColumns: upsellConfig.activeTemplate === UPSELL_STYLES.GRID ? 'repeat(2, 1fr)' : undefined,
+                      flexDirection: upsellConfig.activeTemplate === UPSELL_STYLES.LIST ? 'column' : 'row',
                       gap: '8px',
-                      overflowX: upsellConfig.layout === 'carousel' && upsellConfig.alignment === 'horizontal' ? 'auto' : 'visible',
+                      overflowX: upsellConfig.activeTemplate === UPSELL_STYLES.CAROUSEL ? 'auto' : 'visible',
                       scrollBehavior: 'smooth',
                     }}>
                     {productsToShow.slice(0, 6).map(productId => {
@@ -2694,42 +3144,33 @@ export default function CartDrawerAdmin() {
               );
             })()}
 
-            {/* Coupon Feature */}
+            {/* Coupon Feature - Product Widget Style */}
             {featureStates.couponSliderEnabled && allCoupons.length > 0 && (
-              <div style={{ 
-                padding: '12px',
+              <div style={{
+                padding: '16px',
                 order: couponPosition === 'top' ? -1 : 999,
+                backgroundColor: '#fff',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <p style={{ margin: 0, fontSize: '12px', fontWeight: '600', color: '#1f2937' }}>
-                    🎟️ Available Coupons ({allCoupons.filter(c => c.enabled).length})
-                  </p>
-                  <div style={{ display: 'flex', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <Text as="h3" variant="headingSm" fontWeight="bold">
+                    Availalbe Offers
+                  </Text>
+                  <div style={{ display: 'flex', gap: '6px' }}>
                     <button
                       onClick={() => handleScrollCoupons('left')}
                       style={{
                         width: '32px',
                         height: '32px',
-                        borderRadius: '6px',
-                        border: '1px solid #d1d5db',
+                        borderRadius: '50%',
+                        border: '1px solid #e2e8f0',
                         backgroundColor: '#fff',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '18px',
-                        fontWeight: '700',
-                        color: '#111',
+                        color: '#64748b',
                         transition: 'all 0.2s',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f3f4f6';
-                        e.currentTarget.style.transform = 'scale(1.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = '#fff';
-                        e.currentTarget.style.transform = 'scale(1)';
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                       }}
                     >
                       ←
@@ -2739,387 +3180,265 @@ export default function CartDrawerAdmin() {
                       style={{
                         width: '32px',
                         height: '32px',
-                        borderRadius: '6px',
-                        border: '1px solid #d1d5db',
+                        borderRadius: '50%',
+                        border: '1px solid #e2e8f0',
                         backgroundColor: '#fff',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '18px',
-                        fontWeight: '700',
-                        color: '#111',
+                        color: '#64748b',
                         transition: 'all 0.2s',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = '#f3f4f6';
-                        e.currentTarget.style.transform = 'scale(1.05)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = '#fff';
-                        e.currentTarget.style.transform = 'scale(1)';
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                       }}
                     >
                       →
                     </button>
                   </div>
                 </div>
-                <div ref={couponSliderRef} style={{ 
+
+                <div ref={couponSliderRef} style={{
                   display: couponLayout === 'grid' ? 'grid' : 'flex',
                   gridTemplateColumns: couponLayout === 'grid' ? (couponAlignment === 'horizontal' ? 'repeat(2, 1fr)' : '1fr') : undefined,
                   flexDirection: couponLayout === 'carousel' ? (couponAlignment === 'horizontal' ? 'row' : 'column') : undefined,
-                  gap: '8px', 
-                  paddingBottom: '4px', 
-                  scrollBehavior: 'smooth', 
+                  gap: '12px',
+                  paddingBottom: '4px',
+                  scrollBehavior: 'smooth',
                   overflowX: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? 'auto' : 'hidden',
                   overflowY: couponLayout === 'carousel' && couponAlignment === 'vertical' ? 'auto' : 'hidden',
                 }}>
-                {allCoupons.filter(c => c.enabled).map((coupon, idx) => {
-                  // Use editingCoupon if this is the currently editing coupon for live preview
-                  const displayCoupon = editingCoupon && editingCoupon.id === coupon.id ? editingCoupon : coupon;
-                  
-                  // Style 1: Blue Banner (like Sam's CLUB image)
-                  if (selectedCouponStyle === COUPON_STYLES.STYLE_1) {
+                  {allCoupons.filter(c => c.enabled).map((coupon, idx) => {
+                    const displayCoupon = editingCoupon && editingCoupon.id === coupon.id ? editingCoupon : coupon;
                     const isApplied = appliedCouponIds.includes(coupon.id);
-                    return (
-                      <div 
-                        key={coupon.id}
-                        onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
-                        style={{ 
-                          minWidth: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? '280px' : undefined,
-                          width: couponLayout === 'grid' ? '100%' : undefined,
-                          padding: '10px 14px',
-                          backgroundColor: displayCoupon.backgroundColor,
-                          borderRadius: `${displayCoupon.borderRadius}px`,
-                          cursor: 'pointer',
-                          transition: 'transform 0.15s',
-                          position: 'relative',
-                          border: isApplied ? '2px solid #10b981' : '2px solid transparent',
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.01)'}
-                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                      >
-                        {/* Applied Badge */}
-                        {isApplied && (
-                          <div style={{
-                            position: 'absolute',
-                            top: '8px',
-                            right: '8px',
-                            backgroundColor: '#10b981',
-                            color: '#ffffff',
-                            padding: '4px 10px',
+
+                    // STYLE 1: Classic Banner
+                    if (selectedCouponStyle === COUPON_STYLES.STYLE_1) {
+                      return (
+                        <div
+                          key={coupon.id}
+                          style={{
+                            minWidth: '260px',
+                            padding: '12px',
+                            backgroundColor: '#fff',
                             borderRadius: '12px',
-                            fontSize: '11px',
-                            fontWeight: '700',
+                            border: isApplied ? `1px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px',
-                            zIndex: 5,
+                            gap: '12px',
+                            position: 'relative',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          {isApplied && (
+                            <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: displayCoupon.backgroundColor }}></div>
+                          )}
+                          <div style={{
+                            width: '48px',
+                            height: '48px',
+                            borderRadius: '10px',
+                            backgroundColor: displayCoupon.backgroundColor + '20',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '24px',
+                            color: displayCoupon.backgroundColor,
+                            flexShrink: 0
                           }}>
-                            <span>✓</span>
-                            <span>Applied</span>
+                            {displayCoupon.iconUrl || '🎟️'}
                           </div>
-                        )}
-                        {/* Top label */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                          <span style={{ fontSize: '14px' }}>{displayCoupon.iconUrl}</span>
-                          <p style={{ margin: 0, fontSize: '11px', fontWeight: '600', color: displayCoupon.textColor, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                            {displayCoupon.label}
-                          </p>
-                        </div>
-                        
-                        {/* Main content - layout based on coupon alignment */}
-                        <div style={{ display: 'flex', alignItems: couponAlignment === 'horizontal' ? 'center' : 'flex-start', flexDirection: couponAlignment === 'horizontal' ? 'row' : 'column', justifyContent: 'space-between', gap: '12px' }}>
-                          <div style={{ flex: 1 }}>
-                            <p style={{ margin: '0 0 4px 0', fontSize: '22px', fontWeight: '800', color: displayCoupon.textColor, lineHeight: '1' }}>
-                              {displayCoupon.code}
-                            </p>
-                            <p style={{ margin: 0, fontSize: '10px', color: displayCoupon.textColor, opacity: 0.85 }}>
-                              {displayCoupon.discountType === 'percentage' 
-                                ? `${displayCoupon.discountValue}% off your order` 
-                                : `₹${displayCoupon.discountValue} off your order`}
-                            </p>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#1e293b' }}>{displayCoupon.code}</p>
+                            <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{displayCoupon.label}</p>
                           </div>
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleCopyCouponCode(coupon.code, coupon.id); }}
-                            style={{ 
-                              padding: '10px 20px',
-                              fontSize: '12px',
-                              backgroundColor: isApplied ? '#ef4444' : displayCoupon.button.backgroundColor,
-                              color: displayCoupon.button.textColor,
+                          <button
+                            onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: isApplied ? '#ecfdf5' : '#f8fafc',
+                              color: isApplied ? '#059669' : '#475569',
                               border: 'none',
-                              borderRadius: `${displayCoupon.button.borderRadius}px`,
+                              borderRadius: '8px',
+                              fontSize: '11px',
+                              fontWeight: '600',
                               cursor: 'pointer',
-                              fontWeight: '700',
-                              whiteSpace: 'nowrap',
-                              boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                              whiteSpace: 'nowrap'
                             }}
                           >
-                            {isApplied ? 'Remove Coupon' : displayCoupon.button.text}
+                            {isApplied ? 'Applied' : 'Apply'}
                           </button>
                         </div>
-                      </div>
-                    );
-                  }
-                  
-                  // Style 2: Pink Baby Card (like BAWSE5 image)
-                  if (selectedCouponStyle === COUPON_STYLES.STYLE_2) {
-                    const isApplied = appliedCouponIds.includes(coupon.id);
-                    return (
-                      <div 
-                        key={coupon.id}
-                        onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
-                        style={{ 
-                          minWidth: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? '280px' : undefined,
-                          width: couponLayout === 'grid' ? '100%' : undefined,
-                          padding: '14px 16px',
-                          backgroundColor: displayCoupon.backgroundColor,
-                          borderRadius: `${displayCoupon.borderRadius}px`,
-                          cursor: 'pointer',
-                          border: isApplied ? '2px solid #10b981' : `1px solid ${displayCoupon.textColor}15`,
-                          transition: 'transform 0.15s, box-shadow 0.15s',
-                          position: 'relative',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                          e.currentTarget.style.boxShadow = 'none';
-                        }}
-                      >
-                        {/* Applied Badge */}
-                        {isApplied && (
-                          <div style={{
-                            position: 'absolute',
-                            top: '10px',
-                            right: '10px',
-                            backgroundColor: '#10b981',
-                            color: '#ffffff',
-                            padding: '4px 10px',
-                            borderRadius: '12px',
-                            fontSize: '11px',
-                            fontWeight: '700',
+                      );
+                    }
+
+                    // STYLE 2: Minimal Card
+                    if (selectedCouponStyle === COUPON_STYLES.STYLE_2) {
+                      return (
+                        <div
+                          key={coupon.id}
+                          style={{
+                            minWidth: '180px',
+                            padding: '16px',
+                            backgroundColor: '#fff',
+                            borderRadius: '16px',
+                            border: isApplied ? `2px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
                             display: 'flex',
+                            flexDirection: 'column',
                             alignItems: 'center',
-                            gap: '4px',
-                            zIndex: 5,
-                          }}>
-                            <span>✓</span>
-                            <span>Applied</span>
-                          </div>
-                        )}
-                        {/* Icon + Code Header */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
-                          <span style={{ fontSize: '20px', lineHeight: '1' }}>{displayCoupon.iconUrl}</span>
-                          <p style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: displayCoupon.textColor, letterSpacing: '0.5px', lineHeight: '1' }}>
-                            {displayCoupon.code}
-                          </p>
-                        </div>
-                        
-                        {/* Description */}
-                        <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: displayCoupon.textColor, lineHeight: '1.4', opacity: 0.9 }}>
-                          {displayCoupon.discountType === 'percentage' 
-                            ? `${displayCoupon.discountValue}% off your order` 
-                            : `₹${displayCoupon.discountValue} off your order`}
-                        </p>
-                        
-                        {/* Rounded button */}
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); handleCopyCouponCode(coupon.code, coupon.id); }}
-                          style={{ 
-                            padding: '9px 20px',
-                            fontSize: '12px',
-                            backgroundColor: isApplied ? '#ef4444' : displayCoupon.button.backgroundColor,
-                            color: displayCoupon.button.textColor,
-                            border: 'none',
-                            borderRadius: `${displayCoupon.button.borderRadius}px`,
-                            cursor: 'pointer',
-                            fontWeight: '600',
-                            display: 'inline-block',
-                            transition: 'opacity 0.2s',
+                            textAlign: 'center',
+                            gap: '10px',
+                            position: 'relative'
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                         >
-                          {isApplied ? 'Remove Coupon' : displayCoupon.button.text}
-                        </button>
-                      </div>
-                    );
-                  }
-                  
-                  // Style 3: Ticket Design (like yellow ticket image)
-                  if (selectedCouponStyle === COUPON_STYLES.STYLE_3) {
-                    const isApplied = appliedCouponIds.includes(coupon.id);
-                    return (
-                      <div 
-                        key={coupon.id}
-                        onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
-                        style={{ 
-                          minWidth: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? '280px' : undefined,
-                          width: couponLayout === 'grid' ? '100%' : undefined,
-                          display: 'flex',
-                          backgroundColor: displayCoupon.backgroundColor,
-                          borderRadius: `${displayCoupon.borderRadius}px`,
-                          overflow: 'hidden',
-                          cursor: 'pointer',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                          transition: 'transform 0.15s',
-                          position: 'relative',
-                          border: isApplied ? '2px solid #10b981' : '2px solid transparent',
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.01)'}
-                        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                      >
-                        {/* Applied Badge */}
-                        {isApplied && (
                           <div style={{
-                            position: 'absolute',
-                            top: '8px',
-                            right: '8px',
-                            backgroundColor: '#10b981',
-                            color: '#ffffff',
-                            padding: '4px 10px',
-                            borderRadius: '12px',
-                            fontSize: '11px',
-                            fontWeight: '700',
+                            width: '56px',
+                            height: '56px',
+                            borderRadius: '16px',
+                            backgroundColor: displayCoupon.backgroundColor,
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px',
-                            zIndex: 5,
+                            justifyContent: 'center',
+                            fontSize: '28px',
+                            color: '#fff',
+                            boxShadow: `0 4px 10px ${displayCoupon.backgroundColor}60`
                           }}>
-                            <span>✓</span>
-                            <span>Applied</span>
+                            {displayCoupon.iconUrl || '🎁'}
                           </div>
-                        )}
-                        {/* Yellow/Gold Side Banner */}
-                        <div style={{ 
-                          width: '32px',
-                          backgroundColor: displayCoupon.button.backgroundColor,
+                          <div>
+                            <p style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>{displayCoupon.code}</p>
+                            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>{displayCoupon.description}</p>
+                          </div>
+                          <button
+                            onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
+                            style={{
+                              width: '100%',
+                              padding: '8px',
+                              marginTop: '4px',
+                              backgroundColor: isApplied ? '#10b981' : '#1e293b',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '10px',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            {isApplied ? '✓ Applied' : 'Apply Coupon'}
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    // STYLE 3: Bold & Vibrant
+                    return (
+                      <div
+                        key={coupon.id}
+                        style={{
+                          minWidth: '280px',
+                          padding: '0',
+                          backgroundColor: '#fff',
+                          borderRadius: '12px',
+                          border: '1px solid #e2e8f0',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        <div style={{
+                          backgroundColor: displayCoupon.backgroundColor,
+                          padding: '12px 16px',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '12px 6px',
+                          justifyContent: 'space-between',
+                          color: displayCoupon.textColor
                         }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{ fontSize: '18px' }}>{displayCoupon.iconUrl || '⚡'}</span>
+                            <span style={{ fontSize: '14px', fontWeight: '700' }}>{displayCoupon.label}</span>
+                          </div>
                           <div style={{
-                            writingMode: 'vertical-rl',
-                            textOrientation: 'mixed',
-                            transform: 'rotate(180deg)',
-                            fontSize: '10px',
-                            fontWeight: '700',
-                            color: displayCoupon.button.textColor,
-                            letterSpacing: '1px',
+                            backgroundColor: 'rgba(255,255,255,0.2)',
+                            padding: '4px 8px',
+                            borderRadius: '6px',
+                            fontSize: '11px',
+                            fontWeight: '600'
                           }}>
-                            {displayCoupon.label.split(' ')[0]}
+                            {displayCoupon.discountValue}% OFF
                           </div>
                         </div>
-                        
-                        {/* Main Ticket Content */}
-                        <div style={{ flex: 1, padding: '12px 14px' }}>
-                          {/* Ticket header */}
-                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '4px' }}>
-                            <div style={{ flex: 1 }}>
-                              <p style={{ margin: '0 0 2px 0', fontSize: '11px', fontWeight: '600', color: displayCoupon.textColor }}>
-                                {displayCoupon.label}
-                              </p>
-                              <p style={{ margin: 0, fontSize: '10px', color: displayCoupon.textColor, opacity: 0.7 }}>
-                                {displayCoupon.code}
-                              </p>
-                            </div>
-                            <span style={{ fontSize: '20px' }}>{displayCoupon.iconUrl}</span>
+                        <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                          <div style={{ flex: 1, border: '1px dashed #cbd5e1', borderRadius: '6px', padding: '6px 10px', backgroundColor: '#f8fafc' }}>
+                            <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#334155', fontFamily: 'monospace' }}>{displayCoupon.code}</p>
                           </div>
-                          
-                          <p style={{ margin: '0 0 10px 0', fontSize: '10px', color: displayCoupon.textColor, opacity: 0.7 }}>
-                            {displayCoupon.discountType === 'percentage' 
-                              ? `${displayCoupon.discountValue}% off your order` 
-                              : `₹${displayCoupon.discountValue} off your order`}
-                          </p>
-                          
-                          {/* Buy button */}
-                          <button 
-                            onClick={(e) => { e.stopPropagation(); handleCopyCouponCode(coupon.code, coupon.id); }}
-                            style={{ 
-                              padding: '8px 18px',
-                              fontSize: '11px',
-                              backgroundColor: isApplied ? '#ef4444' : displayCoupon.button.backgroundColor,
-                              color: displayCoupon.button.textColor,
+                          <button
+                            onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
+                            style={{
                               border: 'none',
-                              borderRadius: `${displayCoupon.button.borderRadius}px`,
-                              cursor: 'pointer',
+                              background: 'none',
+                              color: isApplied ? '#10b981' : '#2563eb',
+                              fontSize: '12px',
                               fontWeight: '700',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px',
+                              cursor: 'pointer',
+                              padding: '4px'
                             }}
                           >
-                            {isApplied ? 'Remove Coupon' : displayCoupon.button.text}
+                            {isApplied ? 'REMOVE' : 'APPLY'}
                           </button>
                         </div>
                       </div>
                     );
-                  }
-                  
-                  return null;
-                })}
+                  })}
                 </div>
               </div>
             )}
 
-            {/* Upsell Feature */}
-            {featureStates.upsellEnabled && (
-              <div style={{ padding: '12px', backgroundColor: '#ede9fe', borderRadius: '8px', border: '1px solid #c4b5fd' }}>
-                <p style={{ margin: '0 0 8px 0', fontSize: '12px', fontWeight: '600', color: '#5b21b6' }}>✨ You might also like</p>
-                <div style={{ display: 'flex', gap: '8px', padding: '8px', backgroundColor: '#f5f3ff', borderRadius: '6px', border: '1px solid #ddd6fe' }}>
-                  <div style={{ width: '40px', height: '40px', backgroundColor: '#c4b5fd', borderRadius: '4px', flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, fontSize: '12px', fontWeight: '600', color: '#111' }}>Premium Bundle</p>
-                    <p style={{ margin: '2px 0 0 0', fontSize: '11px', color: '#6b7280' }}>$19.99</p>
+            {/* Footer */}
+            {
+              !showEmpty && (
+                <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb', backgroundColor: '#f9fafb', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '14px' }}>
+                    <span style={{ color: '#6b7280', fontWeight: '500' }}>Subtotal</span>
+                    <span style={{ fontWeight: '600', color: '#111' }}>₹{cartTotal.toFixed(0)}</span>
                   </div>
-                  <button style={{ padding: '4px 10px', fontSize: '11px', backgroundColor: '#7c3aed', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '600', alignSelf: 'center' }}>Add</button>
+
+                  {/* Show applied discounts */}
+                  {appliedCouponIds.length > 0 && appliedCouponIds.map(couponId => {
+                    const coupon = allCoupons.find(c => c.id === couponId);
+                    if (!coupon) return null;
+                    const discount = calculateCouponDiscount(coupon, cartTotal);
+                    return (
+                      <div key={couponId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '13px' }}>
+                        <span style={{ color: '#10b981', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>✓</span>
+                          <span>{coupon.code} ({coupon.discountType === 'percentage' ? `${coupon.discountValue}%` : `₹${coupon.discountValue}`})</span>
+                        </span>
+                        <span style={{ fontWeight: '600', color: '#10b981' }}>-₹{discount.toFixed(0)}</span>
+                      </div>
+                    );
+                  })}
+
+                  {totalDiscount > 0 && (
+                    <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '8px', marginBottom: '8px' }} />
+                  )}
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', fontSize: '15px' }}>
+                    <span style={{ color: '#111', fontWeight: '700' }}>Total</span>
+                    <span style={{ fontWeight: '700', color: '#111', fontSize: '18px' }}>₹{finalTotal.toFixed(0)}</span>
+                  </div>
+
+                  <button style={{ width: '100%', padding: '12px', backgroundColor: '#000', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
+                    Checkout • ₹{finalTotal.toFixed(0)}
+                  </button>
                 </div>
-              </div>
-            )}
+              )
+            }
           </div>
-
-          {/* Footer */}
-          {!showEmpty && (
-            <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb', backgroundColor: '#f9fafb', flexShrink: 0 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '14px' }}>
-                <span style={{ color: '#6b7280', fontWeight: '500' }}>Subtotal</span>
-                <span style={{ fontWeight: '600', color: '#111' }}>₹{cartTotal.toFixed(0)}</span>
-              </div>
-              
-              {/* Show applied discounts */}
-              {appliedCouponIds.length > 0 && appliedCouponIds.map(couponId => {
-                const coupon = allCoupons.find(c => c.id === couponId);
-                if (!coupon) return null;
-                const discount = calculateCouponDiscount(coupon, cartTotal);
-                return (
-                  <div key={couponId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '13px' }}>
-                    <span style={{ color: '#10b981', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span>✓</span>
-                      <span>{coupon.code} ({coupon.discountType === 'percentage' ? `${coupon.discountValue}%` : `₹${coupon.discountValue}`})</span>
-                    </span>
-                    <span style={{ fontWeight: '600', color: '#10b981' }}>-₹{discount.toFixed(0)}</span>
-                  </div>
-                );
-              })}
-              
-              {totalDiscount > 0 && (
-                <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '8px', marginBottom: '8px' }} />
-              )}
-              
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', fontSize: '15px' }}>
-                <span style={{ color: '#111', fontWeight: '700' }}>Total</span>
-                <span style={{ fontWeight: '700', color: '#111', fontSize: '18px' }}>₹{finalTotal.toFixed(0)}</span>
-              </div>
-              
-              <button style={{ width: '100%', padding: '12px', backgroundColor: '#000', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
-                Checkout • ₹{finalTotal.toFixed(0)}
-              </button>
-            </div>
-          )}
         </div>
       </div>
     );
@@ -3137,288 +3456,297 @@ export default function CartDrawerAdmin() {
     <Frame>
       {saveToastMarkup}
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      {/* Deactivate Confirmation Modal */}
-      <Modal
-        open={showDeactivateModal}
-        onClose={handleCancelDeactivate}
-        title="Deactivate cart"
-        primaryAction={{
-          content: 'Deactivate',
-          onAction: handleConfirmDeactivate,
-          destructive: true,
-        }}
-        secondaryActions={[
-          {
-            content: 'Cancel',
-            onAction: handleCancelDeactivate,
-          },
-        ]}
-      >
-        <Modal.Section>
-          <Text as="p">
-            Changing cart status to "Inactive" will remove this cart from your live store.
-          </Text>
-        </Modal.Section>
-      </Modal>
-
-      {/* Milestone Product Modal */}
-      <Modal
-        open={showProductModal && selectedMilestoneProduct !== null}
-        onClose={() => setShowProductModal(false)}
-        title="Milestone Reward"
-      >
-        <Modal.Section>
-          <BlockStack gap="400">
-            {selectedMilestoneProduct && selectedMilestoneProduct.map(product => (
-              <Card key={product.id}>
-                <InlineStack align="space-between" blockAlign="center">
-                  <BlockStack gap="200">
-                    <Text variant="headingSm" as="h3">{product.image} {product.title}</Text>
-                    <Text as="p" tone="subdued">₹{product.price}</Text>
-                  </BlockStack>
-                  <Button
-                    onClick={() => handleAddToCart(product)}
-                    variant="primary"
-                  >
-                    Add to Cart
-                  </Button>
-                </InlineStack>
-              </Card>
-            ))}
-          </BlockStack>
-        </Modal.Section>
-      </Modal>
-
-      {/* Modal: Manual Upsell Builder */}
-      <Modal
-        open={showManualUpsellBuilder}
-        onClose={() => {
-          setShowManualUpsellBuilder(false);
-          cancelManualUpsellRules();
-        }}
-        title="Configure Manual Upsell Rules"
-        primaryAction={{
-          content: 'Save Rules',
-          loading: upsellSaving,
-          onAction: saveManualUpsellRules,
-        }}
-        secondaryActions={[
-          {
-            content: 'Cancel',
-            onAction: () => {
-              setShowManualUpsellBuilder(false);
-              cancelManualUpsellRules();
+        {/* Deactivate Confirmation Modal */}
+        <Modal
+          open={showDeactivateModal}
+          onClose={handleCancelDeactivate}
+          title="Deactivate cart"
+          primaryAction={{
+            content: 'Deactivate',
+            onAction: handleConfirmDeactivate,
+            destructive: true,
+          }}
+          secondaryActions={[
+            {
+              content: 'Cancel',
+              onAction: handleCancelDeactivate,
             },
-          },
-        ]}
-        large
-      >
-        <Modal.Section>
-          <BlockStack gap="400">
-            {manualUpsellRules.map((rule, idx) => (
-              <Card key={rule.id}>
-                <BlockStack gap="200">
-                  <InlineStack align="space-between">
-                    <Text variant="headingSm">Rule #{idx + 1}</Text>
+          ]}
+        >
+          <Modal.Section>
+            <Text as="p">
+              Changing cart status to "Inactive" will remove this cart from your live store.
+            </Text>
+          </Modal.Section>
+        </Modal>
+
+        {/* Milestone Product Modal */}
+        <Modal
+          open={showProductModal && selectedMilestoneProduct !== null}
+          onClose={() => setShowProductModal(false)}
+          title="Milestone Reward"
+        >
+          <Modal.Section>
+            <BlockStack gap="400">
+              {selectedMilestoneProduct && selectedMilestoneProduct.map(product => (
+                <Card key={product.id}>
+                  <InlineStack align="space-between" blockAlign="center">
+                    <BlockStack gap="200">
+                      <Text variant="headingSm" as="h3">{product.image} {product.title}</Text>
+                      <Text as="p" tone="subdued">₹{product.price}</Text>
+                    </BlockStack>
                     <Button
-                      variant="plain"
-                      tone="critical"
-                      size="slim"
-                      onClick={() => removeManualUpsellRule(rule.id)}
+                      onClick={() => handleAddToCart(product)}
+                      variant="primary"
                     >
-                      Delete
+                      Add to Cart
                     </Button>
                   </InlineStack>
+                </Card>
+              ))}
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
 
-                  <Divider />
-
-                  <BlockStack gap="150">
-                    <BlockStack gap="100">
-                      <Text variant="bodySm" fontWeight="semibold">Trigger Type</Text>
-                      <InlineStack gap="200">
-                        <Checkbox
-                          label="Any product"
-                          checked={rule.triggerType === 'all'}
-                          onChange={() =>
-                            updateManualUpsellRule(rule.id, { triggerType: 'all' })
-                          }
-                        />
-                        <Checkbox
-                          label="Specific products"
-                          checked={rule.triggerType === 'specific'}
-                          onChange={() =>
-                            updateManualUpsellRule(rule.id, { triggerType: 'specific' })
-                          }
-                        />
-                      </InlineStack>
-                    </BlockStack>
-
-                    {rule.triggerType === 'specific' && (
+        {/* Modal: Manual Upsell Builder */}
+        <Modal
+          open={showManualUpsellBuilder}
+          onClose={() => {
+            setShowManualUpsellBuilder(false);
+            cancelManualUpsellRules();
+          }}
+          title="Configure Manual Upsell Rules"
+          primaryAction={{
+            content: 'Save Rules',
+            loading: upsellSaving,
+            onAction: saveManualUpsellRules,
+          }}
+          secondaryActions={[
+            {
+              content: 'Cancel',
+              onAction: () => {
+                setShowManualUpsellBuilder(false);
+                cancelManualUpsellRules();
+              },
+            },
+          ]}
+          large
+        >
+          <Modal.Section>
+            <BlockStack gap="400">
+              {manualUpsellRules.map((rule, idx) => (
+                <Card key={rule.id}>
+                  <BlockStack gap="200">
+                    <InlineStack align="space-between">
+                      <Text variant="headingSm">Rule #{idx + 1}</Text>
                       <Button
-                        onClick={() => openProductPicker(rule.id, 'trigger')}
-                        variant="secondary"
+                        variant="plain"
+                        tone="critical"
+                        size="slim"
+                        onClick={() => removeManualUpsellRule(rule.id)}
                       >
-                        Choose Trigger Products
+                        Delete
                       </Button>
-                    )}
+                    </InlineStack>
 
-                    <BlockStack gap="100">
-                      <Text variant="bodySm" fontWeight="semibold">Upsell Products</Text>
-                      <Button
-                        onClick={() => openProductPicker(rule.id, 'upsell')}
-                        variant="secondary"
-                      >
-                        Choose Upsell Products
-                      </Button>
+                    <Divider />
+
+                    <BlockStack gap="150">
+                      <BlockStack gap="100">
+                        <Text variant="bodySm" fontWeight="semibold">Trigger Type</Text>
+                        <InlineStack gap="200">
+                          <Checkbox
+                            label="Any product"
+                            checked={rule.triggerType === 'all'}
+                            onChange={() =>
+                              updateManualUpsellRule(rule.id, { triggerType: 'all' })
+                            }
+                          />
+                          <Checkbox
+                            label="Specific products"
+                            checked={rule.triggerType === 'specific'}
+                            onChange={() =>
+                              updateManualUpsellRule(rule.id, { triggerType: 'specific' })
+                            }
+                          />
+                        </InlineStack>
+                      </BlockStack>
+
+                      {rule.triggerType === 'specific' && (
+                        <Button
+                          onClick={() => openProductPicker(rule.id, 'trigger')}
+                          variant="secondary"
+                        >
+                          Choose Trigger Products
+                        </Button>
+                      )}
+
+                      <BlockStack gap="100">
+                        <Text variant="bodySm" fontWeight="semibold">Upsell Products</Text>
+                        <Button
+                          onClick={() => openProductPicker(rule.id, 'upsell')}
+                          variant="secondary"
+                        >
+                          Choose Upsell Products
+                        </Button>
+                      </BlockStack>
+
+                      <Card tone="info">
+                        <Text variant="bodySm">
+                          Trigger: {getTriggerSummary(rule)}
+                        </Text>
+                        <Text variant="bodySm">
+                          Upsell: {getUpsellSummary(rule)}
+                        </Text>
+                      </Card>
                     </BlockStack>
-
-                    <Card tone="info">
-                      <Text variant="bodySm">
-                        Trigger: {getTriggerSummary(rule)}
-                      </Text>
-                      <Text variant="bodySm">
-                        Upsell: {getUpsellSummary(rule)}
-                      </Text>
-                    </Card>
                   </BlockStack>
-                </BlockStack>
-              </Card>
-            ))}
+                </Card>
+              ))}
 
-            <Button
-              onClick={addManualUpsellRule}
-              variant="secondary"
-              fullWidth
-            >
-              + Add Rule
-            </Button>
-          </BlockStack>
-        </Modal.Section>
-      </Modal>
+              <Button
+                onClick={addManualUpsellRule}
+                variant="secondary"
+                fullWidth
+              >
+                + Add Rule
+              </Button>
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
 
-      {/* Modal: Product Picker */}
-      <Modal
-        open={showProductPickerModal}
-        onClose={() => setShowProductPickerModal(false)}
-        title={productPickerMode === 'trigger' ? 'Select Trigger Products' : 'Select Upsell Products'}
-        primaryAction={{
-          content: 'Done',
-          onAction: saveProductPickerSelection,
-        }}
-        secondaryActions={[
-          {
-            content: 'Cancel',
-            onAction: () => setShowProductPickerModal(false),
-          },
-        ]}
-      >
-        <Modal.Section>
-          <BlockStack gap="300">
-            <TextField
-              label="Search"
-              placeholder="Search products..."
-              value={productSearchQuery}
-              onChange={setProductSearchQuery}
-            />
+        {/* Modal: Product Picker */}
+        <Modal
+          open={showProductPickerModal}
+          onClose={() => setShowProductPickerModal(false)}
+          title={productPickerMode === 'trigger' ? 'Select Trigger Products' : 'Select Upsell Products'}
+          primaryAction={{
+            content: 'Done',
+            onAction: saveProductPickerSelection,
+          }}
+          secondaryActions={[
+            {
+              content: 'Cancel',
+              onAction: () => setShowProductPickerModal(false),
+            },
+          ]}
+        >
+          <Modal.Section>
+            <BlockStack gap="300">
+              <TextField
+                label="Search"
+                placeholder="Search products..."
+                value={productSearchQuery}
+                onChange={setProductSearchQuery}
+              />
 
-            {productPickerMode === 'trigger' && (
               <BlockStack gap="200">
                 <Text variant="bodySm" fontWeight="semibold">Collections</Text>
                 <BlockStack gap="100">
-                  {mockCollections.map(col => (
-                    <Checkbox
-                      key={col.id}
-                      label={`${col.title} (${col.productCount})`}
-                      checked={tempSelectedCollectionIds.includes(col.id)}
-                      onChange={(checked) => {
-                        if (checked) {
-                          setTempSelectedCollectionIds([...tempSelectedCollectionIds, col.id]);
-                        } else {
-                          setTempSelectedCollectionIds(
-                            tempSelectedCollectionIds.filter(id => id !== col.id)
-                          );
-                        }
-                      }}
-                    />
-                  ))}
+                  {mockCollections
+                    .filter(col => col.title.toLowerCase().includes((productSearchQuery || '').toLowerCase()))
+                    .map(col => (
+                      <Checkbox
+                        key={col.id}
+                        label={`${col.title} (${col.productCount})`}
+                        checked={tempSelectedCollectionIds.includes(col.id)}
+                        onChange={(checked) => {
+                          if (checked) {
+                            setTempSelectedCollectionIds([...tempSelectedCollectionIds, col.id]);
+                          } else {
+                            setTempSelectedCollectionIds(
+                              tempSelectedCollectionIds.filter(id => id !== col.id)
+                            );
+                          }
+                        }}
+                      />
+                    ))}
+                  {mockCollections.filter(col => col.title.toLowerCase().includes((productSearchQuery || '').toLowerCase())).length === 0 && (
+                    <Text variant="bodySm" tone="subdued">No collections found</Text>
+                  )}
                 </BlockStack>
               </BlockStack>
-            )}
 
-            <BlockStack gap="200">
-              <Text variant="bodySm" fontWeight="semibold">Products</Text>
-              <BlockStack gap="100">
-                {SAMPLE_UPSELL_PRODUCTS.map(prod => (
-                  <Checkbox
-                    key={prod.id}
-                    label={`${prod.title} ($${prod.price})`}
-                    checked={tempSelectedProductIds.includes(prod.id)}
-                    onChange={(checked) => {
-                      if (checked) {
-                        setTempSelectedProductIds([...tempSelectedProductIds, prod.id]);
-                      } else {
-                        setTempSelectedProductIds(
-                          tempSelectedProductIds.filter(id => id !== prod.id)
-                        );
-                      }
-                    }}
-                  />
-                ))}
+              <BlockStack gap="200">
+                <Text variant="bodySm" fontWeight="semibold">Products</Text>
+                <BlockStack gap="100">
+                  {(loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts)
+                    .filter(p => p.title.toLowerCase().includes((productSearchQuery || '').toLowerCase()))
+                    .map(prod => (
+                      <Checkbox
+                        key={prod.id}
+                        label={`${prod.title} (₹${prod.price})`}
+                        checked={tempSelectedProductIds.includes(prod.id)}
+                        onChange={(checked) => {
+                          if (checked) {
+                            setTempSelectedProductIds([...tempSelectedProductIds, prod.id]);
+                          } else {
+                            setTempSelectedProductIds(
+                              tempSelectedProductIds.filter(id => id !== prod.id)
+                            );
+                          }
+                        }}
+                      />
+                    ))}
+                  {(loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts)
+                    .filter(p => p.title.toLowerCase().includes((productSearchQuery || '').toLowerCase())).length === 0 && (
+                      <Text variant="bodySm" tone="subdued">No products found</Text>
+                    )}
+                </BlockStack>
               </BlockStack>
+
+              {(tempSelectedProductIds.length > 0 || tempSelectedCollectionIds.length > 0) && (
+                <BlockStack gap="100">
+                  <Text variant="bodySm" fontWeight="semibold">Selected ({tempSelectedProductIds.length + tempSelectedCollectionIds.length})</Text>
+                  <InlineStack gap="100" wrap>
+                    {tempSelectedCollectionIds.map(id => {
+                      const collection = mockCollections.find(c => c.id === id);
+                      return (
+                        <Tag key={id} onRemove={() =>
+                          setTempSelectedCollectionIds(
+                            tempSelectedCollectionIds.filter(cid => cid !== id)
+                          )
+                        }>
+                          {collection?.title || id}
+                        </Tag>
+                      );
+                    })}
+                    {tempSelectedProductIds.map(id => {
+                      const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === id);
+                      return (
+                        <Tag key={id} onRemove={() =>
+                          setTempSelectedProductIds(
+                            tempSelectedProductIds.filter(pid => pid !== id)
+                          )
+                        }>
+                          {product?.title || id}
+                        </Tag>
+                      );
+                    })}
+                  </InlineStack>
+                </BlockStack>
+              )}
             </BlockStack>
+          </Modal.Section>
+        </Modal>
 
-            {(tempSelectedProductIds.length > 0 || tempSelectedCollectionIds.length > 0) && (
-              <BlockStack gap="100">
-                <Text variant="bodySm" fontWeight="semibold">Selected ({tempSelectedProductIds.length + tempSelectedCollectionIds.length})</Text>
-                <InlineStack gap="100" wrap>
-                  {tempSelectedCollectionIds.map(id => {
-                    const collection = mockCollections.find(c => c.id === id);
-                    return (
-                      <Badge key={id} onRemove={() =>
-                        setTempSelectedCollectionIds(
-                          tempSelectedCollectionIds.filter(cid => cid !== id)
-                        )
-                      }>
-                        {collection?.title || id}
-                      </Badge>
-                    );
-                  })}
-                  {tempSelectedProductIds.map(id => {
-                    const product = SAMPLE_UPSELL_PRODUCTS.find(p => p.id === id);
-                    return (
-                      <Badge key={id} onRemove={() =>
-                        setTempSelectedProductIds(
-                          tempSelectedProductIds.filter(pid => pid !== id)
-                        )
-                      }>
-                        {product?.title || id}
-                      </Badge>
-                    );
-                  })}
-                </InlineStack>
-              </BlockStack>
-            )}
-          </BlockStack>
-        </Modal.Section>
-      </Modal>
+        {/* LEFT SIDEBAR */}
+        {renderLeftSidebar()}
 
-      {/* LEFT SIDEBAR */}
-      {renderLeftSidebar()}
-
-      {/* MIDDLE PANEL - EDITOR */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', borderRight: '1px solid #e5e7eb', backgroundColor: '#f6f6f7' }}>
-        {renderEditorPanel()}
-      </div>
-
-      {/* RIGHT PANEL - PREVIEW */}
-      <div style={{ width: '480px', height: '100vh', overflow: 'hidden', backgroundColor: '#fff' }}>
-        <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
-          <Text variant="headingSm" as="h2">Live Preview</Text>
+        {/* MIDDLE PANEL - EDITOR */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', borderRight: '1px solid #e5e7eb', backgroundColor: '#f6f6f7' }}>
+          {renderEditorPanel()}
         </div>
-        <div style={{ height: 'calc(100vh - 49px)', overflow: 'hidden' }}>
-          {renderCartPreview()}
+
+        {/* RIGHT PANEL - PREVIEW */}
+        <div style={{ width: '480px', height: '100vh', overflow: 'hidden', backgroundColor: '#fff' }}>
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
+            <Text variant="headingSm" as="h2">Live Preview</Text>
+          </div>
+          <div style={{ height: 'calc(100vh - 49px)', overflow: 'hidden' }}>
+            {renderCartPreview()}
+          </div>
         </div>
-      </div>
       </div>
     </Frame>
   );

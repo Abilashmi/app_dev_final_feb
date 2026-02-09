@@ -73,3 +73,13 @@ model UpsellRule {
   @@index([shop])
   @@index([ruleType])
 }
+
+model WidgetSettings {
+  id          String   @id @default(uuid())
+  shop        String   @unique
+  coupons     String   // JSON string
+  fbt         String   // JSON string
+  progressBar String?  // JSON string - Added for Cart Drawer sync
+  upsell      String?  // JSON string - Added for Cart Drawer sync
+  updatedAt   DateTime @updatedAt
+}

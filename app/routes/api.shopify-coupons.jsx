@@ -6,7 +6,7 @@ import { authenticate } from "../shopify.server";
 export async function loader({ request }) {
   try {
     const { session, admin } = await authenticate.admin(request);
-    
+
     if (!admin) {
       // Fallback: return sample coupons if not authenticated
       return new Response(JSON.stringify({
@@ -79,12 +79,15 @@ export async function loader({ request }) {
                   startsAt
                   endsAt
                   codes(first: 1) { edges { node { code } } }
+                  asyncUsageCount
+                  usageLimit
                 }
                 ... on DiscountAutomaticBasic {
                   title
                   status
                   startsAt
                   endsAt
+                  asyncUsageCount
                 }
                 ... on DiscountCodeBxgy {
                   title
@@ -92,12 +95,15 @@ export async function loader({ request }) {
                   startsAt
                   endsAt
                   codes(first: 1) { edges { node { code } } }
+                  asyncUsageCount
+                  usageLimit
                 }
                 ... on DiscountAutomaticBxgy {
                   title
                   status
                   startsAt
                   endsAt
+                  asyncUsageCount
                 }
                 ... on DiscountCodeFreeShipping {
                   title
@@ -105,12 +111,15 @@ export async function loader({ request }) {
                   startsAt
                   endsAt
                   codes(first: 1) { edges { node { code } } }
+                  asyncUsageCount
+                  usageLimit
                 }
                 ... on DiscountAutomaticFreeShipping {
                   title
                   status
                   startsAt
                   endsAt
+                  asyncUsageCount
                 }
               }
             }
@@ -118,60 +127,14 @@ export async function loader({ request }) {
         }
       }
     `;
-    
+
     const gqlRes = await admin.graphql(query);
     const data = await gqlRes.json();
 
     if (data.errors) {
       // Fallback: return sample coupons if Shopify API access denied
       return new Response(JSON.stringify({
-        coupons: [
-          {
-            id: 'sample-1',
-            heading: '10% Off All Products',
-            subtext: 'Save 10% on your entire order',
-            code: 'SAVE10',
-            type: 'DiscountCodeBasic',
-            status: 'ACTIVE',
-            starts_at: '2026-01-01T00:00:00Z',
-            ends_at: '2026-12-31T23:59:59Z',
-            sectionBg: '#f6f6f7',
-            headingColor: '#000000',
-            subtextColor: '#6d7175',
-            couponBg: '#000000',
-            codeColor: '#ffffff',
-          },
-          {
-            id: 'sample-2',
-            heading: 'Buy 1 Get 1 Free',
-            subtext: 'BOGO on select items',
-            code: 'BOGO',
-            type: 'DiscountCodeBxgy',
-            status: 'SCHEDULED',
-            starts_at: '2026-03-01T00:00:00Z',
-            ends_at: '2026-03-31T23:59:59Z',
-            sectionBg: '#f6f6f7',
-            headingColor: '#000000',
-            subtextColor: '#6d7175',
-            couponBg: '#000000',
-            codeColor: '#ffffff',
-          },
-          {
-            id: 'sample-3',
-            heading: 'Free Shipping',
-            subtext: 'On orders over $50',
-            code: 'FREESHIP',
-            type: 'DiscountCodeFreeShipping',
-            status: 'EXPIRED',
-            starts_at: '2025-01-01T00:00:00Z',
-            ends_at: '2025-12-31T23:59:59Z',
-            sectionBg: '#f6f6f7',
-            headingColor: '#000000',
-            subtextColor: '#6d7175',
-            couponBg: '#000000',
-            codeColor: '#ffffff',
-          },
-        ],
+        coupons: [],
         error: data.errors[0]?.message || "Shopify API error",
         success: false
       }), {
@@ -196,6 +159,8 @@ export async function loader({ request }) {
           status: d.status || '',
           starts_at: d.startsAt || '',
           ends_at: d.endsAt || '',
+          used: d.asyncUsageCount || 0,
+          limit: d.usageLimit || null,
           sectionBg: "#f6f6f7",
           headingColor: "#000000",
           subtextColor: "#6d7175",

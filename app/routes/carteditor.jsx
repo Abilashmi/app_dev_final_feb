@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useLoaderData, useFetcher } from 'react-router-dom';
 import classNames from 'classnames';
-import { sampleCoupons } from './api.cart-settings';
+import { sampleCoupons } from '../services/api.cart-settings.shared';
 
 // The loader now gets the initial sample coupons
 export async function loader() {
@@ -20,14 +20,14 @@ export default function CartEditor() {
     const { name, type, checked, value } = e.target;
 
     if (name.startsWith('progressBar.') || name.startsWith('couponSlider.') || name.startsWith('upsellProducts.')) {
-        const [parent, child] = name.split('.');
-        setSettings((prev) => ({
-            ...prev,
-            [parent]: {
-                ...prev[parent],
-                [child]: type === 'checkbox' ? checked : (type === 'number' ? parseFloat(value) : value),
-            },
-        }));
+      const [parent, child] = name.split('.');
+      setSettings((prev) => ({
+        ...prev,
+        [parent]: {
+          ...prev[parent],
+          [child]: type === 'checkbox' ? checked : (type === 'number' ? parseFloat(value) : value),
+        },
+      }));
     } else if (type === 'checkbox') {
       setSettings((prev) => ({
         ...prev,
@@ -48,7 +48,7 @@ export default function CartEditor() {
       { method: 'post', action: '/api/cart-settings' }
     );
   };
-  
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">Cart Drawer Customizer</h1>

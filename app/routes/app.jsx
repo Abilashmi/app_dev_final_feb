@@ -21,7 +21,7 @@ export default function App() {
         <s-app-nav>
           <s-link href="/app">Home</s-link>
           <s-link href="/app/analytics">Analytics</s-link>
-          <s-link href="/app/createcoupon">Create coupons</s-link>
+          <s-link href="/app/discount">Create coupons</s-link>
           <s-link href="/app/productwidget">Productwidget</s-link>
           <s-link href="/app/cartdrawer">Cartdrawer Editor</s-link>
           <s-link href="/app/Plan">Plan</s-link>

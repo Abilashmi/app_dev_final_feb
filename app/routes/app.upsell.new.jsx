@@ -25,18 +25,18 @@ import {
   saveUpsellConfig,
   SAMPLE_UPSELL_PRODUCTS,
   trackUpsellEvent,
-} from './api.cart-settings';
+} from '../services/api.cart-settings.shared';
 
 /**
  * Rule Card Component - Reusable for all three rules
  */
-function RuleCard({ 
-  title, 
-  description, 
-  ruleKey, 
-  config, 
+function RuleCard({
+  title,
+  description,
+  ruleKey,
+  config,
   onConfigChange,
-  children 
+  children
 }) {
   const isEnabled = config[ruleKey]?.enabled || false;
 
@@ -374,7 +374,7 @@ export default function UpsellPage() {
       setToastError(false);
       setToastMessage('✅ Upsell configuration saved successfully!');
       setInitialConfig(config);
-      
+
       try {
         trackUpsellEvent('upsell_config_saved', {
           rule1Enabled: config.rule1?.enabled,
