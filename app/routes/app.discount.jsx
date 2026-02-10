@@ -107,9 +107,9 @@ export default function AppDiscounts() {
 
   return (
     <Page
-      title="Discounts"
+      title="Coupon"
       primaryAction={{
-        content: "Create discount",
+        content: "Create Coupon",
         onAction: () => navigate("/app/discounts/create"),
       }}
     >
@@ -140,7 +140,7 @@ export default function AppDiscounts() {
           itemCount={filteredCoupons.length}
           selectable={false}
           headings={[
-            { title: "Title" },
+            { title: "Applies to" },
             { title: "Code" },
             { title: "Type" },
             { title: "Status" },
@@ -159,7 +159,9 @@ export default function AppDiscounts() {
               }
             >
               <IndexTable.Cell>
-                <Text fontWeight="medium">{coupon.heading}</Text>
+                <Text variant="bodySm" tone="subdued">
+                  {coupon.subtext || "All products"}
+                </Text>
               </IndexTable.Cell>
 
               <IndexTable.Cell>
@@ -193,6 +195,6 @@ export default function AppDiscounts() {
           ))}
         </IndexTable>
       </Card>
-    </Page>
+    </Page >
   );
 }

@@ -67,7 +67,7 @@ export async function loader({ request }) {
     // Try to fetch from Shopify API
     const query = `
       query DiscountDashboardList {
-        discountNodes(first: 50) {
+        discountNodes(first: 50, reverse: true) {
           edges {
             node {
               id
@@ -79,6 +79,7 @@ export async function loader({ request }) {
                   startsAt
                   endsAt
                   codes(first: 1) { edges { node { code } } }
+                  summary
                   asyncUsageCount
                   usageLimit
                 }
@@ -87,6 +88,7 @@ export async function loader({ request }) {
                   status
                   startsAt
                   endsAt
+                  summary
                   asyncUsageCount
                 }
                 ... on DiscountCodeBxgy {
@@ -95,6 +97,7 @@ export async function loader({ request }) {
                   startsAt
                   endsAt
                   codes(first: 1) { edges { node { code } } }
+                  summary
                   asyncUsageCount
                   usageLimit
                 }
@@ -103,6 +106,7 @@ export async function loader({ request }) {
                   status
                   startsAt
                   endsAt
+                  summary
                   asyncUsageCount
                 }
                 ... on DiscountCodeFreeShipping {
@@ -111,6 +115,7 @@ export async function loader({ request }) {
                   startsAt
                   endsAt
                   codes(first: 1) { edges { node { code } } }
+                  summary
                   asyncUsageCount
                   usageLimit
                 }
@@ -119,6 +124,7 @@ export async function loader({ request }) {
                   status
                   startsAt
                   endsAt
+                  summary
                   asyncUsageCount
                 }
               }
@@ -153,7 +159,7 @@ export async function loader({ request }) {
         return {
           id: node.id,
           heading: d.title,
-          subtext: '',
+          subtext: d.summary || '',
           code: code || d.title,
           type: d.__typename,
           status: d.status || '',
