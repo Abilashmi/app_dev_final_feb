@@ -182,52 +182,35 @@ const mockProducts = [
 const mockApi = {
   getCartData: async () => {
     try {
-      const response = await fetch('/api/cart-settings/cart-data', {
-        headers: {
-          'X-Shop-ID': SHOP_ID,
-        },
-      });
-      return response.json();
+      const response = await fetch(`/api/cart-settings?shop=${SHOP_ID}`);
+      const data = await response.json();
+      return data.cartData || mockCartData;
     } catch {
       return mockCartData;
     }
   },
   getMilestones: async (mode = 'amount') => {
     try {
-      const response = await fetch('/api/cart-settings/milestones', {
-        headers: {
-          'X-Shop-ID': SHOP_ID,
-          'X-Mode': mode,
-        },
-      });
-      return response.json();
+      const response = await fetch(`/api/cart-settings?shop=${SHOP_ID}`);
+      const data = await response.json();
+      const progressBar = data.settings?.progressBar;
+      if (progressBar) {
+        return progressBar.tiers;
+      }
+      return mode === 'amount' ? mockMilestones : mockQuantityMilestones;
     } catch {
       return mode === 'amount' ? mockMilestones : mockQuantityMilestones;
     }
   },
   getProducts: async (productIds) => {
-    try {
-      const response = await fetch('/api/cart-settings/products', {
-        method: 'POST',
-        headers: {
-          'X-Shop-ID': SHOP_ID,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ productIds }),
-      });
-      return response.json();
-    } catch {
-      return mockProducts.filter(p => productIds.includes(p.id));
-    }
+    // Return from local mock for simplicity in this demo pick
+    return mockProducts.filter(p => productIds.includes(p.id));
   },
   getShopifyProducts: async () => {
     try {
-      const response = await fetch('/api/cart-settings/shopify-products', {
-        headers: {
-          'X-Shop-ID': SHOP_ID,
-        },
-      });
-      return response.json();
+      const response = await fetch(`/api/cart-settings?shop=${SHOP_ID}`);
+      const data = await response.json();
+      return data.shopifyProducts || shopifyProducts;
     } catch {
       return shopifyProducts;
     }
@@ -413,8 +396,7 @@ const CouponPreview = ({ styleKey }) => {
           display: 'flex',
           alignItems: 'center',
           gap: '10px',
-          position: 'relative',
-          overflow: 'hidden'
+          position: 'relative'
         }}
       >
         <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: dummyCoupon.backgroundColor }}></div>
@@ -692,7 +674,7 @@ export default function CartDrawerAdmin() {
   // Feature enable states
   const [featureStates, setFeatureStates] = useState({
     progressBarEnabled: true,
-    couponSliderEnabled: false,
+    couponSliderEnabled: true,
     upsellEnabled: false,
   });
 
@@ -847,7 +829,7 @@ export default function CartDrawerAdmin() {
 
           // 1. Update Coupons
           if (coupons && coupons.length > 0) {
-            setAllCoupons(coupons);
+            setAllCoupons(coupons || []);
             setActiveCouponTab(coupons[0].id);
             setEditingCoupon(JSON.parse(JSON.stringify(coupons[0])));
             setOriginalCoupon(JSON.parse(JSON.stringify(coupons[0])));
@@ -886,6 +868,14 @@ export default function CartDrawerAdmin() {
             setCouponPosition(settings.coupons.position || 'top');
             setCouponLayout(settings.coupons.layout || 'grid');
             setCouponAlignment(settings.coupons.alignment || 'horizontal');
+          }
+
+          // 6. Update Product & Cart Data
+          if (data.shopifyProducts) {
+            setLoadedShopifyProducts(data.shopifyProducts);
+          }
+          if (data.cartData) {
+            setCartData(data.cartData);
           }
         }
       } catch (error) {
@@ -1145,15 +1135,14 @@ export default function CartDrawerAdmin() {
 
       // Save to API route
       try {
-        console.log('[Coupon] Sending POST to /api/cart-settings/coupons');
-        const response = await fetch('/api/cart-settings/coupons', {
+        console.log('[Coupon] Sending POST to /api/cart-settings?action=coupons');
+        const response = await fetch('/api/cart-settings?action=coupons', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-Shop-ID': SHOP_ID,
           },
           body: JSON.stringify({
-            coupon: editingCoupon,
             allCoupons: updated,
           }),
         });
@@ -1195,14 +1184,19 @@ export default function CartDrawerAdmin() {
     setIsSaving(true);
     try {
       console.log('[Style] Saving selected style:', selectedCouponStyle);
-      const url = `/api/cart-settings?action=save-style`;
+      const url = `/api/cart-settings?action=coupon-style`;
       const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Shop-ID': SHOP_ID,
         },
-        body: JSON.stringify({ style: selectedCouponStyle }),
+        body: JSON.stringify({
+          selectedStyle: selectedCouponStyle,
+          position: couponPosition,
+          layout: couponLayout,
+          alignment: couponAlignment
+        }),
       });
 
       if (!response.ok) {
@@ -1343,7 +1337,7 @@ export default function CartDrawerAdmin() {
   const handleSaveProgressBarSettings = async () => {
     try {
       console.log('[Progress] Saving settings:', progressBarSettings);
-      const response = await fetch(`/api/cart-settings/progress-bar?shop=${SHOP_ID}`, {
+      const response = await fetch(`/api/cart-settings?action=progress-bar`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1399,7 +1393,7 @@ export default function CartDrawerAdmin() {
       console.log('[Upsell] Saving upsell rules via API');
 
       // Save to API route
-      const response = await fetch('/api/cart-settings/upsell', {
+      const response = await fetch('/api/cart-settings?action=upsell', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1411,7 +1405,7 @@ export default function CartDrawerAdmin() {
       console.log('[Upsell] Response status:', response.status);
 
       if (!response.ok) {
-        throw new Error(`Failed to save upsell rules: ${response.status}`);
+        throw new Error(`Failed to save upsell: ${response.status}`);
       }
 
       const result = await response.json();
@@ -2160,7 +2154,7 @@ export default function CartDrawerAdmin() {
                     </div>
 
                     <div style={{ marginTop: '8px' }}>
-                      <Text tone="subdued">{COUPON_STYLE_METADATA[selectedCouponStyle].description}</Text>
+                      <Text tone="subdued">{COUPON_STYLE_METADATA[selectedCouponStyle].description}dfkwuhew0</Text>
                     </div>
                     {/* Save Button for Style */}
                     <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
@@ -2854,7 +2848,7 @@ export default function CartDrawerAdmin() {
                 border: 'none',
                 marginBottom: '20px',
                 position: 'relative',
-                overflow: 'hidden'
+
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <Text as="p" fontWeight="bold" variant="headingSm">

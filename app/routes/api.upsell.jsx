@@ -4,8 +4,6 @@
  * POST /api/upsell - Save upsell configuration
  * GET /api/upsell/products - Get available upsell products
  */
-
-
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 import {
