@@ -1344,7 +1344,7 @@ export default function CartDrawerAdmin() {
           'X-Shop-ID': SHOP_ID
         },
         body: JSON.stringify({
-          settings: progressBarSettings,
+          ...progressBarSettings,
           enabled: featureStates.progressBarEnabled,
           mode: progressMode
         })
@@ -1669,11 +1669,11 @@ export default function CartDrawerAdmin() {
   const renderEditorPanel = () => {
     // Progress Bar Editor
     if (selectedTab === 'progress-bar') {
-      const activeTier = progressBarSettings.tiers[activeTierIndex];
-      const isCartTotal = progressBarSettings.rewardsCalculation[0] === 'cartTotal';
+      const activeTier = progressBarSettings?.tiers?.[activeTierIndex];
+      const isCartTotal = (progressBarSettings?.rewardsCalculation?.[0] || 'cartTotal') === 'cartTotal';
 
       // Prepare tabs for tiers
-      const tierTabs = progressBarSettings.tiers.map((tier, index) => ({
+      const tierTabs = (progressBarSettings?.tiers || []).map((tier, index) => ({
         id: `tier-${index}`,
         content: `Tier ${index + 1}`,
         panelID: `tier-panel-${index}`,
@@ -1683,7 +1683,7 @@ export default function CartDrawerAdmin() {
       const currentValue = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
 
       // Derive milestones for LIVE editor updates
-      const liveMilestones = progressBarSettings.tiers.map(tier => ({
+      const liveMilestones = (progressBarSettings?.tiers || []).map(tier => ({
         id: tier.id,
         target: tier.minValue,
         label: progressMode === 'amount' ? `₹${tier.minValue}` : `${tier.minValue} items`,
@@ -1899,7 +1899,7 @@ export default function CartDrawerAdmin() {
 
                 {/* Tier Tabs */}
                 <div style={{ borderBottom: '1px solid #e5e7eb', display: 'flex', gap: '0' }}>
-                  {progressBarSettings.tiers.map((tier, idx) => (
+                  {(progressBarSettings?.tiers || []).map((tier, idx) => (
                     <button
                       key={tier.id}
                       onClick={() => setActiveTierIndex(idx)}
