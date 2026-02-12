@@ -19,3 +19,17 @@ export async function sendToFakeApi(data) {
         backendId: `backend_${Math.random().toString(36).substr(2, 9)}`,
     };
 }
+
+/**
+ * Returns simulated tier data for the progress bar.
+ */
+export async function getTierData() {
+    return {
+        id: "tier-fake-1",
+        rewardType: "product",
+        minValue: 3,
+        description: "Admin Reward",
+        titleBeforeAchieving: "Add {COUNT} more for Admin Reward",
+        products: ["REAL_PRODUCT_PLACEHOLDER"],
+    };
+}

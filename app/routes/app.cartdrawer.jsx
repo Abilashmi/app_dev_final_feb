@@ -290,11 +290,12 @@ function ProductPicker({
   label,
   selected,
   onChange,
+  products,
   maxSelect = null,
   showCount = true,
 }) {
   const selectedProducts = selected
-    .map((id) => (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find((p) => p.id === id))
+    .map((id) => products.find((p) => p.id === id))
     .filter((p) => p !== undefined);
 
   return (
@@ -312,20 +313,26 @@ function ProductPicker({
       </InlineStack>
 
       <BlockStack gap="150">
-        {(loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).map((product) => (
+        {products.map((product) => (
           <div
             key={product.id}
             style={{
               padding: '12px',
               border: selected.includes(product.id)
-                ? '2px solid #0070f3'
-                : '1px solid #e5e7eb',
-              borderRadius: '6px',
+                ? '2px solid #2c6ecb'
+                : '1px solid #f1f5f9',
+              borderRadius: '12px',
               backgroundColor: selected.includes(product.id)
                 ? '#f0f7ff'
                 : '#ffffff',
               cursor: 'pointer',
               transition: 'all 0.2s ease',
+              boxShadow: selected.includes(product.id)
+                ? '0 4px 12px rgba(44, 110, 203, 0.1)'
+                : '0 2px 4px rgba(0,0,0,0.02)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
             }}
             onClick={() => {
               if (selected.includes(product.id)) {
@@ -337,46 +344,57 @@ function ProductPicker({
               }
             }}
           >
-            <InlineStack gap="200" align="center">
-              <div
-                style={{
-                  width: '50px',
-                  height: '50px',
-                  backgroundColor: '#f3f4f6',
-                  borderRadius: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  flexShrink: 0,
-                }}
-              >
-                {product.image ? (
-                  <img
-                    src={product.image}
-                    alt={product.title}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <Text tone="subdued" variant="bodySm">
-                    No Image
-                  </Text>
-                )}
-              </div>
-              <BlockStack gap="050" style={{ flex: 1 }}>
-                <Text fontWeight="semibold" variant="bodySm">
+            <div style={{
+              width: '56px',
+              height: '56px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              border: '1px solid #f1f5f9',
+              flexShrink: 0
+            }}>
+              {product.image && (product.image.startsWith('http') || product.image.startsWith('//')) ? (
+                <img src={product.image} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ fontSize: '24px' }}>{product.image || '📦'}</span>
+              )}
+            </div>
+
+            <BlockStack gap="050" style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                overflow: 'hidden',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                wordBreak: 'break-word'
+              }}>
+                <Text fontWeight="bold" variant="bodyMd">
                   {product.title}
                 </Text>
-                <Text tone="subdued" variant="bodySm">
-                  ₹{product.price}
-                </Text>
-              </BlockStack>
-              {selected.includes(product.id) && (
-                <Text as="span" tone="success">
-                  ✓
-                </Text>
-              )}
-            </InlineStack>
+              </div>
+              <Text tone="subdued" variant="bodySm">
+                ₹{product.price}
+              </Text>
+            </BlockStack>
+
+            {selected.includes(product.id) && (
+              <div style={{
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                backgroundColor: '#2c6ecb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontSize: '14px'
+              }}>
+                ✓
+              </div>
+            )}
           </div>
         ))}
       </BlockStack>
@@ -571,9 +589,9 @@ const CouponPreview = ({ styleKey }) => {
   );
 };
 
-function SelectedProductsDisplay({ productIds, label }) {
+function SelectedProductsDisplay({ productIds, label, products }) {
   const selectedProducts = productIds
-    .map((id) => (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find((p) => p.id === id))
+    .map((id) => products.find((p) => p.id === id))
     .filter((p) => p !== undefined);
 
   if (selectedProducts.length === 0) {
@@ -596,55 +614,57 @@ function SelectedProductsDisplay({ productIds, label }) {
       <Text as="p" fontWeight="semibold">
         {label}:
       </Text>
-      <BlockStack gap="100">
+      <BlockStack gap="150">
         {selectedProducts.map((product) => (
           <div
             key={product.id}
             style={{
               padding: '12px',
-              backgroundColor: '#f0f7ff',
-              border: '1px solid #0070f3',
-              borderRadius: '6px',
+              backgroundColor: '#fff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px',
               display: 'flex',
-              justifyContent: 'space-between',
               alignItems: 'center',
+              gap: '12px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
             }}
           >
-            <InlineStack gap="200" align="center">
-              <div
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  backgroundColor: '#e5eeff',
-                  borderRadius: '4px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                }}
-              >
-                {product.image ? (
-                  <img
-                    src={product.image}
-                    alt={product.title}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                ) : (
-                  <Text tone="subdued" variant="bodySm">
-                    No Image
-                  </Text>
-                )}
-              </div>
-              <BlockStack gap="050">
-                <Text fontWeight="semibold" variant="bodySm">
+            <div style={{
+              width: '48px',
+              height: '48px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              border: '1px solid #f1f5f9',
+              flexShrink: 0
+            }}>
+              {product.image && (product.image.startsWith('http') || product.image.startsWith('//')) ? (
+                <img src={product.image} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ fontSize: '20px' }}>{product.image || '📦'}</span>
+              )}
+            </div>
+
+            <BlockStack gap="050" style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                overflow: 'hidden',
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                wordBreak: 'break-word'
+              }}>
+                <Text fontWeight="bold" variant="bodySm">
                   {product.title}
                 </Text>
-                <Text tone="subdued" variant="bodySm">
-                  ₹{product.price}
-                </Text>
-              </BlockStack>
-            </InlineStack>
-            <Badge>{product.sku}</Badge>
+              </div>
+              <InlineStack gap="200" align="center">
+                <Text tone="subdued" variant="bodySm">₹{product.price}</Text>
+                <Badge tone="success">Selected</Badge>
+              </InlineStack>
+            </BlockStack>
           </div>
         ))}
       </BlockStack>
@@ -705,6 +725,7 @@ export default function CartDrawerAdmin() {
     borderRadius: 8,
     completionText: 'Free shipping unlocked!',
     rewardsCalculation: ['cartTotal'], // 'cartTotal' or 'cartQuantity'
+    maxTarget: 1000,
     tiers: [
       {
         id: 1,
@@ -886,6 +907,7 @@ export default function CartDrawerAdmin() {
           // 3. Update Progress Bar
           if (settings.progressBar) {
             setProgressBarSettings(settings.progressBar);
+            setProgressMode(settings.progressBar.mode || 'amount');
           }
 
           // 4. Update Upsell
@@ -1821,8 +1843,8 @@ export default function CartDrawerAdmin() {
         associatedProducts: tier.products || []
       })).sort((a, b) => a.target - b.target);
 
-      const highestMilestone = liveMilestones.length > 0 ? liveMilestones[liveMilestones.length - 1].target : 1000;
-      const progressPercent = calculateProgress(currentValue, highestMilestone);
+      const maxTargetSetting = progressBarSettings?.maxTarget || 1000;
+      const progressPercent = calculateProgress(currentValue, maxTargetSetting);
       const milestone = getActiveMilestone(currentValue, liveMilestones, progressMode);
 
       return (
@@ -1869,6 +1891,17 @@ export default function CartDrawerAdmin() {
                         onChange={() => updateProgressBarSetting('placement', 'bottom')}
                       />
                     </InlineStack>
+                  </BlockStack>
+                  <BlockStack gap="200">
+                    <Text variant="bodyMd" fontWeight="semibold">Max Scale (100% Goal)</Text>
+                    <TextField
+                      type="number"
+                      value={progressBarSettings.maxTarget || 1000}
+                      onChange={(value) => updateProgressBarSetting('maxTarget', Number(value))}
+                      suffix={progressMode === 'amount' ? '₹' : 'items'}
+                      autoComplete="off"
+                      helpText="The value at which the bar reaches 100% fullness."
+                    />
                   </BlockStack>
                 </BlockStack>
 
@@ -2996,7 +3029,7 @@ export default function CartDrawerAdmin() {
       associatedProducts: tier.products || []
     })).sort((a, b) => a.target - b.target);
 
-    const highestTarget = previewMilestones.length > 0 ? previewMilestones[previewMilestones.length - 1].target : 1000;
+    const maxTargetSetting = progressBarSettings.maxTarget || 1000;
 
     return (
       <div style={{ position: 'relative', height: '100%', backgroundColor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -3098,7 +3131,7 @@ export default function CartDrawerAdmin() {
                   {/* Foreground Fill */}
                   {(() => {
                     const currentVal = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
-                    const percentage = Math.min(100, (currentVal / highestTarget) * 100);
+                    const percentage = Math.min(100, (currentVal / maxTargetSetting) * 100);
 
                     return (
                       <div style={{
@@ -3125,7 +3158,7 @@ export default function CartDrawerAdmin() {
                   {previewMilestones.map((ms, idx) => {
                     const currentVal = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
                     const isCompleted = currentVal >= ms.target;
-                    const percent = Math.min(100, Math.max(0, (ms.target / highestTarget) * 100));
+                    const percent = Math.min(100, Math.max(0, (ms.target / maxTargetSetting) * 100));
 
                     // Icon logic based on text or generic
                     let icon = '🔒';
@@ -3246,6 +3279,139 @@ export default function CartDrawerAdmin() {
                 ))}
               </>
             )}
+
+            {/* Unlocked Rewards Section */}
+            {featureStates.progressBarEnabled && (() => {
+              const currentVal = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
+              const unlockedMilestones = previewMilestones.filter(ms => currentVal >= ms.target && ms.associatedProducts.length > 0);
+
+              if (unlockedMilestones.length === 0) return null;
+
+              return (
+                <div style={{
+                  padding: '16px',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0',
+                  marginTop: '12px',
+                  order: -1, // Show near the top
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                    <div style={{
+                      width: '32px',
+                      height: '32px',
+                      backgroundColor: '#10b981',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#fff',
+                      fontSize: '18px'
+                    }}>
+                      🎁
+                    </div>
+                    <Text variant="headingSm" as="h3">Unlocked Rewards</Text>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {unlockedMilestones.map(ms => (
+                      <div key={ms.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ width: '4px', height: '14px', backgroundColor: '#10b981', borderRadius: '2px' }} />
+                          <Text variant="bodySm" fontWeight="bold">{ms.rewardText}</Text>
+                        </div>
+
+                        <div style={{
+                          display: 'flex',
+                          gap: '12px',
+                          overflowX: 'auto',
+                          paddingBottom: '8px',
+                          paddingLeft: '4px',
+                          scrollbarWidth: 'none', // Hide scrollbar for clean look
+                          msOverflowStyle: 'none'
+                        }}>
+                          {ms.associatedProducts.map(productId => {
+                            const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
+                            if (!product) return null;
+                            return (
+                              <div key={product.id} style={{
+                                flexShrink: 0,
+                                width: '150px',
+                                backgroundColor: '#fff',
+                                borderRadius: '12px',
+                                border: '1px solid #f1f5f9',
+                                padding: '10px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                gap: '8px',
+                                position: 'relative',
+                                boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
+                              }}>
+                                {/* Free Badge */}
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '6px',
+                                  right: '6px',
+                                  backgroundColor: '#10b981',
+                                  color: '#fff',
+                                  padding: '2px 6px',
+                                  borderRadius: '6px',
+                                  fontSize: '9px',
+                                  fontWeight: '900',
+                                  boxShadow: '0 2px 4px rgba(16,185,129,0.2)',
+                                  zIndex: 2
+                                }}>
+                                  FREE
+                                </div>
+
+                                {/* Image */}
+                                <div style={{
+                                  width: '64px',
+                                  height: '64px',
+                                  backgroundColor: '#f8fafc',
+                                  borderRadius: '8px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  overflow: 'hidden',
+                                  border: '1px solid #f1f5f9'
+                                }}>
+                                  {product.image && (product.image.startsWith('http') || product.image.startsWith('//')) ? (
+                                    <img src={product.image} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  ) : (
+                                    <span style={{ fontSize: '24px' }}>{product.image || '📦'}</span>
+                                  )}
+                                </div>
+
+                                {/* Title */}
+                                <div style={{ width: '100%', textAlign: 'center' }}>
+                                  <p style={{
+                                    margin: 0,
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    color: '#0f172a',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                    lineHeight: '1.3',
+                                    minHeight: '2.6em' // Space for 2 lines
+                                  }}>
+                                    {product.title}
+                                  </p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Upsell Recommendations */}
             {upsellConfig.enabled && (!showEmpty || upsellConfig.showOnEmptyCart) && (() => {
@@ -3977,6 +4143,37 @@ export default function CartDrawerAdmin() {
               >
                 + Add Rule
               </Button>
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
+
+        {/* Modal: Progress Bar Product Picker */}
+        <Modal
+          open={showProductPicker}
+          onClose={() => setShowProductPicker(false)}
+          title="Select Reward Products"
+          primaryAction={{
+            content: 'Save Selection',
+            onAction: handleSaveSelectedProducts,
+          }}
+          secondaryActions={[
+            {
+              content: 'Cancel',
+              onAction: () => setShowProductPicker(false),
+            },
+          ]}
+        >
+          <Modal.Section>
+            <BlockStack gap="400">
+              <Text variant="bodyMd" tone="subdued">
+                Select products that will be shown as rewards for this milestone.
+              </Text>
+              <ProductPicker
+                label="Reward Products"
+                selected={selectedProductIds}
+                onChange={setSelectedProductIds}
+                products={loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts}
+              />
             </BlockStack>
           </Modal.Section>
         </Modal>
