@@ -161,6 +161,7 @@ const FAKE_FBT_CONFIG = {
         fbt1: {
             name: "Classic Grid",
             layout: "horizontal",
+            interactionType: "classic",
             bgColor: "#ffffff",
             textColor: "#111827",
             priceColor: "#059669",
@@ -174,6 +175,7 @@ const FAKE_FBT_CONFIG = {
         fbt2: {
             name: "Modern Cards",
             layout: "horizontal",
+            interactionType: "bundle",
             bgColor: "#f9fafb",
             textColor: "#374151",
             priceColor: "#dc2626",
@@ -187,6 +189,7 @@ const FAKE_FBT_CONFIG = {
         fbt3: {
             name: "Vertical List",
             layout: "vertical",
+            interactionType: "quickAdd",
             bgColor: "#ffffff",
             textColor: "#1f2937",
             priceColor: "#2563eb",
@@ -547,6 +550,176 @@ function FBTTemplatePreview({ templateKey, config, isActive, onSelect }) {
     );
 }
 
+// --- PRODUCT CARD (shared across interaction styles) ---
+
+function ProductCard({ product, template, interactionType, isSelected, isRequired, quantity, onToggle, onQuantityChange }) {
+    const cardBg = isSelected || quantity > 0 ? `${template.buttonColor}10` : `${template.borderColor}22`;
+    const cardBorder = isSelected || quantity > 0 ? `${template.buttonColor}44` : `${template.borderColor}44`;
+
+    return (
+        <div
+            style={{
+                width: template.layout === "vertical" ? "100%" : "140px",
+                display: "flex",
+                flexDirection: template.layout === "vertical" ? "row" : "column",
+                alignItems: "center",
+                gap: "10px",
+                padding: "10px",
+                borderRadius: "12px",
+                background: cardBg,
+                border: `1.5px solid ${cardBorder}`,
+                transition: "all 0.2s ease",
+                position: "relative",
+                overflow: "hidden",
+                boxSizing: "border-box",
+            }}
+        >
+            {/* Required badge for bundle */}
+            {interactionType === "bundle" && isRequired && (
+                <div style={{
+                    position: "absolute", top: "-8px", right: "-4px",
+                    padding: "2px 6px", borderRadius: "4px",
+                    background: template.buttonColor, color: template.buttonTextColor,
+                    fontSize: "9px", fontWeight: "700", letterSpacing: "0.5px",
+                }}>
+                    REQUIRED
+                </div>
+            )}
+
+            {/* Product image */}
+            <div style={{
+                width: "60px", height: "60px",
+                background: template.borderColor,
+                backgroundImage: product.image ? `url(${product.image})` : "none",
+                backgroundSize: "cover", backgroundPosition: "center",
+                borderRadius: "8px", flexShrink: 0,
+            }} />
+
+            {/* Product info */}
+            <div style={{
+                textAlign: template.layout === "vertical" ? "left" : "center",
+                flex: 1, minWidth: 0,
+            }}>
+                <div style={{
+                    color: template.textColor, fontSize: "12px", fontWeight: "600",
+                    whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    maxWidth: "100%",
+                }}>
+                    {product.title}
+                </div>
+                {template.showPrices && (
+                    <div style={{ color: template.priceColor, fontSize: "12px", fontWeight: "bold", marginTop: "2px" }}>
+                        ₹{parseFloat(product.price).toLocaleString("en-IN")}
+                    </div>
+                )}
+            </div>
+
+            {/* Interaction controls */}
+            <div style={{ flexShrink: 0 }}>
+                {interactionType === "classic" && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+                        style={{
+                            padding: "5px 12px",
+                            borderRadius: "6px",
+                            border: isSelected ? "none" : `1px solid ${template.buttonColor}`,
+                            background: isSelected ? template.buttonColor : "transparent",
+                            color: isSelected ? template.buttonTextColor : template.buttonColor,
+                            fontSize: "11px", fontWeight: "700",
+                            cursor: "pointer", transition: "all 0.2s",
+                            whiteSpace: "nowrap",
+                        }}
+                    >
+                        {isSelected ? "Added ✓" : "Add"}
+                    </button>
+                )}
+
+                {interactionType === "bundle" && (
+                    <div
+                        onClick={(e) => { e.stopPropagation(); if (!isRequired) onToggle(); }}
+                        style={{
+                            width: "20px", height: "20px",
+                            borderRadius: "4px",
+                            border: `2px solid ${isRequired ? template.buttonColor + '66' : template.buttonColor}`,
+                            background: isSelected ? template.buttonColor : "transparent",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            cursor: isRequired ? "not-allowed" : "pointer",
+                            transition: "all 0.2s", opacity: isRequired ? 0.7 : 1,
+                        }}
+                    >
+                        {isSelected && (
+                            <span style={{ color: template.buttonTextColor, fontSize: "12px", fontWeight: "bold" }}>✓</span>
+                        )}
+                    </div>
+                )}
+
+                {interactionType === "quickAdd" && (
+                    <>
+                        {quantity === 0 ? (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onQuantityChange(1); }}
+                                style={{
+                                    padding: "5px 14px",
+                                    borderRadius: "6px",
+                                    border: `1px solid ${template.buttonColor}`,
+                                    background: "transparent",
+                                    color: template.buttonColor,
+                                    fontSize: "11px", fontWeight: "700",
+                                    cursor: "pointer", transition: "all 0.2s",
+                                }}
+                            >
+                                Add
+                            </button>
+                        ) : (
+                            <div style={{
+                                display: "flex", alignItems: "center", gap: "0",
+                                borderRadius: "6px", overflow: "hidden",
+                                border: `1px solid ${template.buttonColor}`,
+                            }}>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onQuantityChange(quantity - 1); }}
+                                    style={{
+                                        width: "26px", height: "26px",
+                                        border: "none",
+                                        background: template.buttonColor,
+                                        color: template.buttonTextColor,
+                                        fontSize: "14px", fontWeight: "700",
+                                        cursor: "pointer", display: "flex",
+                                        alignItems: "center", justifyContent: "center",
+                                    }}
+                                >
+                                    −
+                                </button>
+                                <span style={{
+                                    width: "26px", textAlign: "center",
+                                    fontSize: "12px", fontWeight: "700",
+                                    color: template.textColor,
+                                }}>
+                                    {quantity}
+                                </span>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onQuantityChange(quantity + 1); }}
+                                    style={{
+                                        width: "26px", height: "26px",
+                                        border: "none",
+                                        background: template.buttonColor,
+                                        color: template.buttonTextColor,
+                                        fontSize: "14px", fontWeight: "700",
+                                        cursor: "pointer", display: "flex",
+                                        alignItems: "center", justifyContent: "center",
+                                    }}
+                                >
+                                    +
+                                </button>
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // --- COUPONS SECTION ---
 
 function CouponsSection({ config, onSave, saving }) {
@@ -760,6 +933,10 @@ function FBTSection({ config, products, onSave, saving }) {
     const [selectedUpsellProducts, setSelectedUpsellProducts] = useState([]);
     const [simulatedTriggerId, setSimulatedTriggerId] = useState("");
 
+    // --- Interaction state for preview ---
+    const [selectedProductIds, setSelectedProductIds] = useState(new Set());
+    const [productQuantities, setProductQuantities] = useState({});
+
     const handleModeChange = useCallback((value) => {
         setMode(value[0]);
     }, []);
@@ -806,6 +983,61 @@ function FBTSection({ config, products, onSave, saving }) {
 
     const getProductById = (id) => products.find((p) => p.id === id);
     const currentTemplate = templates[activeTemplate];
+    const interactionType = currentTemplate?.interactionType || "classic";
+
+    // Derive display products for preview
+    const activeRule = manualRules.find(r => r.triggerProductId === simulatedTriggerId);
+    const displayProducts = activeRule
+        ? activeRule.upsellProductIds.map(id => products.find(p => p.id === id)).filter(Boolean)
+        : products.slice(0, 3);
+
+    // Reset selection when interaction type or display products change
+    useEffect(() => {
+        if (interactionType === "classic") {
+            setSelectedProductIds(new Set(displayProducts.map(p => p.id)));
+            setProductQuantities({});
+        } else if (interactionType === "bundle") {
+            setSelectedProductIds(new Set(displayProducts.map(p => p.id)));
+            setProductQuantities({});
+        } else {
+            setSelectedProductIds(new Set());
+            const qtys = {};
+            displayProducts.forEach(p => { qtys[p.id] = 0; });
+            setProductQuantities(qtys);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [interactionType, activeTemplate, simulatedTriggerId]);
+
+    // Toggle selection (classic / bundle)
+    const handleToggleProduct = (productId) => {
+        setSelectedProductIds(prev => {
+            const next = new Set(prev);
+            if (next.has(productId)) {
+                if (interactionType === "bundle" && next.size <= 1) return prev;
+                next.delete(productId);
+            } else {
+                next.add(productId);
+            }
+            return next;
+        });
+    };
+
+    // Update quantity (quickAdd)
+    const handleQuantityChange = (productId, qty) => {
+        setProductQuantities(prev => ({ ...prev, [productId]: Math.max(0, qty) }));
+    };
+
+    // Total price calculation
+    const totalPrice = (() => {
+        if (interactionType === "quickAdd") {
+            return displayProducts.reduce((sum, p) => sum + (productQuantities[p.id] || 0) * parseFloat(p.price), 0);
+        }
+        return displayProducts.filter(p => selectedProductIds.has(p.id)).reduce((sum, p) => sum + parseFloat(p.price), 0);
+    })();
+
+    const selectedCount = interactionType === "quickAdd"
+        ? Object.values(productQuantities).filter(q => q > 0).length
+        : selectedProductIds.size;
 
     return (
         <BlockStack gap="400">
@@ -858,13 +1090,6 @@ function FBTSection({ config, products, onSave, saving }) {
                     <BlockStack gap="300">
                         <Text as="h3" variant="headingMd">Preview</Text>
                         {(() => {
-                            const activeRule = manualRules.find(r => r.triggerProductId === simulatedTriggerId);
-                            const displayProducts = activeRule
-                                ? activeRule.upsellProductIds.map(id => products.find(p => p.id === id)).filter(Boolean)
-                                : products.slice(0, 3);
-
-                            const totalPrice = displayProducts.reduce((sum, p) => sum + parseFloat(p.price), 0);
-
                             return (
                                 <div
                                     style={{
@@ -881,53 +1106,43 @@ function FBTSection({ config, products, onSave, saving }) {
                                         <div style={{ color: currentTemplate.textColor, fontWeight: "800", fontSize: "18px", letterSpacing: "-0.5px" }}>
                                             Frequently Bought Together
                                         </div>
+
+                                        {/* Style badge */}
+                                        <div>
+                                            <Badge tone="info" size="small">
+                                                {interactionType === "classic" ? "Classic" : interactionType === "bundle" ? "Bundle" : "Quick Add"}
+                                            </Badge>
+                                        </div>
+
                                         {simulatedTriggerId && !activeRule && (
                                             <Banner tone="info">No rules found for this product. Showing defaults.</Banner>
                                         )}
+
+                                        {/* Product cards */}
                                         <div style={{
                                             display: "flex",
                                             flexDirection: currentTemplate.layout === "vertical" ? "column" : "row",
-                                            gap: "16px",
-                                            alignItems: "center",
-                                            justifyContent: "center"
+                                            gap: "12px",
+                                            alignItems: currentTemplate.layout === "vertical" ? "stretch" : "flex-start",
+                                            justifyContent: "center",
+                                            flexWrap: "wrap",
                                         }}>
-                                            {displayProducts.map((p, i) => (
-                                                <React.Fragment key={p.id}>
-                                                    <div
-                                                        style={{
-                                                            width: currentTemplate.layout === "vertical" ? "100%" : "120px",
-                                                            display: "flex",
-                                                            flexDirection: currentTemplate.layout === "vertical" ? "row" : "column",
-                                                            alignItems: "center",
-                                                            gap: "12px",
-                                                            padding: "8px",
-                                                            borderRadius: "12px",
-                                                            background: `${currentTemplate.borderColor}22`,
-                                                            border: `1px solid ${currentTemplate.borderColor}44`,
-                                                        }}
-                                                    >
-                                                        <div style={{
-                                                            width: "60px",
-                                                            height: "60px",
-                                                            background: currentTemplate.borderColor,
-                                                            backgroundImage: p.image ? `url(${p.image})` : "none",
-                                                            backgroundSize: "cover",
-                                                            backgroundPosition: "center",
-                                                            borderRadius: "8px",
-                                                            flexShrink: 0
-                                                        }} />
-                                                        <div style={{ textAlign: currentTemplate.layout === "vertical" ? "left" : "center", flex: 1, minWidth: 0 }}>
-                                                            <div style={{ color: currentTemplate.textColor, fontSize: "13px", fontWeight: "600", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</div>
-                                                            {currentTemplate.showPrices && <div style={{ color: currentTemplate.priceColor, fontSize: "12px", fontWeight: "bold" }}>₹{p.price}</div>}
-                                                        </div>
-                                                    </div>
-                                                    {i < displayProducts.length - 1 && currentTemplate.layout === "horizontal" && (
-                                                        <div style={{ fontSize: "24px", color: currentTemplate.textColor, opacity: 0.3, fontWeight: "300" }}>+</div>
-                                                    )}
-                                                </React.Fragment>
+                                            {displayProducts.map((p) => (
+                                                <ProductCard
+                                                    key={p.id}
+                                                    product={p}
+                                                    template={currentTemplate}
+                                                    interactionType={interactionType}
+                                                    isSelected={selectedProductIds.has(p.id)}
+                                                    isRequired={interactionType === "bundle" && selectedProductIds.has(p.id) && selectedProductIds.size <= 1}
+                                                    quantity={productQuantities[p.id] || 0}
+                                                    onToggle={() => handleToggleProduct(p.id)}
+                                                    onQuantityChange={(qty) => handleQuantityChange(p.id, qty)}
+                                                />
                                             ))}
                                         </div>
 
+                                        {/* Footer: Total + Add All */}
                                         <div style={{
                                             display: "flex",
                                             justifyContent: "space-between",
@@ -937,13 +1152,15 @@ function FBTSection({ config, products, onSave, saving }) {
                                         }}>
                                             {currentTemplate.showPrices && (
                                                 <BlockStack gap="050">
-                                                    <Text variant="bodySm" tone="subdued">Total Price</Text>
+                                                    <Text variant="bodySm" tone="subdued">
+                                                        {selectedCount > 0 ? `Total (${selectedCount} item${selectedCount > 1 ? 's' : ''})` : 'Select items'}
+                                                    </Text>
                                                     <div style={{ color: currentTemplate.priceColor, fontWeight: "900", fontSize: "22px" }}>
                                                         ₹{totalPrice.toLocaleString("en-IN")}
                                                     </div>
                                                 </BlockStack>
                                             )}
-                                            {currentTemplate.showAddAllButton && (
+                                            {currentTemplate.showAddAllButton && selectedCount > 0 && (
                                                 <div
                                                     style={{
                                                         padding: "12px 24px",
@@ -958,7 +1175,7 @@ function FBTSection({ config, products, onSave, saving }) {
                                                         transition: "all 0.2s ease"
                                                     }}
                                                 >
-                                                    Add All to Cart
+                                                    Add {selectedCount} to Cart
                                                 </div>
                                             )}
                                         </div>
@@ -976,6 +1193,35 @@ function FBTSection({ config, products, onSave, saving }) {
                 <Card>
                     <BlockStack gap="400">
                         <Text as="h3" variant="headingMd">Customize: {currentTemplate.name}</Text>
+
+                        <Divider />
+
+                        <Text as="h4" variant="headingSm">Interaction Style</Text>
+                        <Select
+                            label="How customers interact with products"
+                            labelHidden
+                            options={[
+                                { label: "Classic — Individual Add / Remove", value: "classic" },
+                                { label: "Bundle — Minimum 1 Required", value: "bundle" },
+                                { label: "Quick Add — Quantity Stepper", value: "quickAdd" },
+                            ]}
+                            value={interactionType}
+                            onChange={(v) => updateTemplate("interactionType", v)}
+                        />
+
+                        <Divider />
+
+                        <Text as="h4" variant="headingSm">Layout Alignment</Text>
+                        <Select
+                            label="Product card alignment"
+                            labelHidden
+                            options={[
+                                { label: "Horizontal — Side by side", value: "horizontal" },
+                                { label: "Vertical — Stacked list", value: "vertical" },
+                            ]}
+                            value={currentTemplate.layout || "horizontal"}
+                            onChange={(v) => updateTemplate("layout", v)}
+                        />
 
                         <Divider />
 

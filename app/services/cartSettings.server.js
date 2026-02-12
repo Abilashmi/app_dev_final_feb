@@ -132,3 +132,29 @@ export function saveCoupons(data) {
   }
   return COUPONS;
 }
+
+// ==========================================
+// COUPON SELECTIONS (IDs + Overrides only)
+// ==========================================
+let COUPON_SELECTIONS = {
+  selectedCouponIds: [],
+  style: "style-2",
+  displaySettings: {
+    position: "top",
+    layout: "grid",
+    alignment: "horizontal",
+  },
+  couponOverrides: {},
+};
+
+export function getCouponSelections() {
+  return COUPON_SELECTIONS;
+}
+
+export function saveCouponSelections(data) {
+  COUPON_SELECTIONS = {
+    ...COUPON_SELECTIONS,
+    ...data,
+  };
+  return COUPON_SELECTIONS;
+}

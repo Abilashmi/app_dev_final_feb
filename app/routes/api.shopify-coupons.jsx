@@ -82,6 +82,12 @@ export async function loader({ request }) {
                   summary
                   asyncUsageCount
                   usageLimit
+                  customerGets {
+                    value {
+                      ... on DiscountPercentage { percentage }
+                      ... on DiscountAmount { amount { amount currencyCode } }
+                    }
+                  }
                 }
                 ... on DiscountAutomaticBasic {
                   title
@@ -90,6 +96,12 @@ export async function loader({ request }) {
                   endsAt
                   summary
                   asyncUsageCount
+                  customerGets {
+                    value {
+                      ... on DiscountPercentage { percentage }
+                      ... on DiscountAmount { amount { amount currencyCode } }
+                    }
+                  }
                 }
                 ... on DiscountCodeBxgy {
                   title
@@ -156,6 +168,29 @@ export async function loader({ request }) {
         if (d.codes && d.codes.edges.length > 0) {
           code = d.codes.edges[0].node.code;
         }
+
+        // Extract discount type and value
+        let discountType = 'fixed';
+        let discountValue = 0;
+        if (d.customerGets?.value) {
+          const val = d.customerGets.value;
+          if (val.percentage !== undefined) {
+            discountType = 'percentage';
+            discountValue = Math.round(val.percentage * 100);
+          } else if (val.amount) {
+            discountType = 'fixed';
+            discountValue = parseFloat(val.amount.amount);
+          }
+        }
+        if (d.__typename === 'DiscountCodeFreeShipping' || d.__typename === 'DiscountAutomaticFreeShipping') {
+          discountType = 'free_shipping';
+          discountValue = 0;
+        }
+        if (d.__typename === 'DiscountCodeBxgy' || d.__typename === 'DiscountAutomaticBxgy') {
+          discountType = 'bxgy';
+          discountValue = 0;
+        }
+
         return {
           id: node.id,
           heading: d.title,
@@ -167,6 +202,8 @@ export async function loader({ request }) {
           ends_at: d.endsAt || '',
           used: d.asyncUsageCount || 0,
           limit: d.usageLimit || null,
+          discountType,
+          discountValue,
           sectionBg: "#f6f6f7",
           headingColor: "#000000",
           subtextColor: "#6d7175",

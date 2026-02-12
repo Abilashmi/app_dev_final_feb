@@ -28,6 +28,8 @@ import {
   hsbToRgb,
   rgbToHsb,
   rgbToHex,
+  Banner,
+  Spinner,
 } from '@shopify/polaris';
 import {
   sampleCoupons,
@@ -738,6 +740,16 @@ export default function CartDrawerAdmin() {
   });
 
   // ==========================================
+  // ACTIVE COUPONS STATE (from Dashboard API)
+  // ==========================================
+  const [activeCouponsFromAPI, setActiveCouponsFromAPI] = useState([]);
+  const [selectedActiveCoupons, setSelectedActiveCoupons] = useState([]);
+  const [couponOverrides, setCouponOverrides] = useState({});
+  const [isLoadingActiveCoupons, setIsLoadingActiveCoupons] = useState(false);
+  const [activeCouponWarning, setActiveCouponWarning] = useState(null);
+  const [editingCouponSource, setEditingCouponSource] = useState(null); // 'sample' or 'active'
+
+  // ==========================================
   // UPSELL EDITOR STATE (RULE 1/2/3 CONFIG)
   // ==========================================
   const [upsellConfig, setUpsellConfig] = useState({
@@ -827,12 +839,22 @@ export default function CartDrawerAdmin() {
         if (data.success && data.settings) {
           const { settings, coupons } = data;
 
-          // 1. Update Coupons
+          // 1. Update Coupons (Normalize data from backend)
           if (coupons && coupons.length > 0) {
-            setAllCoupons(coupons || []);
-            setActiveCouponTab(coupons[0].id);
-            setEditingCoupon(JSON.parse(JSON.stringify(coupons[0])));
-            setOriginalCoupon(JSON.parse(JSON.stringify(coupons[0])));
+            const normalizedCoupons = coupons.map(c => ({
+              ...c,
+              enabled: c.enabled !== undefined ? c.enabled : (c.is_enabled !== undefined ? c.is_enabled : true),
+              code: c.code || c.coupon_code_text || 'CODE',
+              label: c.label || 'Coupon',
+              description: c.description || c.description_text || '',
+            }));
+
+            setAllCoupons(normalizedCoupons);
+            if (normalizedCoupons.length > 0) {
+              setActiveCouponTab(normalizedCoupons[0].id);
+              setEditingCoupon(JSON.parse(JSON.stringify(normalizedCoupons[0])));
+              setOriginalCoupon(JSON.parse(JSON.stringify(normalizedCoupons[0])));
+            }
           }
 
           // 2. Update Feature States
@@ -870,7 +892,13 @@ export default function CartDrawerAdmin() {
             setCouponAlignment(settings.coupons.alignment || 'horizontal');
           }
 
-          // 6. Update Product & Cart Data
+          // 6. Load Coupon Selections (IDs + Overrides)
+          if (data.couponSelections) {
+            setSelectedActiveCoupons(data.couponSelections.selectedCouponIds || []);
+            setCouponOverrides(data.couponSelections.couponOverrides || {});
+          }
+
+          // 7. Update Product & Cart Data
           if (data.shopifyProducts) {
             setLoadedShopifyProducts(data.shopifyProducts);
           }
@@ -989,6 +1017,48 @@ export default function CartDrawerAdmin() {
     }
   }, [featureStates.couponSliderEnabled, appliedCouponIds.length]);
 
+  // Fetch active coupons from Shopify Admin API when Manage Coupons tab is opened
+  React.useEffect(() => {
+    if (couponSubTab === 'manage-coupons' && activeCouponsFromAPI.length === 0 && !isLoadingActiveCoupons) {
+      const fetchActiveCoupons = async () => {
+        setIsLoadingActiveCoupons(true);
+        setActiveCouponWarning(null);
+        try {
+          console.log('[Coupon] Fetching coupons from /api/shopify-coupons');
+          const response = await fetch('/api/shopify-coupons');
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          const data = await response.json();
+          console.log('[Coupon] Shopify coupons response:', data);
+          if (data.coupons && data.coupons.length > 0) {
+            // Filter only ACTIVE coupons and normalize the format
+            const activeCoupons = data.coupons
+              .filter(c => c.status === 'ACTIVE')
+              .map(c => ({
+                id: c.id,
+                code: c.code || c.heading,
+                label: c.heading || c.code,
+                description: c.subtext || '',
+                discountType: c.discountType || 'percentage',
+                discountValue: c.discountValue || 0,
+                expiryDate: c.ends_at ? c.ends_at.split('T')[0] : '',
+                status: 'active',
+              }));
+            console.log('[Coupon] Filtered active coupons:', activeCoupons.length);
+            setActiveCouponsFromAPI(activeCoupons);
+          } else {
+            setActiveCouponsFromAPI([]);
+          }
+        } catch (error) {
+          console.error('[Coupon] Error fetching active coupons:', error);
+          setActiveCouponsFromAPI([]);
+        } finally {
+          setIsLoadingActiveCoupons(false);
+        }
+      };
+      fetchActiveCoupons();
+    }
+  }, [couponSubTab]);
+
 
   const handleAddToCart = async (product) => {
     // Update mock cart data
@@ -1087,13 +1157,43 @@ export default function CartDrawerAdmin() {
     setSelectedCouponStyle(style);
   };
 
-  const handleCouponTabClick = (couponId) => {
-    const coupon = allCoupons.find(c => c.id === couponId);
+  const handleCouponTabClick = (couponId, source = 'sample') => {
+    let coupon;
+    if (source === 'active') {
+      coupon = activeCouponsFromAPI.find(c => c.id === couponId);
+      if (coupon) {
+        // Merge with any existing overrides
+        const overrides = couponOverrides[couponId] || {};
+        coupon = { ...coupon, ...overrides };
+      }
+    } else {
+      coupon = allCoupons.find(c => c.id === couponId);
+    }
     if (coupon) {
       setActiveCouponTab(couponId);
+      setEditingCouponSource(source);
       setEditingCoupon(JSON.parse(JSON.stringify(coupon)));
       setOriginalCoupon(JSON.parse(JSON.stringify(coupon)));
     }
+  };
+
+  const toggleActiveCouponSelection = (couponId) => {
+    setSelectedActiveCoupons(prev =>
+      prev.includes(couponId)
+        ? prev.filter(id => id !== couponId)
+        : [...prev, couponId]
+    );
+    setActiveCouponWarning(null);
+  };
+
+  const updateCouponOverride = (couponId, field, value) => {
+    setCouponOverrides(prev => ({
+      ...prev,
+      [couponId]: {
+        ...(prev[couponId] || {}),
+        [field]: value,
+      },
+    }));
   };
 
   const handleToggleCouponEnabled = (checked) => {
@@ -1119,60 +1219,70 @@ export default function CartDrawerAdmin() {
     updateNestedField(updatedCoupon, keys, value);
     setEditingCoupon(updatedCoupon);
 
-    // Also update in allCoupons immediately for live preview
-    setAllCoupons(prev => prev.map(c =>
-      c.id === updatedCoupon.id ? JSON.parse(JSON.stringify(updatedCoupon)) : c
-    ));
+    if (editingCouponSource === 'active') {
+      // Store as override — don't modify source data
+      updateCouponOverride(editingCoupon.id, path, value);
+    } else {
+      // Sample coupons: update in allCoupons for live preview only
+      setAllCoupons(prev => prev.map(c =>
+        c.id === updatedCoupon.id ? JSON.parse(JSON.stringify(updatedCoupon)) : c
+      ));
+    }
   };
 
+  // canSave logic: only allow saving if at least one active coupon is selected
+  const canSaveCoupons = selectedActiveCoupons.length > 0;
+
   const handleSaveCoupon = async () => {
-    if (editingCoupon) {
-      setIsSaving(true);
-      console.log('[Coupon] Save initiated for coupon:', editingCoupon.id);
+    // Strict save validation
+    if (!canSaveCoupons) {
+      setActiveCouponWarning('Select at least one active coupon from the Dashboard to save.');
+      setSaveToastMessage('Cannot save — no active coupons selected');
+      setShowSaveToast(true);
+      return;
+    }
 
-      // Update in allCoupons state
-      const updated = allCoupons.map(c =>
-        c.id === editingCoupon.id ? JSON.parse(JSON.stringify(editingCoupon)) : c
-      );
-      setAllCoupons(updated);
+    setIsSaving(true);
+    setActiveCouponWarning(null);
+    console.log('[Coupon] Save initiated — selected active coupons:', selectedActiveCoupons);
 
-      // Save to API route
-      try {
-        console.log('[Coupon] Sending POST to /api/cart-settings?action=coupons');
-        const response = await fetch('/api/cart-settings?action=coupons', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Shop-ID': SHOP_ID,
+    // Save only IDs + overrides (never full coupon data)
+    try {
+      console.log('[Coupon] Sending POST to /api/cart-settings?action=coupon-selections');
+      const response = await fetch('/api/cart-settings?action=coupon-selections', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shop-ID': SHOP_ID,
+        },
+        body: JSON.stringify({
+          selectedCouponIds: selectedActiveCoupons,
+          style: selectedCouponStyle,
+          displaySettings: {
+            position: couponPosition,
+            layout: couponLayout,
+            alignment: couponAlignment,
           },
-          body: JSON.stringify({
-            allCoupons: updated,
-          }),
-        });
+          couponOverrides: couponOverrides,
+        }),
+      });
 
-        console.log('[Coupon] Response status:', response.status);
+      console.log('[Coupon] Response status:', response.status);
 
-        if (!response.ok) {
-          throw new Error(`Failed to save coupon: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log('[Coupon] Saved successfully:', result);
-      } catch (error) {
-        console.error('[Coupon] Save error:', error);
+      if (!response.ok) {
+        throw new Error(`Failed to save coupon selections: ${response.status}`);
       }
 
-      setOriginalCoupon(JSON.parse(JSON.stringify(editingCoupon)));
+      const result = await response.json();
+      console.log('[Coupon] Saved successfully:', result);
 
-      const messageByTab = {
-        'progress-bar': 'Progress bar saved',
-        coupon: 'Coupon saved',
-        upsell: 'Upsell saved',
-      };
-
-      await new Promise(resolve => setTimeout(resolve, 600));
-      setSaveToastMessage(messageByTab[selectedTab] || 'Saved');
+      setSaveToastMessage('Coupon selections saved successfully');
       setShowSaveToast(true);
+    } catch (error) {
+      console.error('[Coupon] Save error:', error);
+      setSaveToastMessage('Failed to save coupon selections');
+      setShowSaveToast(true);
+    } finally {
       setIsSaving(false);
     }
   };
@@ -2240,214 +2350,295 @@ export default function CartDrawerAdmin() {
             {
               couponSubTab === 'manage-coupons' && (
                 <BlockStack gap="400">
+                  {/* Warning Banner */}
+                  {activeCouponWarning && (
+                    <Banner tone="warning" onDismiss={() => setActiveCouponWarning(null)}>
+                      <p>{activeCouponWarning}</p>
+                    </Banner>
+                  )}
+
+                  {/* Sample Coupons — Auto-shown for Style Preview
+                  <Card>
+                    <BlockStack gap="300">
+                      <Text variant="headingMd" as="h2">Coupon Preview</Text>
+                      <Text tone="subdued" as="p">These sample coupons show how your selected style looks. Active coupons from your Shopify dashboard appear below.</Text>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: couponLayout === 'grid' ? 'repeat(2, 1fr)' : '1fr',
+                        gap: '12px',
+                        padding: '8px 0',
+                      }}>
+                        {allCoupons.filter(c => c.enabled).map(coupon => (
+                          <div
+                            key={coupon.id}
+                            style={{
+                              padding: '14px',
+                              backgroundColor: coupon.backgroundColor || '#0070f3',
+                              color: coupon.textColor || '#ffffff',
+                              borderRadius: `${coupon.borderRadius || 8}px`,
+                              border: '1px solid rgba(0,0,0,0.05)',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                              <span style={{ fontSize: '18px' }}>{coupon.iconUrl}</span>
+                              <div>
+                                <div style={{ fontWeight: 600, fontSize: '13px' }}>{coupon.code}</div>
+                                <div style={{ fontSize: '11px', opacity: 0.85 }}>{coupon.label}</div>
+                              </div>
+                            </div>
+                            <div style={{ fontSize: '11px', opacity: 0.8, marginBottom: '8px' }}>{coupon.description}</div>
+                            <button style={{
+                              padding: '4px 12px',
+                              fontSize: '11px',
+                              fontWeight: 600,
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              backgroundColor: coupon.button?.backgroundColor || '#000',
+                              color: coupon.button?.textColor || '#fff',
+                            }}>
+                              {coupon.button?.text || 'Apply'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </BlockStack>
+                  </Card> */}
+
+                  {/* Active Coupons (From Shopify Admin API) */}
                   <Card>
                     <BlockStack gap="400">
                       <BlockStack gap="200">
-                        <Text variant="headingMd" as="h2">Enable/Disable Coupons</Text>
-                        <Text tone="subdued" as="p">Select which coupons to show in the slider</Text>
+                        <Text variant="headingMd" as="h2">Active Coupons</Text>
+                        <Text tone="subdued" as="p">Select which active coupons to display in the cart slider. These are fetched from your Shopify dashboard.</Text>
                       </BlockStack>
 
-                      {/* Coupon List with Enable/Disable */}
-                      <BlockStack gap="200">
-                        {allCoupons.map(coupon => (
-                          <div
-                            key={coupon.id}
-                            onClick={() => handleCouponTabClick(coupon.id)}
-                            style={{
-                              padding: '12px 16px',
-                              backgroundColor: activeCouponTab === coupon.id ? '#f0f7ff' : '#f9fafb',
-                              border: `1px solid ${activeCouponTab === coupon.id ? '#2c6ecb' : '#e5e7eb'}`,
-                              borderRadius: '8px',
-                              transition: 'all 0.2s',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <InlineStack align="space-between" blockAlign="center" gap="200">
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                                <span style={{ fontSize: '20px' }}>{coupon.iconUrl}</span>
-                                <BlockStack gap="100">
-                                  <Text variant="bodyMd" fontWeight="semibold" truncate>{coupon.code}</Text>
-                                  <Text variant="bodySm" tone="subdued" truncate>{coupon.label}</Text>
-                                </BlockStack>
-                              </div>
-                              <Checkbox
-                                checked={coupon.enabled}
-                                onChange={(checked) => {
-                                  const updated = allCoupons.map(c =>
-                                    c.id === coupon.id ? { ...c, enabled: checked } : c
-                                  );
-                                  setAllCoupons(updated);
-                                  const idx = sampleCoupons.findIndex(c => c.id === coupon.id);
-                                  if (idx !== -1) sampleCoupons[idx].enabled = checked;
-                                  if (editingCoupon && editingCoupon.id === coupon.id) {
-                                    setEditingCoupon({ ...editingCoupon, enabled: checked });
-                                  }
+                      {/* Loading State */}
+                      {isLoadingActiveCoupons && (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}>
+                          <BlockStack gap="200" inlineAlign="center">
+                            <Spinner size="small" />
+                            <Text tone="subdued" variant="bodySm">Fetching active coupons...</Text>
+                          </BlockStack>
+                        </div>
+                      )}
+
+                      {/* No Active Coupons */}
+                      {!isLoadingActiveCoupons && activeCouponsFromAPI.length === 0 && (
+                        <Banner tone="info">
+                          <p>No active coupons found. Create coupons in your <strong>Coupon Dashboard</strong> and make sure they have an <strong>Active</strong> status.</p>
+                        </Banner>
+                      )}
+
+                      {/* Active Coupons List */}
+                      {!isLoadingActiveCoupons && activeCouponsFromAPI.length > 0 && (
+                        <BlockStack gap="200">
+                          {activeCouponsFromAPI.map(coupon => {
+                            const isSelected = selectedActiveCoupons.includes(coupon.id);
+                            const isEditing = activeCouponTab === coupon.id && editingCouponSource === 'active';
+                            return (
+                              <div
+                                key={coupon.id}
+                                onClick={() => handleCouponTabClick(coupon.id, 'active')}
+                                style={{
+                                  padding: '12px 16px',
+                                  backgroundColor: isEditing ? '#f0fff4' : isSelected ? '#f0f7ff' : '#f9fafb',
+                                  border: `1px solid ${isEditing ? '#22c55e' : isSelected ? '#2c6ecb' : '#e5e7eb'}`,
+                                  borderRadius: '8px',
+                                  transition: 'all 0.2s',
+                                  cursor: 'pointer',
                                 }}
-                              />
+                              >
+                                <InlineStack align="space-between" blockAlign="center" gap="200">
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                                    <div style={{
+                                      width: '36px', height: '36px', borderRadius: '8px',
+                                      backgroundColor: '#dcfce7', display: 'flex',
+                                      alignItems: 'center', justifyContent: 'center', fontSize: '16px',
+                                    }}>
+                                      {coupon.discountType === 'percentage' ? '🏷️' :
+                                        coupon.discountType === 'free_shipping' ? '🚚' : '💰'}
+                                    </div>
+                                    <BlockStack gap="100">
+                                      <InlineStack gap="200" blockAlign="center">
+                                        <Text variant="bodyMd" fontWeight="semibold" truncate>{coupon.code}</Text>
+                                        <Badge tone="success" size="small">Active</Badge>
+                                      </InlineStack>
+                                      <Text variant="bodySm" tone="subdued" truncate>
+                                        {coupon.label} — {coupon.discountType === 'percentage'
+                                          ? `${coupon.discountValue}% off`
+                                          : coupon.discountType === 'free_shipping'
+                                            ? 'Free Shipping'
+                                            : `₹${coupon.discountValue} off`}
+                                      </Text>
+                                    </BlockStack>
+                                  </div>
+                                  <Checkbox
+                                    checked={isSelected}
+                                    onChange={() => toggleActiveCouponSelection(coupon.id)}
+                                  />
+                                </InlineStack>
+                              </div>
+                            );
+                          })}
+                        </BlockStack>
+                      )}
+                    </BlockStack>
+                  </Card>
+
+                  <Divider />
+
+                  {/* Coupon Editor */}
+                  {editingCoupon ? (
+                    <Card>
+                      <div style={{ padding: '4px' }}>
+                        <BlockStack gap="400">
+                          {/* Source Banner */}
+                          <Banner tone="success">
+                            <p>Editing an <strong>active coupon</strong>. Appearance changes will be saved as style overrides.</p>
+                          </Banner>
+
+                          <InlineStack align="space-between" blockAlign="center">
+                            <BlockStack gap="100">
+                              <Text variant="headingSm" as="h3">Edit: {editingCoupon.code}</Text>
+                              <Text tone="subdued" variant="bodySm">Configure display and discount settings</Text>
+                            </BlockStack>
+                          </InlineStack>
+
+                          <Divider />
+
+                          {/* Editor Fields */}
+                          <BlockStack gap="300">
+                            <InlineStack gap="300" blockAlign="start">
+                              <div style={{ flex: 1 }}>
+                                <TextField
+                                  label="Coupon Code"
+                                  value={editingCoupon.code}
+                                  disabled
+                                  autoComplete="off"
+                                />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <TextField
+                                  label="Label Text"
+                                  value={editingCoupon.label}
+                                  onChange={(value) => updateCouponField('label', value)}
+                                  autoComplete="off"
+                                />
+                              </div>
                             </InlineStack>
-                          </div>
-                        ))}
-                      </BlockStack>
 
-                      <Divider />
+                            <TextField
+                              label="Description"
+                              value={editingCoupon.description}
+                              onChange={(value) => updateCouponField('description', value)}
+                              autoComplete="off"
+                            />
 
-                      {/* Coupon Editor */}
-                      {editingCoupon ? (
-                        <div style={{ padding: '16px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                          <BlockStack gap="400">
-                            <InlineStack align="space-between" blockAlign="center">
-                              <BlockStack gap="100">
-                                <Text variant="headingSm" as="h3">Edit: {editingCoupon.code}</Text>
-                                <Text tone="subdued" variant="bodySm">Configure display and discount settings</Text>
-                              </BlockStack>
+
+                            <Divider />
+                            <Text variant="headingSm" as="h4">Appearance</Text>
+
+                            <InlineStack gap="300">
+                              <div style={{ flex: 1 }}>
+                                <ColorPickerField
+                                  label="Background Color"
+                                  value={editingCoupon.backgroundColor || '#0070f3'}
+                                  onChange={(value) => updateCouponField('backgroundColor', value)}
+                                />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <ColorPickerField
+                                  label="Text Color"
+                                  value={editingCoupon.textColor || '#ffffff'}
+                                  onChange={(value) => updateCouponField('textColor', value)}
+                                />
+                              </div>
+                            </InlineStack>
+
+                            <InlineStack gap="300">
+                              <div style={{ flex: 1 }}>
+                                <TextField
+                                  label="Icon (emoji)"
+                                  value={editingCoupon.iconUrl || '🏷️'}
+                                  onChange={(value) => updateCouponField('iconUrl', value)}
+                                  autoComplete="off"
+                                />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <TextField
+                                  label="Border Radius"
+                                  type="number"
+                                  value={String(editingCoupon.borderRadius || 8)}
+                                  onChange={(value) => updateCouponField('borderRadius', Number(value))}
+                                  autoComplete="off"
+                                  suffix="px"
+                                />
+                              </div>
                             </InlineStack>
 
                             <Divider />
+                            <Text variant="headingSm" as="h4">Button Settings</Text>
 
-                            {/* Compact Single Column Layout */}
-                            <BlockStack gap="300">
-                              <InlineStack gap="300" blockAlign="start">
-                                <div style={{ flex: 1 }}>
-                                  <TextField
-                                    label="Coupon Code"
-                                    value={editingCoupon.code}
-                                    disabled
-                                    autoComplete="off"
-                                  />
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <TextField
-                                    label="Label Text"
-                                    value={editingCoupon.label}
-                                    onChange={(value) => updateCouponField('label', value)}
-                                    autoComplete="off"
-                                  />
-                                </div>
-                              </InlineStack>
+                            <TextField
+                              label="Button Text"
+                              value={editingCoupon.button?.text || 'Apply'}
+                              onChange={(value) => updateCouponField('button.text', value)}
+                              autoComplete="off"
+                            />
 
-                              <TextField
-                                label="Description"
-                                value={editingCoupon.description}
-                                onChange={(value) => updateCouponField('description', value)}
-                                autoComplete="off"
-                              />
-
-                              <InlineStack gap="300">
-                                <div style={{ flex: 1 }}>
-                                  <Select
-                                    label="Discount Type"
-                                    options={[
-                                      { label: 'Percentage Off', value: 'percentage' },
-                                      { label: 'Fixed Amount Off', value: 'fixed' },
-                                    ]}
-                                    value={editingCoupon.discountType || 'percentage'}
-                                    onChange={(value) => updateCouponField('discountType', value)}
-                                  />
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <TextField
-                                    label="Discount Value"
-                                    type="number"
-                                    value={String(editingCoupon.discountValue || 0)}
-                                    onChange={(value) => updateCouponField('discountValue', Number(value))}
-                                    autoComplete="off"
-                                    suffix={editingCoupon.discountType === 'percentage' ? '%' : '₹'}
-                                  />
-                                </div>
-                              </InlineStack>
-
-                              <TextField
-                                label="Expiry Date (Optional)"
-                                type="date"
-                                value={editingCoupon.expiryDate || ''}
-                                onChange={(value) => updateCouponField('expiryDate', value)}
-                                autoComplete="off"
-                                helpText="Leave empty for no expiry"
-                              />
-
-                              <Divider />
-                              <Text variant="headingSm" as="h4">Appearance</Text>
-
-                              <InlineStack gap="300">
-                                <div style={{ flex: 1 }}>
-                                  <ColorPickerField
-                                    label="Background Color"
-                                    value={editingCoupon.backgroundColor}
-                                    onChange={(value) => updateCouponField('backgroundColor', value)}
-                                  />
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <ColorPickerField
-                                    label="Text Color"
-                                    value={editingCoupon.textColor}
-                                    onChange={(value) => updateCouponField('textColor', value)}
-                                  />
-                                </div>
-                              </InlineStack>
-
-                              <InlineStack gap="300">
-                                <div style={{ flex: 1 }}>
-                                  <TextField
-                                    label="Icon (emoji)"
-                                    value={editingCoupon.iconUrl}
-                                    onChange={(value) => updateCouponField('iconUrl', value)}
-                                    autoComplete="off"
-                                  />
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <TextField
-                                    label="Border Radius"
-                                    type="number"
-                                    value={String(editingCoupon.borderRadius)}
-                                    onChange={(value) => updateCouponField('borderRadius', Number(value))}
-                                    autoComplete="off"
-                                    suffix="px"
-                                  />
-                                </div>
-                              </InlineStack>
-
-                              <Divider />
-                              <Text variant="headingSm" as="h4">Button Settings</Text>
-
-                              <TextField
-                                label="Button Text"
-                                value={editingCoupon.button?.text || 'Apply'}
-                                onChange={(value) => updateCouponField('button.text', value)}
-                                autoComplete="off"
-                              />
-
-                              <InlineStack gap="300">
-                                <div style={{ flex: 1 }}>
-                                  <ColorPickerField
-                                    label="Button Background"
-                                    value={editingCoupon.button?.backgroundColor || '#000000'}
-                                    onChange={(value) => updateCouponField('button.backgroundColor', value)}
-                                  />
-                                </div>
-                                <div style={{ flex: 1 }}>
-                                  <ColorPickerField
-                                    label="Button Text Color"
-                                    value={editingCoupon.button?.textColor || '#ffffff'}
-                                    onChange={(value) => updateCouponField('button.textColor', value)}
-                                  />
-                                </div>
-                              </InlineStack>
-
-                              {/* Save/Cancel Actions */}
-                              <Divider />
-                              <InlineStack align="end" gap="200">
-                                <Button onClick={handleCancelCoupon} disabled={isSaving}>Cancel</Button>
-                                <Button variant="primary" onClick={handleSaveCoupon} loading={isSaving} disabled={isSaving}>Save Changes</Button>
-                              </InlineStack>
-                            </BlockStack>
+                            <InlineStack gap="300">
+                              <div style={{ flex: 1 }}>
+                                <ColorPickerField
+                                  label="Button Background"
+                                  value={editingCoupon.button?.backgroundColor || '#000000'}
+                                  onChange={(value) => updateCouponField('button.backgroundColor', value)}
+                                />
+                              </div>
+                              <div style={{ flex: 1 }}>
+                                <ColorPickerField
+                                  label="Button Text Color"
+                                  value={editingCoupon.button?.textColor || '#ffffff'}
+                                  onChange={(value) => updateCouponField('button.textColor', value)}
+                                />
+                              </div>
+                            </InlineStack>
                           </BlockStack>
-                        </div>
-                      ) : (
-                        <div style={{ padding: '40px 20px', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                          <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#374151' }}>👈 Select a coupon to edit</p>
-                          <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>Click on a coupon above to edit its settings</p>
-                        </div>
-                      )}
+                        </BlockStack>
+                      </div>
+                    </Card>
+                  ) : (
+                    <div style={{ padding: '40px 20px', textAlign: 'center', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+                      <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#374151' }}>👆 Select a coupon to edit</p>
+                      <p style={{ margin: 0, fontSize: '14px', color: '#6b7280' }}>Click on a sample or active coupon above to edit its appearance</p>
+                    </div>
+                  )}
+
+                  {/* Save Button — disabled unless active coupons selected */}
+                  <Card>
+                    <BlockStack gap="300">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <BlockStack gap="100">
+                          <Text variant="headingSm">Save Coupon Selections</Text>
+                          <Text variant="bodySm" tone="subdued">
+                            {canSaveCoupons
+                              ? `${selectedActiveCoupons.length} active coupon${selectedActiveCoupons.length > 1 ? 's' : ''} selected`
+                              : 'No active coupons selected — select at least one to save'
+                            }
+                          </Text>
+                        </BlockStack>
+                      </InlineStack>
+                      <InlineStack align="end" gap="200">
+                        <Button onClick={handleCancelCoupon} disabled={isSaving}>Cancel</Button>
+                        <Button
+                          variant="primary"
+                          onClick={handleSaveCoupon}
+                          loading={isSaving}
+                          disabled={!canSaveCoupons || isSaving}
+                        >
+                          Save Coupon Selections
+                        </Button>
+                      </InlineStack>
                     </BlockStack>
                   </Card>
                 </BlockStack>
@@ -3142,257 +3333,322 @@ export default function CartDrawerAdmin() {
             })()}
 
             {/* Coupon Feature - Product Widget Style */}
-            {featureStates.couponSliderEnabled && allCoupons.length > 0 && (
-              <div style={{
-                padding: '16px',
-                order: couponPosition === 'top' ? -1 : 999,
-                backgroundColor: '#fff',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <Text as="h3" variant="headingSm" fontWeight="bold">
-                    Availalbe Offers
-                  </Text>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                      onClick={() => handleScrollCoupons('left')}
-                      style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%',
-                        border: '1px solid #e2e8f0',
-                        backgroundColor: '#fff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#64748b',
-                        transition: 'all 0.2s',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                      }}
-                    >
-                      ←
-                    </button>
-                    <button
-                      onClick={() => handleScrollCoupons('right')}
-                      style={{
-                        width: '32px',
-                        height: '32px',
-                        borderRadius: '50%',
-                        border: '1px solid #e2e8f0',
-                        backgroundColor: '#fff',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        color: '#64748b',
-                        transition: 'all 0.2s',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                      }}
-                    >
-                      →
-                    </button>
-                  </div>
-                </div>
+            {featureStates.couponSliderEnabled && (
+              (() => {
+                // Determine which coupons to show
+                let couponsToShow = [];
 
-                <div ref={couponSliderRef} style={{
-                  display: couponLayout === 'grid' ? 'grid' : 'flex',
-                  gridTemplateColumns: couponLayout === 'grid' ? (couponAlignment === 'horizontal' ? 'repeat(2, 1fr)' : '1fr') : undefined,
-                  flexDirection: couponLayout === 'carousel' ? (couponAlignment === 'horizontal' ? 'row' : 'column') : undefined,
-                  gap: '12px',
-                  paddingBottom: '4px',
-                  scrollBehavior: 'smooth',
-                  overflowX: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? 'auto' : 'hidden',
-                  overflowY: couponLayout === 'carousel' && couponAlignment === 'vertical' ? 'auto' : 'hidden',
-                }}>
-                  {allCoupons.filter(c => c.enabled).map((coupon, idx) => {
-                    const displayCoupon = editingCoupon && editingCoupon.id === coupon.id ? editingCoupon : coupon;
-                    const isApplied = appliedCouponIds.includes(coupon.id);
+                if (selectedActiveCoupons.length > 0) {
+                  // If user has selected specific active coupons, prioritize those
+                  // We map the IDs to the actual coupon data (from API or overrides)
+                  couponsToShow = selectedActiveCoupons.map(id => {
+                    const apiCoupon = activeCouponsFromAPI.find(c => c.id === id);
+                    const override = couponOverrides[id] || {};
 
-                    // STYLE 1: Classic Banner
-                    if (selectedCouponStyle === COUPON_STYLES.STYLE_1) {
-                      return (
-                        <div
-                          key={coupon.id}
-                          style={{
-                            minWidth: '260px',
-                            padding: '12px',
-                            backgroundColor: '#fff',
-                            borderRadius: '12px',
-                            border: isApplied ? `1px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '12px',
-                            position: 'relative',
-                            overflow: 'hidden'
-                          }}
-                        >
-                          {isApplied && (
-                            <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: displayCoupon.backgroundColor }}></div>
-                          )}
-                          <div style={{
-                            width: '48px',
-                            height: '48px',
-                            borderRadius: '10px',
-                            backgroundColor: displayCoupon.backgroundColor + '20',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '24px',
-                            color: displayCoupon.backgroundColor,
-                            flexShrink: 0
-                          }}>
-                            {displayCoupon.iconUrl || '🎟️'}
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#1e293b' }}>{displayCoupon.code}</p>
-                            <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{displayCoupon.label}</p>
-                          </div>
-                          <button
-                            onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
-                            style={{
-                              padding: '6px 12px',
-                              backgroundColor: isApplied ? '#ecfdf5' : '#f8fafc',
-                              color: isApplied ? '#059669' : '#475569',
-                              border: 'none',
-                              borderRadius: '8px',
-                              fontSize: '11px',
-                              fontWeight: '600',
-                              cursor: 'pointer',
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            {isApplied ? 'Applied' : 'Apply'}
-                          </button>
-                        </div>
-                      );
+                    // Merge API data with overrides (overrides take precedence for visual props)
+                    if (apiCoupon) {
+                      return { ...apiCoupon, ...override, enabled: true };
                     }
 
-                    // STYLE 2: Minimal Card
-                    if (selectedCouponStyle === COUPON_STYLES.STYLE_2) {
-                      return (
-                        <div
-                          key={coupon.id}
+                    // Fallback if API data isn't loaded yet but we have an ID +/ Overrides
+                    // We try to reconstruct a usable object from overrides or placeholders
+                    return {
+                      id,
+                      code: override.code || 'LOADING...',
+                      label: override.label || 'Coupon',
+                      description: override.description || '...',
+                      discountType: 'percentage',
+                      discountValue: 0,
+                      backgroundColor: override.backgroundColor || '#000',
+                      textColor: override.textColor || '#fff',
+                      iconUrl: override.iconUrl || '🎟️',
+                      enabled: true,
+                      ...override
+                    };
+                  });
+                } else if (allCoupons.length > 0) {
+                  // Fallback to "allCoupons" (which might be samples or saved legacy coupons)
+                  // ENSURE we handle the property mismatch (is_enabled vs enabled) if present
+                  couponsToShow = allCoupons.map(c => ({
+                    ...c,
+                    enabled: c.enabled !== undefined ? c.enabled : (c.is_enabled !== undefined ? c.is_enabled : true),
+                    code: c.code || c.coupon_code_text || 'CODE',
+                    label: c.label || 'Coupon Label', // Add defaults if missing
+                    description: c.description || c.description_text || 'Description', // Add defaults if missing
+                  })).filter(c => c.enabled);
+                }
+
+                // If still empty (e.g. no saved coupons yet), show a generic sample so the user sees something
+                if (couponsToShow.length === 0) {
+                  couponsToShow = [{
+                    id: 'sample-welcome',
+                    code: 'WELCOME10',
+                    label: 'Welcome Offer',
+                    description: 'Get 10% off your first order',
+                    discountType: 'percentage',
+                    discountValue: 10,
+                    backgroundColor: '#1a1a1a', // Dark theme default
+                    textColor: '#ffffff',
+                    iconUrl: '🎉',
+                    enabled: true
+                  }];
+                }
+
+                return (
+                  <div style={{
+                    padding: '16px',
+                    order: couponPosition === 'top' ? -1 : 999,
+                    backgroundColor: '#fff',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <Text as="h3" variant="headingSm" fontWeight="bold">
+                        Available Offers
+                      </Text>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          onClick={() => handleScrollCoupons('left')}
                           style={{
-                            minWidth: '180px',
-                            padding: '16px',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            border: '1px solid #e2e8f0',
                             backgroundColor: '#fff',
-                            borderRadius: '16px',
-                            border: isApplied ? `2px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0',
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            textAlign: 'center',
-                            gap: '10px',
-                            position: 'relative'
-                          }}
-                        >
-                          <div style={{
-                            width: '56px',
-                            height: '56px',
-                            borderRadius: '16px',
-                            backgroundColor: displayCoupon.backgroundColor,
+                            cursor: 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            fontSize: '28px',
-                            color: '#fff',
-                            boxShadow: `0 4px 10px ${displayCoupon.backgroundColor}60`
-                          }}>
-                            {displayCoupon.iconUrl || '🎁'}
-                          </div>
-                          <div>
-                            <p style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>{displayCoupon.code}</p>
-                            <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>{displayCoupon.description}</p>
-                          </div>
-                          <button
-                            onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
+                            color: '#64748b',
+                            transition: 'all 0.2s',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                          }}
+                        >
+                          ←
+                        </button>
+                        <button
+                          onClick={() => handleScrollCoupons('right')}
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            border: '1px solid #e2e8f0',
+                            backgroundColor: '#fff',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#64748b',
+                            transition: 'all 0.2s',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                          }}
+                        >
+                          →
+                        </button>
+                      </div>
+                    </div>
+
+                    <div ref={couponSliderRef} style={{
+                      display: couponLayout === 'grid' ? 'grid' : 'flex',
+                      gridTemplateColumns: couponLayout === 'grid' ? (couponAlignment === 'horizontal' ? 'repeat(2, 1fr)' : '1fr') : undefined,
+                      flexDirection: couponLayout === 'carousel' ? (couponAlignment === 'horizontal' ? 'row' : 'column') : undefined,
+                      gap: '12px',
+                      paddingBottom: '4px',
+                      scrollBehavior: 'smooth',
+                      overflowX: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? 'auto' : 'hidden',
+                      overflowY: couponLayout === 'carousel' && couponAlignment === 'vertical' ? 'auto' : 'hidden',
+                    }}>
+                      {couponsToShow.map((coupon, idx) => {
+                        // Use editing state if this is the one being edited
+                        const displayCoupon = editingCoupon && editingCoupon.id === coupon.id ? editingCoupon : coupon;
+                        const isApplied = appliedCouponIds.includes(coupon.id);
+
+
+                        // STYLE 1: Classic Banner
+                        if (selectedCouponStyle === COUPON_STYLES.STYLE_1) {
+                          return (
+                            <div
+                              key={coupon.id}
+                              style={{
+                                minWidth: '260px',
+                                padding: '12px',
+                                backgroundColor: '#fff',
+                                borderRadius: '12px',
+                                border: isApplied ? `1px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                position: 'relative',
+                                overflow: 'hidden'
+                              }}
+                            >
+                              {isApplied && (
+                                <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: displayCoupon.backgroundColor }}></div>
+                              )}
+                              <div style={{
+                                width: '48px',
+                                height: '48px',
+                                borderRadius: '10px',
+                                backgroundColor: displayCoupon.backgroundColor + '20',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '24px',
+                                color: displayCoupon.backgroundColor,
+                                flexShrink: 0
+                              }}>
+                                {displayCoupon.iconUrl || '🎟️'}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#1e293b' }}>{displayCoupon.code}</p>
+                                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{displayCoupon.label}</p>
+                              </div>
+                              <button
+                                onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
+                                style={{
+                                  padding: '6px 12px',
+                                  backgroundColor: isApplied ? '#ecfdf5' : '#f8fafc',
+                                  color: isApplied ? '#059669' : '#475569',
+                                  border: 'none',
+                                  borderRadius: '8px',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  whiteSpace: 'nowrap'
+                                }}
+                              >
+                                {isApplied ? 'Applied' : 'Apply'}
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        // STYLE 2: Minimal Card
+                        if (selectedCouponStyle === COUPON_STYLES.STYLE_2) {
+                          return (
+                            <div
+                              key={coupon.id}
+                              style={{
+                                minWidth: '180px',
+                                padding: '16px',
+                                backgroundColor: '#fff',
+                                borderRadius: '16px',
+                                border: isApplied ? `2px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0',
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                textAlign: 'center',
+                                gap: '10px',
+                                position: 'relative'
+                              }}
+                            >
+                              <div style={{
+                                width: '56px',
+                                height: '56px',
+                                borderRadius: '16px',
+                                backgroundColor: displayCoupon.backgroundColor,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '28px',
+                                color: '#fff',
+                                boxShadow: `0 4px 10px ${displayCoupon.backgroundColor}60`
+                              }}>
+                                {displayCoupon.iconUrl || '🎁'}
+                              </div>
+                              <div>
+                                <p style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>{displayCoupon.code}</p>
+                                <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>{displayCoupon.description}</p>
+                              </div>
+                              <button
+                                onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
+                                style={{
+                                  width: '100%',
+                                  padding: '8px',
+                                  marginTop: '4px',
+                                  backgroundColor: isApplied ? '#10b981' : '#1e293b',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: '10px',
+                                  fontSize: '12px',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  gap: '6px'
+                                }}
+                              >
+                                {isApplied ? '✓ Applied' : 'Apply Coupon'}
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        // STYLE 3: Bold & Vibrant
+                        return (
+                          <div
+                            key={coupon.id}
                             style={{
-                              width: '100%',
-                              padding: '8px',
-                              marginTop: '4px',
-                              backgroundColor: isApplied ? '#10b981' : '#1e293b',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: '10px',
-                              fontSize: '12px',
-                              fontWeight: '600',
-                              cursor: 'pointer',
+                              minWidth: '280px',
+                              padding: '0',
+                              backgroundColor: '#fff',
+                              borderRadius: '12px',
+                              border: '1px solid #e2e8f0',
+                              boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              overflow: 'hidden'
+                            }}
+                          >
+                            <div style={{
+                              backgroundColor: displayCoupon.backgroundColor,
+                              padding: '12px 16px',
                               display: 'flex',
                               alignItems: 'center',
-                              justifyContent: 'center',
-                              gap: '6px'
-                            }}
-                          >
-                            {isApplied ? '✓ Applied' : 'Apply Coupon'}
-                          </button>
-                        </div>
-                      );
-                    }
-
-                    // STYLE 3: Bold & Vibrant
-                    return (
-                      <div
-                        key={coupon.id}
-                        style={{
-                          minWidth: '280px',
-                          padding: '0',
-                          backgroundColor: '#fff',
-                          borderRadius: '12px',
-                          border: '1px solid #e2e8f0',
-                          boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          overflow: 'hidden'
-                        }}
-                      >
-                        <div style={{
-                          backgroundColor: displayCoupon.backgroundColor,
-                          padding: '12px 16px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          color: displayCoupon.textColor
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '18px' }}>{displayCoupon.iconUrl || '⚡'}</span>
-                            <span style={{ fontSize: '14px', fontWeight: '700' }}>{displayCoupon.label}</span>
+                              justifyContent: 'space-between',
+                              color: displayCoupon.textColor
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '18px' }}>{displayCoupon.iconUrl || '⚡'}</span>
+                                <span style={{ fontSize: '14px', fontWeight: '700' }}>{displayCoupon.label}</span>
+                              </div>
+                              <div style={{
+                                backgroundColor: 'rgba(255,255,255,0.2)',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                fontSize: '11px',
+                                fontWeight: '600'
+                              }}>
+                                {displayCoupon.discountValue}% OFF
+                              </div>
+                            </div>
+                            <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                              <div style={{ flex: 1, border: '1px dashed #cbd5e1', borderRadius: '6px', padding: '6px 10px', backgroundColor: '#f8fafc' }}>
+                                <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#334155', fontFamily: 'monospace' }}>{displayCoupon.code}</p>
+                              </div>
+                              <button
+                                onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
+                                style={{
+                                  border: 'none',
+                                  background: 'none',
+                                  color: isApplied ? '#10b981' : '#2563eb',
+                                  fontSize: '12px',
+                                  fontWeight: '700',
+                                  cursor: 'pointer',
+                                  padding: '4px'
+                                }}
+                              >
+                                {isApplied ? 'REMOVE' : 'APPLY'}
+                              </button>
+                            </div>
                           </div>
-                          <div style={{
-                            backgroundColor: 'rgba(255,255,255,0.2)',
-                            padding: '4px 8px',
-                            borderRadius: '6px',
-                            fontSize: '11px',
-                            fontWeight: '600'
-                          }}>
-                            {displayCoupon.discountValue}% OFF
-                          </div>
-                        </div>
-                        <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                          <div style={{ flex: 1, border: '1px dashed #cbd5e1', borderRadius: '6px', padding: '6px 10px', backgroundColor: '#f8fafc' }}>
-                            <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#334155', fontFamily: 'monospace' }}>{displayCoupon.code}</p>
-                          </div>
-                          <button
-                            onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
-                            style={{
-                              border: 'none',
-                              background: 'none',
-                              color: isApplied ? '#10b981' : '#2563eb',
-                              fontSize: '12px',
-                              fontWeight: '700',
-                              cursor: 'pointer',
-                              padding: '4px'
-                            }}
-                          >
-                            {isApplied ? 'REMOVE' : 'APPLY'}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()
             )}
 
             {/* Footer */}

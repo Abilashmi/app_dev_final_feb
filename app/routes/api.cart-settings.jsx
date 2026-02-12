@@ -8,11 +8,13 @@ import * as cartService from "../services/cartSettings.server";
 export async function loader() {
   const settings = cartService.getCartSettings();
   const coupons = cartService.getCoupons();
+  const couponSelections = cartService.getCouponSelections();
 
   return {
     success: true,
     settings,
     coupons,
+    couponSelections,
     // Provide these directly if needed by the frontend mockApi
     shopifyProducts: settings.shopifyProducts,
     mockCollections: settings.mockCollections,
@@ -48,6 +50,11 @@ export async function action({ request }) {
 
       case "coupons": {
         const updated = cartService.saveCoupons(body);
+        return { success: true, data: updated };
+      }
+
+      case "coupon-selections": {
+        const updated = cartService.saveCouponSelections(body);
         return { success: true, data: updated };
       }
 
