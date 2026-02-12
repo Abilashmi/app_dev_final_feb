@@ -160,14 +160,6 @@ const mockMilestones = [
     rewardText: 'Free Shipping',
     associatedProducts: [101],
   },
-  {
-    id: 'm2',
-    type: 'amount',
-    target: 1000,
-    label: '₹1000',
-    rewardText: 'Free Gift',
-    associatedProducts: [102],
-  },
 ];
 
 // Mock quantity-based milestones
@@ -180,19 +172,11 @@ const mockQuantityMilestones = [
     rewardText: '10% OFF',
     associatedProducts: [103],
   },
-  {
-    id: 'qm2',
-    type: 'quantity',
-    target: 10,
-    label: '10 items',
-    rewardText: 'Free Surprise Gift',
-    associatedProducts: [104],
-  },
 ];
 
 // Mock products
 const mockProducts = [
-  { id: 101, title: 'Gift Box', price: 0, image: '🎁' },
+  { id: 101, title: 'Gift Card', price: 0, image: 'https://cdn.shopify.com/s/files/1/0668/0025/5043/files/gift_card.png?v=1765536575' },
   { id: 102, title: 'Premium Mug', price: 0, image: '☕' },
   { id: 103, title: '10% Discount Code', price: 0, image: '🏷️' },
   { id: 104, title: 'Surprise Mystery Gift', price: 0, image: '🎉' },
@@ -3227,22 +3211,34 @@ export default function CartDrawerAdmin() {
                           return (
                             <div style={{
                               position: 'absolute',
-                              bottom: '-32px',
+                              bottom: isCompleted ? '-48px' : '-32px',
                               left: '50%',
                               transform: 'translateX(-50%)',
                               whiteSpace: 'nowrap',
-                              fontSize: '11px',
+                              fontSize: isCompleted ? '10px' : '11px',
                               fontWeight: '700',
-                              color: isCompleted ? '#334155' : '#64748b',
+                              color: isCompleted ? '#10b981' : '#64748b',
                               backgroundColor: '#fff',
                               padding: '4px 8px',
                               borderRadius: '6px',
                               boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                              border: '1px solid #f1f5f9',
+                              border: `1px solid ${isCompleted ? '#d1fae5' : '#f1f5f9'}`,
                               opacity: isCompleted || isNext ? 1 : 0.7,
-                              pointerEvents: 'none'
+                              pointerEvents: 'none',
+                              zIndex: 10,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              transition: 'all 0.3s ease'
                             }}>
-                              {progressMode === 'amount' ? `₹${ms.target}` : `${ms.target}`}
+                              {isCompleted ? (
+                                <>
+                                  <span style={{ fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.05em', opacity: 0.8 }}>Reached</span>
+                                  <span style={{ color: '#0f172a' }}>{ms.rewardText}</span>
+                                </>
+                              ) : (
+                                <span>{progressMode === 'amount' ? `₹${ms.target}` : `${ms.target}`}</span>
+                              )}
                             </div>
                           );
                         })()}
@@ -3250,6 +3246,85 @@ export default function CartDrawerAdmin() {
                     );
                   })}
                 </div>
+
+                {/* Unlocked Products Preview (Integrated) */}
+                {(() => {
+                  const currentVal = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
+                  const reachedWithProducts = previewMilestones.filter(ms => currentVal >= ms.target && ms.associatedProducts.length > 0);
+
+                  if (reachedWithProducts.length === 0) return null;
+
+                  const allReachedProductIds = [...new Set(reachedWithProducts.flatMap(ms => ms.associatedProducts))];
+
+                  return (
+                    <div style={{
+                      marginTop: '55px',
+                      paddingTop: '12px',
+                      borderTop: '1px dashed #e2e8f0',
+                      animation: 'fadeIn 0.5s ease'
+                    }}>
+                      <style>{`
+                        @keyframes fadeIn {
+                          from { opacity: 0; transform: translateY(5px); }
+                          to { opacity: 1; transform: translateY(0); }
+                        }
+                      `}</style>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+                        <span style={{ fontSize: '14px' }}>🎁</span>
+                        <span style={{ fontSize: '12px', fontWeight: '700', color: '#10b981' }}>Rewards Unlocked!</span>
+                      </div>
+                      <div style={{
+                        display: 'flex',
+                        gap: '12px',
+                        overflowX: 'auto',
+                        paddingBottom: '4px',
+                        scrollbarWidth: 'none',
+                        msOverflowStyle: 'none'
+                      }}>
+                        {allReachedProductIds.map(productId => {
+                          const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
+                          if (!product) return null;
+                          return (
+                            <div key={product.id} style={{
+                              flexShrink: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px',
+                              backgroundColor: '#f8fafc',
+                              padding: '4px 8px 4px 4px',
+                              borderRadius: '8px',
+                              border: '1px solid #e2e8f0'
+                            }}>
+                              <div style={{
+                                width: '32px',
+                                height: '32px',
+                                backgroundColor: '#fff',
+                                borderRadius: '6px',
+                                border: '1px solid #f1f5f9',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                overflow: 'hidden'
+                              }}>
+                                {product.image && (product.image.startsWith('http') || product.image.startsWith('//')) ? (
+                                  <img src={product.image} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                  <span style={{ fontSize: '16px' }}>{product.image || '📦'}</span>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontSize: '10px', fontWeight: '700', color: '#1e293b', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {product.title}
+                                </span>
+                                <span style={{ fontSize: '8px', fontWeight: '800', color: '#10b981' }}>FREE</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -3280,138 +3355,7 @@ export default function CartDrawerAdmin() {
               </>
             )}
 
-            {/* Unlocked Rewards Section */}
-            {featureStates.progressBarEnabled && (() => {
-              const currentVal = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
-              const unlockedMilestones = previewMilestones.filter(ms => currentVal >= ms.target && ms.associatedProducts.length > 0);
 
-              if (unlockedMilestones.length === 0) return null;
-
-              return (
-                <div style={{
-                  padding: '16px',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '12px',
-                  border: '1px solid #e2e8f0',
-                  marginTop: '12px',
-                  order: -1, // Show near the top
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-                    <div style={{
-                      width: '32px',
-                      height: '32px',
-                      backgroundColor: '#10b981',
-                      borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#fff',
-                      fontSize: '18px'
-                    }}>
-                      🎁
-                    </div>
-                    <Text variant="headingSm" as="h3">Unlocked Rewards</Text>
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {unlockedMilestones.map(ms => (
-                      <div key={ms.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <div style={{ width: '4px', height: '14px', backgroundColor: '#10b981', borderRadius: '2px' }} />
-                          <Text variant="bodySm" fontWeight="bold">{ms.rewardText}</Text>
-                        </div>
-
-                        <div style={{
-                          display: 'flex',
-                          gap: '12px',
-                          overflowX: 'auto',
-                          paddingBottom: '8px',
-                          paddingLeft: '4px',
-                          scrollbarWidth: 'none', // Hide scrollbar for clean look
-                          msOverflowStyle: 'none'
-                        }}>
-                          {ms.associatedProducts.map(productId => {
-                            const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
-                            if (!product) return null;
-                            return (
-                              <div key={product.id} style={{
-                                flexShrink: 0,
-                                width: '150px',
-                                backgroundColor: '#fff',
-                                borderRadius: '12px',
-                                border: '1px solid #f1f5f9',
-                                padding: '10px',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                gap: '8px',
-                                position: 'relative',
-                                boxShadow: '0 2px 6px rgba(0,0,0,0.02)'
-                              }}>
-                                {/* Free Badge */}
-                                <div style={{
-                                  position: 'absolute',
-                                  top: '6px',
-                                  right: '6px',
-                                  backgroundColor: '#10b981',
-                                  color: '#fff',
-                                  padding: '2px 6px',
-                                  borderRadius: '6px',
-                                  fontSize: '9px',
-                                  fontWeight: '900',
-                                  boxShadow: '0 2px 4px rgba(16,185,129,0.2)',
-                                  zIndex: 2
-                                }}>
-                                  FREE
-                                </div>
-
-                                {/* Image */}
-                                <div style={{
-                                  width: '64px',
-                                  height: '64px',
-                                  backgroundColor: '#f8fafc',
-                                  borderRadius: '8px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  overflow: 'hidden',
-                                  border: '1px solid #f1f5f9'
-                                }}>
-                                  {product.image && (product.image.startsWith('http') || product.image.startsWith('//')) ? (
-                                    <img src={product.image} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  ) : (
-                                    <span style={{ fontSize: '24px' }}>{product.image || '📦'}</span>
-                                  )}
-                                </div>
-
-                                {/* Title */}
-                                <div style={{ width: '100%', textAlign: 'center' }}>
-                                  <p style={{
-                                    margin: 0,
-                                    fontSize: '11px',
-                                    fontWeight: '700',
-                                    color: '#0f172a',
-                                    display: '-webkit-box',
-                                    WebkitLineClamp: 2,
-                                    WebkitBoxOrient: 'vertical',
-                                    overflow: 'hidden',
-                                    lineHeight: '1.3',
-                                    minHeight: '2.6em' // Space for 2 lines
-                                  }}>
-                                    {product.title}
-                                  </p>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
 
             {/* Upsell Recommendations */}
             {upsellConfig.enabled && (!showEmpty || upsellConfig.showOnEmptyCart) && (() => {

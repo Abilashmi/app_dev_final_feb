@@ -3,7 +3,7 @@
  * Features: Coupons and Frequently Bought Together tabs with templates and color pickers
  */
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useLoaderData, useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
@@ -924,14 +924,18 @@ function CouponsSection({ config, onSave, saving }) {
 // --- FBT SECTION ---
 
 function FBTSection({ config, products, onSave, saving }) {
+    const shopify = useAppBridge();
     const [activeTemplate, setActiveTemplate] = useState(config?.activeTemplate || "fbt1");
     const [templates, setTemplates] = useState(config?.templates || FAKE_FBT_CONFIG.templates);
     const [mode, setMode] = useState(config?.mode || "manual");
     const [openaiKey, setOpenaiKey] = useState(config?.openaiKey || "");
     const [manualRules, setManualRules] = useState(config?.manualRules || []);
-    const [selectedTriggerProduct, setSelectedTriggerProduct] = useState("");
-    const [selectedUpsellProducts, setSelectedUpsellProducts] = useState([]);
     const [simulatedTriggerId, setSimulatedTriggerId] = useState("");
+
+    // --- New display scope state ---
+    const [displayScope, setDisplayScope] = useState("all");
+    const [scopeTriggerProducts, setScopeTriggerProducts] = useState([]);
+    const [ruleFbtProducts, setRuleFbtProducts] = useState([]);
 
     // --- Interaction state for preview ---
     const [selectedProductIds, setSelectedProductIds] = useState(new Set());
@@ -948,18 +952,88 @@ function FBTSection({ config, products, onSave, saving }) {
         });
     };
 
+    // --- Shopify Resource Picker handlers ---
+    const handlePickTriggerProducts = async () => {
+        try {
+            const selected = await shopify.resourcePicker({
+                type: "product",
+                multiple: displayScope === "per_product",
+                selectionIds: scopeTriggerProducts.map(p => ({ id: p.id })),
+            });
+            if (selected) {
+                const mapped = selected.map(item => ({
+                    id: item.id,
+                    title: item.title,
+                    image: item.images?.[0]?.originalSrc || item.image?.originalSrc || "",
+                    handle: item.handle,
+                }));
+                setScopeTriggerProducts(mapped);
+            }
+        } catch (e) {
+            console.error("Resource picker error:", e);
+        }
+    };
+
+    const handlePickFbtProducts = async () => {
+        try {
+            const selected = await shopify.resourcePicker({
+                type: "product",
+                multiple: true,
+                selectionIds: ruleFbtProducts.map(p => ({ id: p.id })),
+            });
+            if (selected) {
+                const mapped = selected.map(item => ({
+                    id: item.id,
+                    title: item.title,
+                    image: item.images?.[0]?.originalSrc || item.image?.originalSrc || "",
+                    price: item.variants?.[0]?.price || "0.00",
+                }));
+                setRuleFbtProducts(mapped);
+            }
+        } catch (e) {
+            console.error("Resource picker error:", e);
+        }
+    };
+
+    const handleRemoveTriggerProduct = (productId) => {
+        setScopeTriggerProducts(prev => prev.filter(p => p.id !== productId));
+    };
+
+    const handleRemoveFbtProduct = (productId) => {
+        setRuleFbtProducts(prev => prev.filter(p => p.id !== productId));
+    };
+
     const handleAddRule = () => {
-        if (!selectedTriggerProduct || selectedUpsellProducts.length === 0) return;
+        if (ruleFbtProducts.length === 0) return;
+        if (displayScope !== "all" && scopeTriggerProducts.length === 0) return;
+
+        // For "single" scope, replace any existing rule
+        if (displayScope === "single") {
+            const existingSingle = manualRules.findIndex(r => r.displayScope === "single");
+            if (existingSingle >= 0) {
+                const updated = [...manualRules];
+                updated[existingSingle] = {
+                    ...updated[existingSingle],
+                    triggerProducts: scopeTriggerProducts,
+                    fbtProducts: ruleFbtProducts,
+                };
+                setManualRules(updated);
+                setScopeTriggerProducts([]);
+                setRuleFbtProducts([]);
+                return;
+            }
+        }
 
         const newRule = {
             id: `rule-${Date.now()}`,
-            triggerProductId: selectedTriggerProduct,
-            upsellProductIds: selectedUpsellProducts,
+            displayScope,
+            triggerProducts: displayScope === "all" ? [] : scopeTriggerProducts,
+            fbtProducts: ruleFbtProducts,
         };
 
         setManualRules([...manualRules, newRule]);
-        setSelectedTriggerProduct("");
-        setSelectedUpsellProducts([]);
+        setScopeTriggerProducts([]);
+        setRuleFbtProducts([]);
     };
 
     const handleRemoveRule = (ruleId) => {
@@ -976,19 +1050,28 @@ function FBTSection({ config, products, onSave, saving }) {
         });
     };
 
-    const productOptions = products.map((p) => ({
-        label: p.title,
-        value: p.id,
-    }));
+    // Check if we can add a rule
+    const canAddRule = useMemo(() => {
+        if (ruleFbtProducts.length === 0) return false;
+        if (displayScope === "all") return true;
+        if (scopeTriggerProducts.length === 0) return false;
+        return true;
+    }, [displayScope, scopeTriggerProducts, ruleFbtProducts]);
 
     const getProductById = (id) => products.find((p) => p.id === id);
     const currentTemplate = templates[activeTemplate];
     const interactionType = currentTemplate?.interactionType || "classic";
 
     // Derive display products for preview
-    const activeRule = manualRules.find(r => r.triggerProductId === simulatedTriggerId);
+    const activeRule = manualRules.find(r => {
+        if (r.displayScope === "all") return true;
+        // New format: triggerProducts array
+        if (r.triggerProducts) return r.triggerProducts.some(tp => tp.id === simulatedTriggerId);
+        // Old format: triggerProductId string
+        return r.triggerProductId === simulatedTriggerId;
+    });
     const displayProducts = activeRule
-        ? activeRule.upsellProductIds.map(id => products.find(p => p.id === id)).filter(Boolean)
+        ? (activeRule.fbtProducts || activeRule.upsellProductIds?.map(id => products.find(p => p.id === id)).filter(Boolean) || products.slice(0, 3))
         : products.slice(0, 3);
 
     // Reset selection when interaction type or display products change
@@ -1329,79 +1412,213 @@ function FBTSection({ config, products, onSave, saving }) {
                 <Card>
                     <BlockStack gap="400">
                         <Text as="h3" variant="headingMd">Manual Upsell Rules</Text>
+                        <Text as="p" tone="subdued">Configure where to show FBT recommendations and which products to suggest.</Text>
 
-                        <Select
-                            label="When customer views this product..."
-                            options={[{ label: "Select a product", value: "" }, ...productOptions]}
-                            value={selectedTriggerProduct}
-                            onChange={setSelectedTriggerProduct}
+                        <Divider />
+
+                        {/* Step 1: Display Scope */}
+                        <Text as="h4" variant="headingSm">Step 1: Where to show FBT</Text>
+                        <ChoiceList
+                            title=""
+                            choices={[
+                                {
+                                    label: "Show on all product pages",
+                                    value: "all",
+                                    helpText: "The same FBT products will appear on every product page",
+                                },
+                                {
+                                    label: "Show on a specific product page",
+                                    value: "single",
+                                    helpText: "Select one product page where FBT will appear",
+                                },
+                                {
+                                    label: "Show different FBT for different product pages",
+                                    value: "per_product",
+                                    helpText: "Create multiple rules with different FBT products per page",
+                                },
+                            ]}
+                            selected={[displayScope]}
+                            onChange={(v) => {
+                                setDisplayScope(v[0]);
+                                setScopeTriggerProducts([]);
+                                setRuleFbtProducts([]);
+                            }}
                         />
 
-                        <Text as="p" fontWeight="semibold">Show these products as suggestions:</Text>
+                        {/* Step 2: Trigger Product Picker (only for single / per_product) */}
+                        {(displayScope === "single" || displayScope === "per_product") && (
+                            <>
+                                <Divider />
+                                <Text as="h4" variant="headingSm">
+                                    Step 2: Select {displayScope === "single" ? "the product page" : "the product page(s)"}
+                                </Text>
+                                <Text as="p" tone="subdued">
+                                    {displayScope === "single"
+                                        ? "Choose the product page where FBT will be displayed."
+                                        : "Choose product page(s) that will show these FBT recommendations."}
+                                </Text>
+                                <Button onClick={handlePickTriggerProducts} variant="secondary">
+                                    {scopeTriggerProducts.length > 0 ? "Change Product(s)" : "Browse Products"}
+                                </Button>
+                                {scopeTriggerProducts.length > 0 && (
+                                    <div style={{
+                                        display: "grid",
+                                        gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+                                        gap: "10px",
+                                        marginTop: "4px",
+                                    }}>
+                                        {scopeTriggerProducts.map(p => (
+                                            <div key={p.id} style={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: "8px",
+                                                padding: "8px 10px",
+                                                background: "#f0f7ff",
+                                                borderRadius: "8px",
+                                                border: "1px solid #bfdbfe",
+                                            }}>
+                                                <Thumbnail source={p.image || ""} alt={p.title} size="small" />
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <Text variant="bodySm" fontWeight="semibold" truncate>{p.title}</Text>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRemoveTriggerProduct(p.id)}
+                                                    style={{
+                                                        background: "none", border: "none", cursor: "pointer",
+                                                        color: "#ef4444", fontSize: "16px", fontWeight: "bold",
+                                                        padding: "0 4px", lineHeight: 1,
+                                                    }}
+                                                    title="Remove"
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
 
-                        <div style={{ maxHeight: "200px", overflow: "auto", border: "1px solid #e5e7eb", borderRadius: "8px", padding: "8px" }}>
-                            {products.map((product) => (
-                                <div
-                                    key={product.id}
-                                    style={{
+                        {/* Step 3: FBT Product Picker */}
+                        <Divider />
+                        <Text as="h4" variant="headingSm">
+                            {displayScope === "all" ? "Step 2" : "Step 3"}: Select FBT products to recommend
+                        </Text>
+                        <Text as="p" tone="subdued">
+                            Choose products to show as "Frequently Bought Together" recommendations.
+                        </Text>
+                        <Button onClick={handlePickFbtProducts} variant="secondary">
+                            {ruleFbtProducts.length > 0 ? "Change FBT Products" : "Browse Products"}
+                        </Button>
+                        {ruleFbtProducts.length > 0 && (
+                            <div style={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+                                gap: "10px",
+                                marginTop: "4px",
+                            }}>
+                                {ruleFbtProducts.map(p => (
+                                    <div key={p.id} style={{
                                         display: "flex",
                                         alignItems: "center",
-                                        padding: "8px",
-                                        cursor: "pointer",
-                                        borderRadius: "4px",
-                                        background: selectedUpsellProducts.includes(product.id) ? "#e0f0ff" : "transparent",
-                                    }}
-                                    onClick={() => {
-                                        if (selectedUpsellProducts.includes(product.id)) {
-                                            setSelectedUpsellProducts(selectedUpsellProducts.filter((id) => id !== product.id));
-                                        } else {
-                                            setSelectedUpsellProducts([...selectedUpsellProducts, product.id]);
-                                        }
-                                    }}
-                                >
-                                    <Checkbox label="" checked={selectedUpsellProducts.includes(product.id)} onChange={() => { }} />
-                                    <Thumbnail source={product.image || ""} alt={product.title} size="small" />
-                                    <div style={{ marginLeft: "12px" }}>
-                                        <Text as="span" fontWeight="semibold">{product.title}</Text>
-                                        <Text as="p" tone="subdued" variant="bodySm">₹{product.price}</Text>
+                                        gap: "8px",
+                                        padding: "8px 10px",
+                                        background: "#f0fdf4",
+                                        borderRadius: "8px",
+                                        border: "1px solid #bbf7d0",
+                                    }}>
+                                        <Thumbnail source={p.image || ""} alt={p.title} size="small" />
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                            <Text variant="bodySm" fontWeight="semibold" truncate>{p.title}</Text>
+                                            <Text variant="bodySm" tone="subdued">₹{parseFloat(p.price || 0).toLocaleString("en-IN")}</Text>
+                                        </div>
+                                        <button
+                                            onClick={() => handleRemoveFbtProduct(p.id)}
+                                            style={{
+                                                background: "none", border: "none", cursor: "pointer",
+                                                color: "#ef4444", fontSize: "16px", fontWeight: "bold",
+                                                padding: "0 4px", lineHeight: 1,
+                                            }}
+                                            title="Remove"
+                                        >
+                                            ×
+                                        </button>
                                     </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
 
-                        <Button onClick={handleAddRule} disabled={!selectedTriggerProduct || selectedUpsellProducts.length === 0}>
-                            Add Rule
+                        {/* Add Rule Button */}
+                        <Button onClick={handleAddRule} disabled={!canAddRule} variant="primary">
+                            {displayScope === "single" && manualRules.some(r => r.displayScope === "single")
+                                ? "Update Rule" : "Add Rule"}
                         </Button>
 
                         <Divider />
 
+                        {/* Saved Rules */}
                         <Text as="h4" variant="headingMd">Saved Rules ({manualRules.length})</Text>
 
                         {manualRules.length === 0 ? (
-                            <Banner>No rules configured yet.</Banner>
+                            <Banner>No rules configured yet. Choose a display scope above and add FBT products.</Banner>
                         ) : (
-                            <BlockStack gap="200">
+                            <BlockStack gap="300">
                                 {manualRules.map((rule) => {
-                                    const triggerProduct = getProductById(rule.triggerProductId);
-                                    const upsellProducts = rule.upsellProductIds.map(getProductById).filter(Boolean);
+                                    // Support both old and new rule formats
+                                    const isNewFormat = !!rule.displayScope;
+                                    const scopeLabel = rule.displayScope === "all"
+                                        ? "All product pages"
+                                        : rule.displayScope === "single"
+                                            ? "Specific product page"
+                                            : rule.displayScope === "per_product"
+                                                ? "Per-product rule"
+                                                : "Legacy rule";
+
+                                    const triggerItems = isNewFormat
+                                        ? (rule.triggerProducts || [])
+                                        : [getProductById(rule.triggerProductId)].filter(Boolean);
+
+                                    const fbtItems = isNewFormat
+                                        ? (rule.fbtProducts || [])
+                                        : (rule.upsellProductIds || []).map(getProductById).filter(Boolean);
 
                                     return (
                                         <Card key={rule.id}>
-                                            <InlineStack align="space-between" blockAlign="start">
-                                                <BlockStack gap="200">
-                                                    <Text as="p" fontWeight="semibold">
-                                                        Trigger: {triggerProduct?.title || rule.triggerProductId}
-                                                    </Text>
-                                                    <InlineStack gap="100" wrap>
-                                                        {upsellProducts.map((p) => (
+                                            <BlockStack gap="300">
+                                                <InlineStack align="space-between" blockAlign="center">
+                                                    <InlineStack gap="200" blockAlign="center">
+                                                        <Badge tone={rule.displayScope === "all" ? "success" : "info"}>
+                                                            {scopeLabel}
+                                                        </Badge>
+                                                    </InlineStack>
+                                                    <Button tone="critical" size="slim" onClick={() => handleRemoveRule(rule.id)}>
+                                                        Remove
+                                                    </Button>
+                                                </InlineStack>
+
+                                                {triggerItems.length > 0 && (
+                                                    <BlockStack gap="100">
+                                                        <Text variant="bodySm" fontWeight="semibold" tone="subdued">Trigger page(s):</Text>
+                                                        <InlineStack gap="200" wrap>
+                                                            {triggerItems.map(p => (
+                                                                <InlineStack key={p.id} gap="100" blockAlign="center">
+                                                                    <Thumbnail source={p.image || ""} alt={p.title} size="extraSmall" />
+                                                                    <Text variant="bodySm">{p.title}</Text>
+                                                                </InlineStack>
+                                                            ))}
+                                                        </InlineStack>
+                                                    </BlockStack>
+                                                )}
+
+                                                <BlockStack gap="100">
+                                                    <Text variant="bodySm" fontWeight="semibold" tone="subdued">FBT products:</Text>
+                                                    <InlineStack gap="200" wrap>
+                                                        {fbtItems.map(p => (
                                                             <Badge key={p.id}>{p.title}</Badge>
                                                         ))}
                                                     </InlineStack>
                                                 </BlockStack>
-                                                <Button tone="critical" onClick={() => handleRemoveRule(rule.id)}>
-                                                    Remove
-                                                </Button>
-                                            </InlineStack>
+                                            </BlockStack>
                                         </Card>
                                     );
                                 })}
