@@ -3,6 +3,8 @@
     "env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    "**/*.js",
+    "**/*.jsx",
     ".react-router/types/**/*"
   ],
   "compilerOptions": {

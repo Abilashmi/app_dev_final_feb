@@ -30,6 +30,7 @@ import {
   rgbToHex,
   Banner,
   Spinner,
+  RadioButton,
 } from '@shopify/polaris';
 import {
   sampleCoupons,
@@ -79,38 +80,55 @@ const mockCartData = {
 // ==========================================
 // COLOR UTILITIES
 // ==========================================
+// ==========================================
+// COLOR UTILITIES
+// ==========================================
+// Robust hex to HSB conversion
 const hexToHsb = (hex) => {
-  let fullHex = hex;
-  if (hex.length === 4) {
-    fullHex = '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+  if (!hex || typeof hex !== 'string') return { hue: 0, saturation: 0, brightness: 0 };
+
+  let fullHex = hex.replace('#', '');
+  if (fullHex.length === 3) {
+    fullHex = fullHex.split('').map(char => char + char).join('');
   }
-  const r = parseInt(fullHex.slice(1, 3), 16);
-  const g = parseInt(fullHex.slice(3, 5), 16);
-  const b = parseInt(fullHex.slice(5, 7), 16);
-  return rgbToHsb({ r, g, b });
+
+  if (fullHex.length !== 6) return { hue: 0, saturation: 0, brightness: 0 };
+
+  const r = parseInt(fullHex.slice(0, 2), 16);
+  const g = parseInt(fullHex.slice(2, 4), 16);
+  const b = parseInt(fullHex.slice(4, 6), 16);
+
+  return rgbToHsb({ red: r, green: g, blue: b });
 };
 
 const ColorPickerField = ({ label, value, onChange }) => {
   const [popoverActive, setPopoverActive] = useState(false);
-  const hsbValue = hexToHsb(value || '#000000');
+  const [color, setColor] = useState(hexToHsb(value || '#000000'));
 
-  const handleColorChange = (hsb) => {
-    const rgb = hsbToRgb(hsb);
+  // Sync internal state when external value changes (and we are not dragging ideally, but tricky)
+  useEffect(() => {
+    setColor(hexToHsb(value || '#000000'));
+  }, [value]);
+
+  const handleColorChange = (newColor) => {
+    setColor(newColor);
+    const rgb = hsbToRgb(newColor);
     const hex = rgbToHex(rgb);
     onChange(hex);
   };
 
   const activator = (
-    <Button onClick={() => setPopoverActive(!popoverActive)}>
-      <InlineStack gap="200" align="center">
+    <Button onClick={() => setPopoverActive((active) => !active)}>
+      <InlineStack gap="200" blockAlign="center">
         <div style={{
-          width: '20px',
-          height: '20px',
-          backgroundColor: value,
-          border: '1px solid #c9cccf',
-          borderRadius: '4px'
+          width: '32px',
+          height: '32px',
+          backgroundColor: value || '#000000',
+          border: '1px solid #e1e3e5',
+          borderRadius: '6px',
+          flexShrink: 0
         }} />
-        <Text variant="bodyMd">{value}</Text>
+        <Text variant="bodyMd">{value || '#000000'}</Text>
       </InlineStack>
     </Button>
   );
@@ -123,10 +141,10 @@ const ColorPickerField = ({ label, value, onChange }) => {
         activator={activator}
         onClose={() => setPopoverActive(false)}
         preferredAlignment="left"
+        fluidContent
+        sectioned
       >
-        <div style={{ padding: '16px' }}>
-          <ColorPicker onChange={handleColorChange} color={hsbValue} fullWidth />
-        </div>
+        <ColorPicker onChange={handleColorChange} color={color} />
       </Popover>
     </BlockStack>
   );
@@ -712,6 +730,7 @@ export default function CartDrawerAdmin() {
   const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [currentTierForProducts, setCurrentTierForProducts] = useState(null);
   const [loadedShopifyProducts, setLoadedShopifyProducts] = useState([]);
+  const [loadedShopifyCollections, setLoadedShopifyCollections] = useState([]);
 
   // ==========================================
   // COUPON EDITOR STATE
@@ -902,6 +921,9 @@ export default function CartDrawerAdmin() {
           if (data.shopifyProducts) {
             setLoadedShopifyProducts(data.shopifyProducts);
           }
+          if (data.shopifyCollections) {
+            setLoadedShopifyCollections(data.shopifyCollections);
+          }
           if (data.cartData) {
             setCartData(data.cartData);
           }
@@ -1062,11 +1084,13 @@ export default function CartDrawerAdmin() {
 
   const handleAddToCart = async (product) => {
     // Update mock cart data
+    const priceNum = typeof product.price === 'string' ? parseFloat(product.price) : (product.price || 0);
+
     setCartData(prev => ({
       ...prev,
-      cartValue: prev.cartValue + product.price,
+      cartValue: prev.cartValue + priceNum,
       totalQuantity: prev.totalQuantity + 1,
-      items: [...prev.items, { ...product, qty: 1 }],
+      items: [...prev.items, { ...product, price: priceNum, qty: 1 }],
     }));
     setShowProductModal(false);
   };
@@ -1144,7 +1168,7 @@ export default function CartDrawerAdmin() {
     return matchesQuery;
   });
 
-  const filteredCollections = mockCollections.filter(collection => {
+  const filteredCollections = (loadedShopifyCollections.length > 0 ? loadedShopifyCollections : mockCollections).filter(collection => {
     const matchesQuery = collection.title.toLowerCase().includes(collectionSearchQuery.toLowerCase());
     if (showOnlySelectedCollections && !selectedCollectionIds.includes(collection.id)) return false;
     return matchesQuery;
@@ -1412,15 +1436,8 @@ export default function CartDrawerAdmin() {
   const getUpsellValidationError = () => {
     if (!upsellConfig) return '';
 
-    const enabledRules = [
-      upsellConfig.rule1?.enabled,
-      upsellConfig.rule2?.enabled,
-      upsellConfig.rule3?.enabled,
-    ].filter(Boolean).length;
+    // Validation relaxed: no rules required to save
 
-    if (enabledRules === 0) {
-      return 'Please enable at least one rule';
-    }
 
     if (upsellConfig.rule1?.enabled && (!upsellConfig.rule1?.upsellProducts || upsellConfig.rule1.upsellProducts.length === 0)) {
       return 'Rule #1: Select at least one upsell product';
@@ -1824,45 +1841,76 @@ export default function CartDrawerAdmin() {
             {/* SECTION 1: General Settings */}
             <Card>
               <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">General settings</Text>
+                <Text variant="headingMd" as="h2">General Settings</Text>
 
-                <Checkbox
-                  label="Show reward like the progress bar on empty cart"
-                  checked={progressBarSettings.showOnEmpty}
-                  onChange={(value) => updateProgressBarSetting('showOnEmpty', value)}
-                />
-
-                <BlockStack gap="200">
-                  <ColorPickerField
-                    label="Bar background color"
-                    value={progressBarSettings.barBackgroundColor}
-                    onChange={(value) => updateProgressBarSetting('barBackgroundColor', value)}
+                <BlockStack gap="400">
+                  <Text variant="headingSm" as="h3">Behavior & Layout</Text>
+                  <Checkbox
+                    label="Show progress bar when cart is empty"
+                    checked={progressBarSettings.showOnEmpty}
+                    onChange={(value) => updateProgressBarSetting('showOnEmpty', value)}
                   />
+
+                  <BlockStack gap="200">
+                    <Text variant="bodyMd" fontWeight="semibold">Placement</Text>
+                    <InlineStack gap="300">
+                      <RadioButton
+                        label="Top of Cart"
+                        checked={progressBarSettings.placement !== 'bottom'}
+                        id="placement-top"
+                        name="progressBarPlacement"
+                        onChange={() => updateProgressBarSetting('placement', 'top')}
+                      />
+                      <RadioButton
+                        label="Bottom of Cart"
+                        checked={progressBarSettings.placement === 'bottom'}
+                        id="placement-bottom"
+                        name="progressBarPlacement"
+                        onChange={() => updateProgressBarSetting('placement', 'bottom')}
+                      />
+                    </InlineStack>
+                  </BlockStack>
                 </BlockStack>
 
-                <BlockStack gap="200">
-                  <ColorPickerField
-                    label="Bar foreground color"
-                    value={progressBarSettings.barForegroundColor}
-                    onChange={(value) => updateProgressBarSetting('barForegroundColor', value)}
-                  />
+                <Divider />
+
+                <BlockStack gap="400">
+                  <Text variant="headingSm" as="h3">Appearance</Text>
+                  <BlockStack gap="200">
+                    <ColorPickerField
+                      label="Bar Background"
+                      value={progressBarSettings.barBackgroundColor}
+                      onChange={(value) => updateProgressBarSetting('barBackgroundColor', value)}
+                    />
+                  </BlockStack>
+
+                  <BlockStack gap="200">
+                    <ColorPickerField
+                      label="Bar Foreground (Fill)"
+                      value={progressBarSettings.barForegroundColor}
+                      onChange={(value) => updateProgressBarSetting('barForegroundColor', value)}
+                    />
+                  </BlockStack>
+
+                  <BlockStack gap="200">
+                    <Text variant="bodyMd" fontWeight="semibold">Corner Radius</Text>
+                    <TextField
+                      type="number"
+                      value={progressBarSettings.borderRadius}
+                      onChange={(value) => updateProgressBarSetting('borderRadius', Number(value))}
+                      suffix="px"
+                      autoComplete="off"
+                    />
+                  </BlockStack>
                 </BlockStack>
 
-                <BlockStack gap="200">
-                  <Text variant="bodyMd" fontWeight="semibold">Bar border radius</Text>
-                  <TextField
-                    type="number"
-                    value={progressBarSettings.borderRadius}
-                    onChange={(value) => updateProgressBarSetting('borderRadius', Number(value))}
-                    suffix="px"
-                    autoComplete="off"
-                  />
-                </BlockStack>
+                <Divider />
 
                 <BlockStack gap="200">
+                  <Text variant="headingSm" as="h3">Messages</Text>
                   <InlineStack align="space-between" blockAlign="center">
                     <Text as="span" variant="bodyMd" fontWeight="semibold">
-                      Text after completing full rewards bar
+                      Completion Message
                     </Text>
                     <Button
                       plain
@@ -1876,6 +1924,7 @@ export default function CartDrawerAdmin() {
                     onChange={(value) => updateProgressBarSetting('completionText', value)}
                     multiline={3}
                     autoComplete="off"
+                    placeholder="e.g. All Rewards Unlocked!"
                   />
                 </BlockStack>
               </BlockStack>
@@ -1884,20 +1933,20 @@ export default function CartDrawerAdmin() {
             {/* SECTION 2: Progress Mode Selection */}
             <Card>
               <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">Progress calculation mode</Text>
+                <Text variant="headingMd" as="h2">Progress Calculation</Text>
 
                 <ChoiceList
                   title=""
                   choices={[
                     {
-                      label: 'Cart Value Based',
+                      label: 'Cart Value Based (Spend)',
                       value: 'amount',
-                      helpText: 'Progress tracked by cart total (₹)',
+                      helpText: 'Progress tracked by total cart value (₹)',
                     },
                     {
-                      label: 'Cart Quantity Based',
+                      label: 'Item Quantity Based (Count)',
                       value: 'quantity',
-                      helpText: 'Progress tracked by item count (#)',
+                      helpText: 'Progress tracked by total number of items',
                     },
                   ]}
                   selected={[progressMode]}
@@ -1937,64 +1986,7 @@ export default function CartDrawerAdmin() {
               </BlockStack>
             </Card>
 
-            {/* SECTION 4: Current Progress */}
-            <Card>
-              <BlockStack gap="300">
-                <Text variant="headingMd" as="h2">Current progress</Text>
 
-                <BlockStack gap="400">
-                  <div style={{ backgroundColor: '#f9fafb', padding: '16px', borderRadius: '8px', border: '1px dashed #d1d5db' }}>
-                    <BlockStack gap="200">
-                      <Text variant="bodyMd" fontWeight="semibold">Simulate customer cart</Text>
-                      {progressMode === 'amount' ? (
-                        <TextField
-                          label="Simulated Cart Value"
-                          type="number"
-                          prefix="₹"
-                          value={cartData.cartValue}
-                          onChange={(v) => setCartData({ ...cartData, cartValue: Number(v) })}
-                          autoComplete="off"
-                        />
-                      ) : (
-                        <TextField
-                          label="Simulated Item Quantity"
-                          type="number"
-                          suffix="items"
-                          value={cartData.totalQuantity}
-                          onChange={(v) => setCartData({ ...cartData, totalQuantity: Number(v) })}
-                          autoComplete="off"
-                        />
-                      )}
-                    </BlockStack>
-                  </div>
-
-                  <BlockStack gap="200">
-                    <InlineStack align="space-between">
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">
-                        {progressMode === 'amount' ? `₹${currentValue}` : `${currentValue} items`} / {progressMode === 'amount' ? `₹${highestMilestone}` : `${highestMilestone} items`}
-                      </Text>
-                      <Text as="span" variant="bodyMd" fontWeight="semibold">{Math.round(progressPercent)}%</Text>
-                    </InlineStack>
-
-                    <ProgressBar progress={progressPercent} />
-
-                    {milestone.upcoming && (
-                      <Text as="p" tone="subdued">
-                        {progressMode === 'amount'
-                          ? `You're ₹${milestone.nextAmount} away from ${milestone.upcoming.rewardText}`
-                          : `You need ${milestone.nextAmount} more item${milestone.nextAmount !== 1 ? 's' : ''} for ${milestone.upcoming.rewardText}`}
-                      </Text>
-                    )}
-
-                    {milestone.completed.length > 0 && milestone.upcoming === undefined && (
-                      <Text as="p" tone="success" fontWeight="semibold">
-                        🎉 {progressBarSettings.completionText}
-                      </Text>
-                    )}
-                  </BlockStack>
-                </BlockStack>
-              </BlockStack>
-            </Card>
 
             {/* SECTION 5: Tier Settings */}
             <Card>
@@ -3032,124 +3024,199 @@ export default function CartDrawerAdmin() {
 
           {/* Body */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {/* Progress Bar Feature */}
+            {/* Progress Bar Feature - Integrated Milestones */}
             {featureStates.progressBarEnabled && (progressBarSettings.showOnEmpty || !showEmpty) && (
               <div style={{
-                padding: '20px',
+                padding: '24px 16px',
+                order: progressBarSettings.placement === 'bottom' ? 10 : -2,
                 backgroundColor: '#ffffff',
                 borderRadius: '16px',
-                boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.08)',
-                border: 'none',
+                boxShadow: '0 4px 20px -5px rgba(0, 0, 0, 0.05)',
                 marginBottom: '20px',
                 position: 'relative',
-
+                border: '1px solid #f1f5f9'
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <Text as="p" fontWeight="bold" variant="headingSm">
-                    {progressMode === 'amount' ? 'Rewards Progress' : 'Item Progress'}
-                  </Text>
-                  <Text as="span" variant="bodySm" tone="subdued" fontWeight="semibold">
-                    {progressMode === 'amount' ? `₹${cartData.cartValue}` : `${cartData.totalQuantity}`} / {highestTarget}
-                  </Text>
-                </div>
-
-                <div style={{
-                  height: '14px',
-                  backgroundColor: progressBarSettings.barBackgroundColor || '#f1f5f9',
-                  borderRadius: `${progressBarSettings.borderRadius || 8}px`,
-                  overflow: 'hidden',
-                  marginBottom: '12px',
-                  boxShadow: 'inset 0 1px 3px rgba(0,0,0,0.1)',
-                  border: '1px solid rgba(0,0,0,0.05)',
-                  padding: '2px' // Inner spacing for a premium look
-                }}>
-                  <div
-                    style={{
-                      height: '100%',
-                      width: `${calculateProgress(progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity, highestTarget)}%`,
-                      backgroundColor: progressBarSettings.barForegroundColor || '#2563eb',
-                      background: `linear-gradient(90deg, ${progressBarSettings.barForegroundColor || '#2563eb'}, ${progressBarSettings.barForegroundColor ? progressBarSettings.barForegroundColor + 'cc' : '#3b82f6'})`,
-                      borderRadius: `${Math.max(0, (progressBarSettings.borderRadius || 8) - 2)}px`,
-                      transition: 'width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                      boxShadow: `0 0 12px ${progressBarSettings.barForegroundColor}55`,
-                      position: 'relative'
-                    }}
-                  >
-                    {/* Glossy overlay */}
-                    <div style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      height: '50%',
-                      background: 'rgba(255,255,255,0.15)',
-                      borderRadius: '99px'
-                    }} />
-                  </div>
-                </div>
-
-                {(() => {
-                  const activeMilestone = getActiveMilestone(progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity, previewMilestones, progressMode);
-                  if (activeMilestone.upcoming) {
-                    return (
-                      <p style={{ margin: 0, fontSize: '13px', color: '#64748b', fontWeight: '500' }}>
-                        You're only <span style={{ color: '#0f172a', fontWeight: '700' }}>{progressMode === 'amount' ? `₹${activeMilestone.nextAmount}` : `${activeMilestone.nextAmount} items`}</span> away from <span style={{ color: progressBarSettings.barForegroundColor || '#2563eb', fontWeight: '700' }}>{activeMilestone.upcoming.rewardText}</span>
-                      </p>
-                    );
+                {/* CSS for Animations */}
+                <style>{`
+                  @keyframes shimmer {
+                    0% { background-position: 200% 0; }
+                    100% { background-position: -200% 0; }
                   }
-                  return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#10b981' }}>
-                      <span style={{ fontSize: '16px' }}>🎉</span>
-                      <p style={{ margin: 0, fontSize: '13px', fontWeight: '700' }}>
-                        {progressBarSettings.completionText}
-                      </p>
-                    </div>
-                  );
-                })()}
+                  @keyframes pulse-ring {
+                    0% { box-shadow: 0 0 0 0 ${progressBarSettings.barForegroundColor || '#2563eb'}66; }
+                    70% { box-shadow: 0 0 0 6px ${progressBarSettings.barForegroundColor || '#2563eb'}00; }
+                    100% { box-shadow: 0 0 0 0 ${progressBarSettings.barForegroundColor || '#2563eb'}00; }
+                  }
+                  .milestone-hover-scale:hover {
+                     transform: translate(-50%, -50%) scale(1.15) !important;
+                     z-index: 20 !important;
+                  }
+                `}</style>
 
-                {/* Milestone Badges */}
-                {previewMilestones.length > 0 && (
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap' }}>
-                    {previewMilestones.map(ms => {
-                      const isCompleted = (progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity) >= ms.target;
+                {/* Header Info */}
+                <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+                  {(() => {
+                    const activeMilestone = getActiveMilestone(progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity, previewMilestones, progressMode);
+                    if (activeMilestone.upcoming) {
+                      const amountLeft = activeMilestone.nextAmount;
+                      const rewardText = activeMilestone.upcoming.rewardText;
                       return (
-                        <div
-                          key={ms.id}
-                          onClick={() => ms.associatedProducts.length > 0 && handleMilestoneProductClick(ms.associatedProducts)}
-                          style={{
-                            padding: '6px 12px',
-                            backgroundColor: isCompleted ? '#ecfdf5' : '#f8fafc',
-                            borderRadius: `${Math.max(0, (progressBarSettings.borderRadius || 8) - 2)}px`,
-                            fontSize: '11px',
-                            fontWeight: '600',
-                            color: isCompleted ? '#059669' : '#64748b',
-                            cursor: ms.associatedProducts.length > 0 ? 'pointer' : 'default',
-                            border: `1px solid ${isCompleted ? '#a7f3d0' : '#e2e8f0'}`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            transition: 'all 0.2s ease'
-                          }}
-                        >
-                          <div style={{
-                            width: '14px',
-                            height: '14px',
-                            borderRadius: '50%',
-                            backgroundColor: isCompleted ? '#10b981' : '#cbd5e1',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: '#fff',
-                            fontSize: '9px'
-                          }}>
-                            {isCompleted ? '✓' : ''}
-                          </div>
-                          {ms.label}
+                        <div>
+                          <p style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: '500', color: '#64748b' }}>
+                            You're <span style={{ color: '#0f172a', fontWeight: '700' }}>{progressMode === 'amount' ? `₹${amountLeft}` : `${amountLeft} items`}</span> away
+                          </p>
+                          <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: progressBarSettings.barForegroundColor || '#2563eb' }}>
+                            Unlock: {rewardText}
+                          </p>
                         </div>
                       );
-                    })}
-                  </div>
-                )}
+                    }
+                    return (
+                      <div style={{ color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '20px' }}>🎉</span>
+                        <span style={{ fontSize: '15px', fontWeight: '700' }}>{progressBarSettings.completionText || 'All Rewards Unlocked!'}</span>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Progress Track */}
+                <div style={{ position: 'relative', height: '40px', marginBottom: '8px', padding: '0 10px' }}>
+                  {/* Background Line */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '12px',
+                    right: '12px',
+                    height: '8px',
+                    marginTop: '-4px',
+                    backgroundColor: '#f1f5f9',
+                    borderRadius: '99px',
+                    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)'
+                  }} />
+
+                  {/* Foreground Fill */}
+                  {(() => {
+                    const currentVal = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
+                    const percentage = Math.min(100, (currentVal / highestTarget) * 100);
+
+                    return (
+                      <div style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '12px',
+                        height: '8px',
+                        marginTop: '-4px',
+                        width: `calc(${percentage}% - 24px)`,
+                        maxWidth: 'calc(100% - 24px)',
+                        backgroundColor: progressBarSettings.barForegroundColor || '#2563eb',
+                        background: `linear-gradient(90deg, ${progressBarSettings.barForegroundColor || '#2563eb'}, #60a5fa, ${progressBarSettings.barForegroundColor || '#2563eb'})`,
+                        backgroundSize: '200% 100%',
+                        animation: 'shimmer 3s infinite linear',
+                        borderRadius: '99px',
+                        transition: 'width 1s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: `0 0 15px ${progressBarSettings.barForegroundColor || '#2563eb'}66`,
+                        zIndex: 1
+                      }} />
+                    );
+                  })()}
+
+                  {/* Milestone Nodes */}
+                  {previewMilestones.map((ms, idx) => {
+                    const currentVal = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
+                    const isCompleted = currentVal >= ms.target;
+                    const percent = Math.min(100, Math.max(0, (ms.target / highestTarget) * 100));
+
+                    // Icon logic based on text or generic
+                    let icon = '🔒';
+                    if (isCompleted) icon = '🎁';
+                    if (ms.rewardText.toLowerCase().includes('ship')) icon = isCompleted ? '🚚' : '🚛';
+                    if (ms.rewardText.toLowerCase().includes('discount') || ms.rewardText.includes('%')) icon = isCompleted ? '🏷️' : '🎫';
+
+                    return (
+                      <div
+                        key={ms.id}
+                        style={{
+                          position: 'absolute',
+                          left: `${percent}%`,
+                          top: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          zIndex: 2,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          cursor: ms.associatedProducts.length > 0 ? 'pointer' : 'default',
+                        }}
+                        onClick={() => ms.associatedProducts.length > 0 && handleMilestoneProductClick(ms.associatedProducts)}
+                      >
+                        {/* Node Circle */}
+                        {/* Node Circle */}
+                        {(() => {
+                          const isNext = !isCompleted && (idx === 0 || ((progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity) >= previewMilestones[idx - 1].target));
+                          return (
+                            <div style={{
+                              width: isCompleted || isNext ? '36px' : '28px',
+                              height: isCompleted || isNext ? '36px' : '28px',
+                              borderRadius: '50%',
+                              backgroundColor: isCompleted ? (progressBarSettings.barForegroundColor || '#2563eb') : '#ffffff',
+                              border: `2px solid ${isCompleted ? (progressBarSettings.barForegroundColor || '#2563eb') : (isNext ? (progressBarSettings.barForegroundColor || '#2563eb') : '#cbd5e1')}`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: isCompleted || isNext ? '16px' : '12px',
+                              boxShadow: isCompleted ? `0 4px 12px ${progressBarSettings.barForegroundColor || '#2563eb'}66` : '0 2px 5px rgba(0,0,0,0.05)',
+                              color: isCompleted ? '#fff' : '#94a3b8',
+                              animation: isNext ? 'pulse-ring 2s infinite' : 'none',
+                              position: 'relative'
+                            }}>
+                              {icon}
+                              {isCompleted && (
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '-4px',
+                                  right: '-4px',
+                                  width: '14px',
+                                  height: '14px',
+                                  backgroundColor: '#10b981',
+                                  borderRadius: '50%',
+                                  border: '2px solid #fff',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: '8px', color: '#fff'
+                                }}>✓</div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
+                        {/* Floating Tooltip Label */}
+                        {(() => {
+                          const isNext = !isCompleted && (idx === 0 || ((progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity) >= previewMilestones[idx - 1].target));
+                          return (
+                            <div style={{
+                              position: 'absolute',
+                              bottom: '-32px',
+                              left: '50%',
+                              transform: 'translateX(-50%)',
+                              whiteSpace: 'nowrap',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              color: isCompleted ? '#334155' : '#64748b',
+                              backgroundColor: '#fff',
+                              padding: '4px 8px',
+                              borderRadius: '6px',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                              border: '1px solid #f1f5f9',
+                              opacity: isCompleted || isNext ? 1 : 0.7,
+                              pointerEvents: 'none'
+                            }}>
+                              {progressMode === 'amount' ? `₹${ms.target}` : `${ms.target}`}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -3186,6 +3253,7 @@ export default function CartDrawerAdmin() {
               let productsToShow = [];
 
               if (upsellConfig.upsellMode === 'manual') {
+                // Try old rule1/2/3 system first
                 const rulesForEvaluation = [
                   {
                     id: 'rule2',
@@ -3211,6 +3279,22 @@ export default function CartDrawerAdmin() {
 
                 const matchedRule = evaluateUpsellRules(rulesForEvaluation, cartProductIds, cartTotal);
                 productsToShow = matchedRule?.upsellProducts || [];
+
+                // Fallback: use manualUpsellRules if old rules yield nothing
+                if (productsToShow.length === 0 && manualUpsellRules.length > 0) {
+                  // Find the first matching manual rule
+                  const matchingManualRule = manualUpsellRules.find(rule => {
+                    if (rule.triggerType === 'all') return true;
+                    // Check if any trigger product is in the cart
+                    if (rule.triggerProductIds?.length > 0) {
+                      return rule.triggerProductIds.some(id => cartProductIds.includes(id));
+                    }
+                    return false;
+                  });
+                  if (matchingManualRule) {
+                    productsToShow = matchingManualRule.upsellProductIds || [];
+                  }
+                }
               } else if (upsellConfig.upsellMode === 'ai') {
                 // For AI mode, show some default products
                 productsToShow = ['sp-2', 'sp-6', 'sp-8'];
@@ -3298,7 +3382,34 @@ export default function CartDrawerAdmin() {
                           border: '1px solid #e5e7eb',
                           minWidth: upsellConfig.layout === 'carousel' && upsellConfig.alignment === 'horizontal' ? '200px' : 'auto',
                         }}>
-                          <div style={{ fontSize: '24px', flexShrink: 0 }}>{product.image}</div>
+                          {product.image && product.image.startsWith('http') ? (
+                            <img
+                              src={product.image}
+                              alt={product.title}
+                              style={{
+                                width: '56px',
+                                height: '56px',
+                                objectFit: 'cover',
+                                borderRadius: '6px',
+                                flexShrink: 0,
+                                backgroundColor: '#f3f4f6',
+                              }}
+                            />
+                          ) : (
+                            <div style={{
+                              width: '56px',
+                              height: '56px',
+                              borderRadius: '6px',
+                              backgroundColor: '#f3f4f6',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '24px',
+                              flexShrink: 0,
+                            }}>
+                              {product.image || '📦'}
+                            </div>
+                          )}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ margin: '0 0 4px 0', fontSize: '12px', fontWeight: '600', color: '#111' }}>
                               {product.title}
@@ -3311,17 +3422,19 @@ export default function CartDrawerAdmin() {
                               </div>
                             )}
                           </div>
-                          <button style={{
-                            padding: upsellConfig.buttonStyle === 'circle' ? '8px' : '6px 10px',
-                            fontSize: '11px',
-                            borderRadius: upsellConfig.buttonStyle === 'circle' ? '50%' : '6px',
-                            border: 'none',
-                            backgroundColor: '#111',
-                            color: '#fff',
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap',
-                            flexShrink: 0,
-                          }}>
+                          <button
+                            onClick={() => handleAddToCart(product)}
+                            style={{
+                              padding: upsellConfig.buttonStyle === 'circle' ? '8px' : '6px 10px',
+                              fontSize: '11px',
+                              borderRadius: upsellConfig.buttonStyle === 'circle' ? '50%' : '6px',
+                              border: 'none',
+                              backgroundColor: '#111',
+                              color: '#fff',
+                              cursor: 'pointer',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0,
+                            }}>
                             {upsellConfig.buttonStyle === 'circle' ? '+' : 'Add'}
                           </button>
                         </div>
@@ -3693,7 +3806,7 @@ export default function CartDrawerAdmin() {
             }
           </div>
         </div>
-      </div>
+      </div >
     );
   };
 

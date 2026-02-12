@@ -348,7 +348,7 @@ export const SAMPLE_UPSELL_PRODUCTS = [
 ];
 
 export const DEFAULT_UPSELL_CONFIG = {
-    enabled: true,
+    enabled: false,
     showOnEmptyCart: false,
     activeTemplate: UPSELL_STYLES.GRID,
     upsellTitle: {

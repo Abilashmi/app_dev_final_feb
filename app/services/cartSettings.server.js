@@ -39,9 +39,17 @@ let CART_SETTINGS = {
     alignment: "horizontal",
   },
   upsell: {
-    enabled: true,
+    enabled: false,
     upsellMode: "manual",
-    manualRules: [],
+    manualRules: [
+      {
+        id: "rule-default-1",
+        triggerType: "all",
+        triggerProductIds: [],
+        triggerCollectionIds: [],
+        upsellProductIds: ["gid://shopify/Product/7545196970051"],
+      },
+    ],
   },
 };
 

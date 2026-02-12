@@ -1,23 +1,105 @@
 // app/routes/api.cart-settings.jsx
+import { authenticate } from "../shopify.server";
 import * as cartService from "../services/cartSettings.server";
 
 /**
  * GET /api/cart-settings
  * Loads all cart configuration data.
  */
-export async function loader() {
+export async function loader({ request }) {
   const settings = cartService.getCartSettings();
   const coupons = cartService.getCoupons();
   const couponSelections = cartService.getCouponSelections();
+
+  // Initialize with static fallback data
+  let shopifyProducts = settings.shopifyProducts;
+  let shopifyCollections = settings.mockCollections; // Initialize fallback
+
+  try {
+    const { admin } = await authenticate.admin(request);
+
+    if (admin) {
+      const response = await admin.graphql(
+        `#graphql
+        query getProducts {
+          products(first: 50, sortKey: TITLE) {
+            edges {
+              node {
+                id
+                title
+                status
+                totalInventory
+                priceRangeV2 {
+                  minVariantPrice {
+                    amount
+                    currencyCode
+                  }
+                }
+                featuredImage {
+                  url
+                }
+                variants(first: 1) {
+                  edges {
+                    node {
+                      id
+                      price
+                    }
+                  }
+                }
+                totalVariants
+              }
+            }
+          }
+          collections(first: 50, sortKey: TITLE) {
+            edges {
+              node {
+                id
+                title
+                productsCount {
+                  count
+                }
+              }
+            }
+          }
+        }`
+      );
+
+      const data = await response.json();
+
+      if (data.data?.products?.edges) {
+        shopifyProducts = data.data.products.edges.map(({ node }) => ({
+          id: node.id,
+          title: node.title,
+          price: node.priceRangeV2?.minVariantPrice?.amount || "0.00",
+          image: node.featuredImage?.url || "",
+          variantId: node.variants?.edges?.[0]?.node?.id || "",
+          variantCount: node.totalVariants || 0,
+          status: (node.status || "ACTIVE").toLowerCase(),
+          legacyId: node.id.split("/").pop()
+        }));
+      }
+
+      if (data.data?.collections?.edges) {
+        shopifyCollections = data.data.collections.edges.map(({ node }) => ({
+          id: node.id,
+          title: node.title,
+          productCount: node.productsCount?.count || 0,
+          legacyId: node.id.split("/").pop()
+        }));
+      }
+    }
+  } catch (error) {
+    console.error("Failed to fetch Shopify products/collections:", error);
+  }
 
   return {
     success: true,
     settings,
     coupons,
     couponSelections,
-    // Provide these directly if needed by the frontend mockApi
-    shopifyProducts: settings.shopifyProducts,
-    mockCollections: settings.mockCollections,
+    shopifyProducts,
+    shopifyCollections, // Now dynamic!
+    mockCollections: settings.mockCollections, // Keep as fallback/unused
     cartData: settings.cartData
   };
 }
