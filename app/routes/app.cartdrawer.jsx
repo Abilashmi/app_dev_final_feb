@@ -1107,7 +1107,10 @@ export default function CartDrawerAdmin() {
 
     const updateNestedField = (obj, keys, val) => {
       const lastKey = keys.pop();
-      const target = keys.reduce((o, k) => o[k], obj);
+      const target = keys.reduce((o, k) => {
+        if (o[k] === undefined || o[k] === null) o[k] = {};
+        return o[k];
+      }, obj);
       target[lastKey] = val;
     };
 
@@ -2408,7 +2411,7 @@ export default function CartDrawerAdmin() {
 
                               <TextField
                                 label="Button Text"
-                                value={editingCoupon.button.text}
+                                value={editingCoupon.button?.text || 'Apply'}
                                 onChange={(value) => updateCouponField('button.text', value)}
                                 autoComplete="off"
                               />
@@ -2417,14 +2420,14 @@ export default function CartDrawerAdmin() {
                                 <div style={{ flex: 1 }}>
                                   <ColorPickerField
                                     label="Button Background"
-                                    value={editingCoupon.button.backgroundColor}
+                                    value={editingCoupon.button?.backgroundColor || '#000000'}
                                     onChange={(value) => updateCouponField('button.backgroundColor', value)}
                                   />
                                 </div>
                                 <div style={{ flex: 1 }}>
                                   <ColorPickerField
                                     label="Button Text Color"
-                                    value={editingCoupon.button.textColor}
+                                    value={editingCoupon.button?.textColor || '#ffffff'}
                                     onChange={(value) => updateCouponField('button.textColor', value)}
                                   />
                                 </div>
@@ -2813,7 +2816,7 @@ export default function CartDrawerAdmin() {
     const highestTarget = previewMilestones.length > 0 ? previewMilestones[previewMilestones.length - 1].target : 1000;
 
     return (
-      <div style={{ position: 'relative', height: '100%', overflow: 'hidden', backgroundColor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+      <div style={{ position: 'relative', height: '100%', backgroundColor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
         {/* Drawer Background (simulated storefront) */}
         <div style={{ position: 'absolute', inset: 0, backgroundColor: '#fff', opacity: 0.3 }} />
 
@@ -2828,7 +2831,7 @@ export default function CartDrawerAdmin() {
           boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
           display: 'flex',
           flexDirection: 'column',
-          overflow: 'hidden',
+
         }}>
           {/* Header */}
           <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -3737,7 +3740,7 @@ export default function CartDrawerAdmin() {
           <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb', backgroundColor: '#f9fafb' }}>
             <Text variant="headingSm" as="h2">Live Preview</Text>
           </div>
-          <div style={{ height: 'calc(100vh - 49px)', overflow: 'hidden' }}>
+          <div style={{ height: 'calc(100vh - 49px)', overflowY: 'auto', overflowX: 'hidden' }}>
             {renderCartPreview()}
           </div>
         </div>
