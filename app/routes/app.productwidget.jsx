@@ -832,9 +832,11 @@ function CouponsSection({ config, onSave, saving }) {
                                 COPY CODE
                             </div>
                         </div>
-                        <div style={{ textAlign: "center" }}>
-                            <Badge tone="success">{currentTemplate.name}</Badge>
-                        </div>
+                        <Box>
+                            <InlineStack align="center">
+                                <Badge tone="success">{currentTemplate.name}</Badge>
+                            </InlineStack>
+                        </Box>
                     </BlockStack>
                 </Card>
 
@@ -1062,6 +1064,33 @@ function FBTSection({ config, products, onSave, saving }) {
         });
     };
 
+    const handleSaveTemplate = () => {
+        onSave({
+            activeTemplate,
+            templateData: JSON.stringify(templates),
+            mode,
+            openaiKey: mode === "ai" ? openaiKey : "",
+            configData: mode === "manual" ? JSON.stringify(manualRules) : "",
+            _toastMessage: "Template is saved!",
+        });
+    };
+
+    const handleDiscardTemplate = () => {
+        setActiveTemplate(config?.activeTemplate || "fbt1");
+        setTemplates(config?.templates || FAKE_FBT_CONFIG.templates);
+    };
+
+    const handleDiscardAll = () => {
+        setActiveTemplate(config?.activeTemplate || "fbt1");
+        setTemplates(config?.templates || FAKE_FBT_CONFIG.templates);
+        setMode(config?.mode || "manual");
+        setOpenaiKey(config?.openaiKey || "");
+        setManualRules(config?.manualRules || []);
+        setDisplayScope("all");
+        setScopeTriggerProducts([]);
+        setRuleFbtProducts([]);
+    };
+
     // Check if we can add a rule
     const canAddRule = useMemo(() => {
         if (ruleFbtProducts.length === 0) return false;
@@ -1146,43 +1175,25 @@ function FBTSection({ config, products, onSave, saving }) {
                 Choose a template and configure product recommendations.
             </Text>
 
-            {/* Template Selector */}
-            <Card>
-                <BlockStack gap="300">
-                    <Text as="h3" variant="headingMd">Select Template</Text>
-                    <InlineStack gap="300">
-                        {Object.keys(templates).map((templateKey) => (
-                            <Button
-                                key={templateKey}
-                                pressed={activeTemplate === templateKey}
-                                onClick={() => setActiveTemplate(templateKey)}
-                            >
-                                {templates[templateKey].name}
-                            </Button>
-                        ))}
-                    </InlineStack>
-                </BlockStack>
-            </Card>
-
-            {/* Simulation Card */}
-            <Card>
-                <BlockStack gap="300">
-                    <Text variant="headingMd" as="h3">Interactive Simulation</Text>
-                    <Text as="p" tone="subdued">Select a product to see how FBT suggests items based on your rules.</Text>
-                    <Select
-                        label="View product page as customer:"
-                        options={[{ label: "Select a product to simulate", value: "" }, ...products.map(p => ({ label: p.title, value: p.id }))]}
-                        value={simulatedTriggerId}
-                        onChange={setSimulatedTriggerId}
-                    />
-                </BlockStack>
-            </Card>
-
             {/* Two Column Layout: Preview Left, Customization Right */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
                 {/* LEFT: Preview */}
                 <Card>
                     <BlockStack gap="300">
+                        {/* Template Selector inside Preview */}
+                        <Text as="h3" variant="headingMd">Select Template</Text>
+                        <InlineStack gap="300">
+                            {Object.keys(templates).map((templateKey) => (
+                                <Button
+                                    key={templateKey}
+                                    pressed={activeTemplate === templateKey}
+                                    onClick={() => setActiveTemplate(templateKey)}
+                                >
+                                    {templates[templateKey].name}
+                                </Button>
+                            ))}
+                        </InlineStack>
+                        <Divider />
                         <Text as="h3" variant="headingMd">Preview</Text>
                         {(() => {
                             return (
@@ -1278,110 +1289,125 @@ function FBTSection({ config, products, onSave, saving }) {
                                 </div>
                             );
                         })()}
-                        <div style={{ textAlign: "center" }}>
-                            <Badge tone="success">{currentTemplate.name}</Badge>
-                        </div>
+                        <Box>
+                            <InlineStack align="center">
+                                <Badge tone="success">{currentTemplate.name}</Badge>
+                            </InlineStack>
+                        </Box>
                     </BlockStack>
                 </Card>
 
                 {/* RIGHT: Customization */}
                 <Card>
-                    <BlockStack gap="400">
-                        <Text as="h3" variant="headingMd">Customize: {currentTemplate.name}</Text>
+                    <div style={{ maxHeight: "480px", overflowY: "auto" }}>
+                        <BlockStack gap="400">
+                            <Text as="h3" variant="headingMd">Customize: {currentTemplate.name}</Text>
 
-                        <Divider />
+                            <Divider />
 
-                        <Text as="h4" variant="headingSm">Interaction Style</Text>
-                        <Select
-                            label="How customers interact with products"
-                            labelHidden
-                            options={[
-                                { label: "Classic — Individual Add / Remove", value: "classic" },
-                                { label: "Bundle — Minimum 1 Required", value: "bundle" },
-                                { label: "Quick Add — Quantity Stepper", value: "quickAdd" },
-                            ]}
-                            value={interactionType}
-                            onChange={(v) => updateTemplate("interactionType", v)}
-                        />
-
-                        <Divider />
-
-                        <Text as="h4" variant="headingSm">Layout Alignment</Text>
-                        <Select
-                            label="Product card alignment"
-                            labelHidden
-                            options={[
-                                { label: "Horizontal — Side by side", value: "horizontal" },
-                                { label: "Vertical — Stacked list", value: "vertical" },
-                            ]}
-                            value={currentTemplate.layout || "horizontal"}
-                            onChange={(v) => updateTemplate("layout", v)}
-                        />
-
-                        <Divider />
-
-                        <Text as="h4" variant="headingSm">Colors</Text>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                            <ColorPickerField
-                                label="Background"
-                                value={currentTemplate.bgColor}
-                                onChange={(v) => updateTemplate("bgColor", v)}
+                            <Text as="h4" variant="headingSm">Interaction Style</Text>
+                            <Select
+                                label="How customers interact with products"
+                                labelHidden
+                                options={[
+                                    { label: "Classic — Individual Add / Remove", value: "classic" },
+                                    { label: "Bundle — Minimum 1 Required", value: "bundle" },
+                                    { label: "Quick Add — Quantity Stepper", value: "quickAdd" },
+                                ]}
+                                value={interactionType}
+                                onChange={(v) => updateTemplate("interactionType", v)}
                             />
-                            <ColorPickerField
-                                label="Text Color"
-                                value={currentTemplate.textColor}
-                                onChange={(v) => updateTemplate("textColor", v)}
-                            />
-                            <ColorPickerField
-                                label="Price Color"
-                                value={currentTemplate.priceColor}
-                                onChange={(v) => updateTemplate("priceColor", v)}
-                            />
-                            <ColorPickerField
-                                label="Button Color"
-                                value={currentTemplate.buttonColor}
-                                onChange={(v) => updateTemplate("buttonColor", v)}
-                            />
-                            <ColorPickerField
-                                label="Button Text"
-                                value={currentTemplate.buttonTextColor}
-                                onChange={(v) => updateTemplate("buttonTextColor", v)}
-                            />
-                            <ColorPickerField
-                                label="Border Color"
-                                value={currentTemplate.borderColor}
-                                onChange={(v) => updateTemplate("borderColor", v)}
-                            />
-                        </div>
 
-                        <Divider />
+                            <Divider />
 
-                        <Text as="h4" variant="headingSm">Styling</Text>
-                        <RangeSlider
-                            label={`Border Radius: ${currentTemplate.borderRadius}px`}
-                            value={currentTemplate.borderRadius}
-                            onChange={(v) => updateTemplate("borderRadius", v)}
-                            min={0}
-                            max={24}
-                            output
-                        />
-
-                        <Divider />
-
-                        <Text as="h4" variant="headingSm">Display Options</Text>
-                        <InlineStack gap="400">
-                            <Checkbox
-                                label="Show Prices"
-                                checked={currentTemplate.showPrices}
-                                onChange={(v) => updateTemplate("showPrices", v)}
+                            <Text as="h4" variant="headingSm">Layout Alignment</Text>
+                            <Select
+                                label="Product card alignment"
+                                labelHidden
+                                options={[
+                                    { label: "Horizontal — Side by side", value: "horizontal" },
+                                    { label: "Vertical — Stacked list", value: "vertical" },
+                                ]}
+                                value={currentTemplate.layout || "horizontal"}
+                                onChange={(v) => updateTemplate("layout", v)}
                             />
-                            <Checkbox
-                                label="Show 'Add All' Button"
-                                checked={currentTemplate.showAddAllButton}
-                                onChange={(v) => updateTemplate("showAddAllButton", v)}
+
+                            <Divider />
+
+                            <Text as="h4" variant="headingSm">Colors</Text>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                <ColorPickerField
+                                    label="Background"
+                                    value={currentTemplate.bgColor}
+                                    onChange={(v) => updateTemplate("bgColor", v)}
+                                />
+                                <ColorPickerField
+                                    label="Text Color"
+                                    value={currentTemplate.textColor}
+                                    onChange={(v) => updateTemplate("textColor", v)}
+                                />
+                                <ColorPickerField
+                                    label="Price Color"
+                                    value={currentTemplate.priceColor}
+                                    onChange={(v) => updateTemplate("priceColor", v)}
+                                />
+                                <ColorPickerField
+                                    label="Button Color"
+                                    value={currentTemplate.buttonColor}
+                                    onChange={(v) => updateTemplate("buttonColor", v)}
+                                />
+                                <ColorPickerField
+                                    label="Button Text"
+                                    value={currentTemplate.buttonTextColor}
+                                    onChange={(v) => updateTemplate("buttonTextColor", v)}
+                                />
+                                <ColorPickerField
+                                    label="Border Color"
+                                    value={currentTemplate.borderColor}
+                                    onChange={(v) => updateTemplate("borderColor", v)}
+                                />
+                            </div>
+
+                            <Divider />
+
+                            <Text as="h4" variant="headingSm">Styling</Text>
+                            <RangeSlider
+                                label={`Border Radius: ${currentTemplate.borderRadius}px`}
+                                value={currentTemplate.borderRadius}
+                                onChange={(v) => updateTemplate("borderRadius", v)}
+                                min={0}
+                                max={24}
+                                output
                             />
+
+                            <Divider />
+
+                            <Text as="h4" variant="headingSm">Display Options</Text>
+                            <InlineStack gap="400">
+                                <Checkbox
+                                    label="Show Prices"
+                                    checked={currentTemplate.showPrices}
+                                    onChange={(v) => updateTemplate("showPrices", v)}
+                                />
+                                <Checkbox
+                                    label="Show 'Add All' Button"
+                                    checked={currentTemplate.showAddAllButton}
+                                    onChange={(v) => updateTemplate("showAddAllButton", v)}
+                                />
+                            </InlineStack>
+                        </BlockStack>
+                    </div>
+                    {/* Save/Discard for template customization — outside scroll */}
+                    <Box paddingBlockStart="300">
+                        <InlineStack align="end" gap="200">
+                            <Button variant="primary" tone="critical" onClick={handleDiscardTemplate}>
+                                Discard
+                            </Button>
+                            <Button variant="primary" onClick={handleSaveTemplate} loading={saving}>
+                                Save Template
+                            </Button>
                         </InlineStack>
-                    </BlockStack>
+                    </Box>
                 </Card>
             </div>
 
@@ -1469,43 +1495,47 @@ function FBTSection({ config, products, onSave, saving }) {
                                         ? "Choose the product page where FBT will be displayed."
                                         : "Choose product page(s) that will show these FBT recommendations."}
                                 </Text>
-                                <Button onClick={handlePickTriggerProducts} variant="secondary">
-                                    {scopeTriggerProducts.length > 0 ? "Change Product(s)" : "Browse Products"}
-                                </Button>
+                                <InlineStack align="center">
+                                    <Button onClick={handlePickTriggerProducts} variant="secondary">
+                                        {scopeTriggerProducts.length > 0 ? "Change Product(s)" : "Browse Products"}
+                                    </Button>
+                                </InlineStack>
                                 {scopeTriggerProducts.length > 0 && (
-                                    <div style={{
-                                        display: "grid",
-                                        gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-                                        gap: "10px",
-                                        marginTop: "4px",
-                                    }}>
-                                        {scopeTriggerProducts.map(p => (
-                                            <div key={p.id} style={{
-                                                display: "flex",
-                                                alignItems: "center",
-                                                gap: "8px",
-                                                padding: "8px 10px",
-                                                background: "#f0f7ff",
-                                                borderRadius: "8px",
-                                                border: "1px solid #bfdbfe",
-                                            }}>
-                                                <Thumbnail source={p.image || ""} alt={p.title} size="small" />
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <Text variant="bodySm" fontWeight="semibold" truncate>{p.title}</Text>
+                                    <div style={{ maxHeight: "280px", overflowY: "auto", padding: "4px" }}>
+                                        <div style={{
+                                            display: "grid",
+                                            gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+                                            gap: "10px",
+                                            marginTop: "4px",
+                                        }}>
+                                            {scopeTriggerProducts.map(p => (
+                                                <div key={p.id} style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    gap: "8px",
+                                                    padding: "8px 10px",
+                                                    background: "#f0f7ff",
+                                                    borderRadius: "8px",
+                                                    border: "1px solid #bfdbfe",
+                                                }}>
+                                                    <Thumbnail source={p.image || ""} alt={p.title} size="small" />
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <Text variant="bodySm" fontWeight="semibold" truncate>{p.title}</Text>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleRemoveTriggerProduct(p.id)}
+                                                        style={{
+                                                            background: "none", border: "none", cursor: "pointer",
+                                                            color: "#ef4444", fontSize: "16px", fontWeight: "bold",
+                                                            padding: "0 4px", lineHeight: 1,
+                                                        }}
+                                                        title="Remove"
+                                                    >
+                                                        ×
+                                                    </button>
                                                 </div>
-                                                <button
-                                                    onClick={() => handleRemoveTriggerProduct(p.id)}
-                                                    style={{
-                                                        background: "none", border: "none", cursor: "pointer",
-                                                        color: "#ef4444", fontSize: "16px", fontWeight: "bold",
-                                                        padding: "0 4px", lineHeight: 1,
-                                                    }}
-                                                    title="Remove"
-                                                >
-                                                    ×
-                                                </button>
-                                            </div>
-                                        ))}
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
                             </>
@@ -1519,52 +1549,58 @@ function FBTSection({ config, products, onSave, saving }) {
                         <Text as="p" tone="subdued">
                             Choose products to show as "Frequently Bought Together" recommendations.
                         </Text>
-                        <Button onClick={handlePickFbtProducts} variant="secondary">
-                            {ruleFbtProducts.length > 0 ? "Change FBT Products" : "Browse Products"}
-                        </Button>
+                        <InlineStack align="center">
+                            <Button onClick={handlePickFbtProducts} variant="secondary">
+                                {ruleFbtProducts.length > 0 ? "Change FBT Products" : "Browse Products"}
+                            </Button>
+                        </InlineStack>
                         {ruleFbtProducts.length > 0 && (
-                            <div style={{
-                                display: "grid",
-                                gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-                                gap: "10px",
-                                marginTop: "4px",
-                            }}>
-                                {ruleFbtProducts.map(p => (
-                                    <div key={p.id} style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "8px",
-                                        padding: "8px 10px",
-                                        background: "#f0fdf4",
-                                        borderRadius: "8px",
-                                        border: "1px solid #bbf7d0",
-                                    }}>
-                                        <Thumbnail source={p.image || ""} alt={p.title} size="small" />
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <Text variant="bodySm" fontWeight="semibold" truncate>{p.title}</Text>
-                                            <Text variant="bodySm" tone="subdued">₹{parseFloat(p.price || 0).toLocaleString("en-IN")}</Text>
+                            <div style={{ maxHeight: "280px", overflowY: "auto", padding: "4px" }}>
+                                <div style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+                                    gap: "10px",
+                                    marginTop: "4px",
+                                }}>
+                                    {ruleFbtProducts.map(p => (
+                                        <div key={p.id} style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "8px",
+                                            padding: "8px 10px",
+                                            background: "#f0fdf4",
+                                            borderRadius: "8px",
+                                            border: "1px solid #bbf7d0",
+                                        }}>
+                                            <Thumbnail source={p.image || ""} alt={p.title} size="small" />
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <Text variant="bodySm" fontWeight="semibold" truncate>{p.title}</Text>
+                                                <Text variant="bodySm" tone="subdued">₹{parseFloat(p.price || 0).toLocaleString("en-IN")}</Text>
+                                            </div>
+                                            <button
+                                                onClick={() => handleRemoveFbtProduct(p.id)}
+                                                style={{
+                                                    background: "none", border: "none", cursor: "pointer",
+                                                    color: "#ef4444", fontSize: "16px", fontWeight: "bold",
+                                                    padding: "0 4px", lineHeight: 1,
+                                                }}
+                                                title="Remove"
+                                            >
+                                                ×
+                                            </button>
                                         </div>
-                                        <button
-                                            onClick={() => handleRemoveFbtProduct(p.id)}
-                                            style={{
-                                                background: "none", border: "none", cursor: "pointer",
-                                                color: "#ef4444", fontSize: "16px", fontWeight: "bold",
-                                                padding: "0 4px", lineHeight: 1,
-                                            }}
-                                            title="Remove"
-                                        >
-                                            ×
-                                        </button>
-                                    </div>
-                                ))}
+                                    ))}
+                                </div>
                             </div>
                         )}
 
                         {/* Add Rule Button */}
-                        <Button onClick={handleAddRule} disabled={!canAddRule} variant="primary">
-                            {displayScope === "single" && manualRules.some(r => r.displayScope === "single")
-                                ? "Update Rule" : "Add Rule"}
-                        </Button>
+                        <InlineStack align="center">
+                            <Button onClick={handleAddRule} disabled={!canAddRule} variant="primary">
+                                {displayScope === "single" && manualRules.some(r => r.displayScope === "single")
+                                    ? "Update Rule" : "Add Rule"}
+                            </Button>
+                        </InlineStack>
 
                         <Divider />
 
@@ -1660,9 +1696,15 @@ function FBTSection({ config, products, onSave, saving }) {
                 </Card>
             )}
 
-            <Button variant="primary" onClick={handleSave} loading={saving} fullWidth>
-                Save FBT Settings
-            </Button>
+            {/* Save/Discard for entire FBT configuration */}
+            <InlineStack align="end" gap="200">
+                <Button variant="primary" tone="critical" onClick={handleDiscardAll}>
+                    Discard
+                </Button>
+                <Button variant="primary" onClick={handleSave} loading={saving}>
+                    Save
+                </Button>
+            </InlineStack>
         </BlockStack>
     );
 }
@@ -1695,12 +1737,16 @@ export default function ProductWidgetPage() {
         setSelectedTab(selectedTabIndex);
     }, []);
 
+    const [customToastMessage, setCustomToastMessage] = useState(null);
+
     useEffect(() => {
         if (fetcher.data) {
             if (fetcher.data.success) {
-                shopify.toast.show(fetcher.data.message || "Saved successfully!");
+                shopify.toast.show(customToastMessage || fetcher.data.message || "Saved successfully!");
+                setCustomToastMessage(null);
             } else {
                 shopify.toast.show(fetcher.data.error || "Failed to save.", { isError: true });
+                setCustomToastMessage(null);
             }
         }
     }, [fetcher.data, shopify]);
@@ -1717,6 +1763,9 @@ export default function ProductWidgetPage() {
     };
 
     const handleFBTSave = (data) => {
+        if (data._toastMessage) {
+            setCustomToastMessage(data._toastMessage);
+        }
         fetcher.submit(
             {
                 actionType: "saveFBTConfig",

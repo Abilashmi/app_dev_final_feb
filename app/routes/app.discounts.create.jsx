@@ -22,6 +22,7 @@ import {
     Select,
     Modal,
     Scrollable,
+    ButtonGroup,
 } from "@shopify/polaris";
 import {
     DiscountIcon,
@@ -516,16 +517,32 @@ export default function CreateDiscount() {
                         <Card>
                             <BlockStack gap="400">
                                 <Text variant="headingMd" as="h2">Discount type</Text>
-                                <ChoiceList
-                                    choices={[
-                                        { label: "Amount off products", value: "amount_off_products" },
-                                        { label: "Amount off order", value: "amount_off_order" },
-                                        { label: "Buy X get Y", value: "bxgy" },
-                                        { label: "Free shipping", value: "free_shipping" },
-                                    ]}
-                                    selected={type}
-                                    onChange={setType}
-                                />
+                                <ButtonGroup segmented>
+                                    <Button
+                                        pressed={type[0] === "amount_off_products"}
+                                        onClick={() => setType(["amount_off_products"])}
+                                    >
+                                        Amount off products
+                                    </Button>
+                                    <Button
+                                        pressed={type[0] === "amount_off_order"}
+                                        onClick={() => setType(["amount_off_order"])}
+                                    >
+                                        Amount off order
+                                    </Button>
+                                    <Button
+                                        pressed={type[0] === "bxgy"}
+                                        onClick={() => setType(["bxgy"])}
+                                    >
+                                        Buy X get Y
+                                    </Button>
+                                    <Button
+                                        pressed={type[0] === "free_shipping"}
+                                        onClick={() => setType(["free_shipping"])}
+                                    >
+                                        Free shipping
+                                    </Button>
+                                </ButtonGroup>
                                 <Divider />
                                 <TextField
                                     label="Discount code"
@@ -621,15 +638,20 @@ export default function CreateDiscount() {
                             <Card>
                                 <BlockStack gap="400">
                                     <Text variant="headingMd" as="h2">Customer buys</Text>
-                                    <ChoiceList
-                                        label="Applies to"
-                                        choices={[
-                                            { label: "Specific products", value: "products" },
-                                            { label: "Specific collections", value: "collections" },
-                                        ]}
-                                        selected={bxgyBuysType}
-                                        onChange={setBxgyBuysType}
-                                    />
+                                    <ButtonGroup segmented>
+                                        <Button
+                                            pressed={bxgyBuysType[0] === "products"}
+                                            onClick={() => setBxgyBuysType(["products"])}
+                                        >
+                                            Specific products
+                                        </Button>
+                                        <Button
+                                            pressed={bxgyBuysType[0] === "collections"}
+                                            onClick={() => setBxgyBuysType(["collections"])}
+                                        >
+                                            Specific collections
+                                        </Button>
+                                    </ButtonGroup>
                                     <InlineStack gap="200">
                                         <div style={{ flex: 1 }}>
                                             <TextField
@@ -670,16 +692,26 @@ export default function CreateDiscount() {
                             <Card>
                                 <BlockStack gap="400">
                                     <Text variant="headingMd" as="h2">Customer gets</Text>
-                                    <ChoiceList
-                                        label="Applies to"
-                                        choices={[
-                                            { label: "Same products as X", value: "same" },
-                                            { label: "Specific products", value: "products" },
-                                            { label: "Specific collections", value: "collections" },
-                                        ]}
-                                        selected={bxgyGetsType}
-                                        onChange={setBxgyGetsType}
-                                    />
+                                    <ButtonGroup segmented>
+                                        <Button
+                                            pressed={bxgyGetsType[0] === "same"}
+                                            onClick={() => setBxgyGetsType(["same"])}
+                                        >
+                                            Same products as X
+                                        </Button>
+                                        <Button
+                                            pressed={bxgyGetsType[0] === "products"}
+                                            onClick={() => setBxgyGetsType(["products"])}
+                                        >
+                                            Specific products
+                                        </Button>
+                                        <Button
+                                            pressed={bxgyGetsType[0] === "collections"}
+                                            onClick={() => setBxgyGetsType(["collections"])}
+                                        >
+                                            Specific collections
+                                        </Button>
+                                    </ButtonGroup>
                                     {bxgyGetsType[0] !== "same" && (
                                         <>
                                             <InlineStack gap="200">
@@ -752,15 +784,20 @@ export default function CreateDiscount() {
                             <Card>
                                 <BlockStack gap="400">
                                     <Text variant="headingMd" as="h2">Countries</Text>
-                                    <ChoiceList
-                                        label="Countries"
-                                        choices={[
-                                            { label: "All countries", value: "all" },
-                                            { label: "Specific countries", value: "specific" },
-                                        ]}
-                                        selected={countriesType}
-                                        onChange={setCountriesType}
-                                    />
+                                    <ButtonGroup segmented>
+                                        <Button
+                                            pressed={countriesType[0] === "all"}
+                                            onClick={() => setCountriesType(["all"])}
+                                        >
+                                            All countries
+                                        </Button>
+                                        <Button
+                                            pressed={countriesType[0] === "specific"}
+                                            onClick={() => setCountriesType(["specific"])}
+                                        >
+                                            Specific countries
+                                        </Button>
+                                    </ButtonGroup>
                                     {countriesType[0] === "specific" && (
                                         <BlockStack gap="300">
                                             <InlineStack gap="200">
@@ -969,15 +1006,26 @@ export default function CreateDiscount() {
                             <Card>
                                 <BlockStack gap="400">
                                     <Text variant="headingMd" as="h2">Minimum purchase requirements</Text>
-                                    <ChoiceList
-                                        choices={[
-                                            { label: "No minimum requirements", value: "none" },
-                                            { label: "Minimum purchase amount (₹)", value: "amount" },
-                                            { label: "Minimum quantity of items", value: "quantity" },
-                                        ]}
-                                        selected={minimumRequirement}
-                                        onChange={setMinimumRequirement}
-                                    />
+                                    <ButtonGroup segmented>
+                                        <Button
+                                            pressed={minimumRequirement[0] === "none"}
+                                            onClick={() => setMinimumRequirement(["none"])}
+                                        >
+                                            No minimum
+                                        </Button>
+                                        <Button
+                                            pressed={minimumRequirement[0] === "amount"}
+                                            onClick={() => setMinimumRequirement(["amount"])}
+                                        >
+                                            Purchase amount (₹)
+                                        </Button>
+                                        <Button
+                                            pressed={minimumRequirement[0] === "quantity"}
+                                            onClick={() => setMinimumRequirement(["quantity"])}
+                                        >
+                                            Quantity of items
+                                        </Button>
+                                    </ButtonGroup>
                                     {minimumRequirement[0] === "amount" && (
                                         <TextField
                                             label="Minimum purchase amount"
