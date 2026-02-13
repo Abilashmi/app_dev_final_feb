@@ -72,8 +72,8 @@ const mockCartData = {
   cartValue: 100,
   totalQuantity: 3,
   items: [
-    { id: 1, title: 'Premium Hoodie', price: 50, qty: 1 },
-    { id: 2, title: 'Classic T-Shirt', price: 25, qty: 2 },
+    { id: 1, title: 'Premium Hoodie', price: 50, quantity: 1 },
+    { id: 2, title: 'Classic T-Shirt', price: 25, quantity: 2 },
   ],
 };
 
@@ -939,7 +939,6 @@ export default function CartDrawerAdmin() {
         console.error('❌ Error loading app config:', error);
       }
     }
-
     loadAppConfig();
   }, []);
 
@@ -1093,12 +1092,15 @@ export default function CartDrawerAdmin() {
     // Update mock cart data
     const priceNum = typeof product.price === 'string' ? parseFloat(product.price) : (product.price || 0);
 
-    setCartData(prev => ({
-      ...prev,
-      cartValue: prev.cartValue + priceNum,
-      totalQuantity: prev.totalQuantity + 1,
-      items: [...prev.items, { ...product, price: priceNum, qty: 1 }],
-    }));
+    setCartData(prev => {
+      const newItems = [...prev.items, { ...product, id: `added-${Date.now()}`, quantity: 1 }];
+      return {
+        ...prev,
+        cartValue: newItems.reduce((sum, item) => sum + (Number(item.price) || 0) * (item.quantity || 1), 0),
+        totalQuantity: newItems.reduce((sum, item) => sum + (item.quantity || 1), 0),
+        items: newItems,
+      };
+    });
     setShowProductModal(false);
   };
 
@@ -3002,7 +3004,8 @@ export default function CartDrawerAdmin() {
 
   const renderCartPreview = () => {
     const showEmpty = previewCartState[0] === 'empty';
-    const cartProductIds = mockCartItems.map(item => item.productId).filter(Boolean);
+    const currentItems = cartData.items || [];
+    const cartProductIds = currentItems.map(item => item.productId).filter(Boolean);
     const cartCollectionIds = cartProductIds.flatMap((productId) => {
       const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
       return product?.collections || [];
@@ -3040,12 +3043,15 @@ export default function CartDrawerAdmin() {
       };
     }).filter(Boolean);
 
-    const normalizedMockItems = mockCartItems.map(item => {
+    const normalizedMockItems = currentItems.map(item => {
       const isUrl = item.image && (item.image.startsWith('http') || item.image.startsWith('//'));
       const priceVal = item.price ? Number(item.price) : 0;
+      const qty = Number(item.quantity || item.qty || 1);
       return {
         ...item,
+        name: item.name || item.title || 'Product',
         price: isNaN(priceVal) ? 0 : priceVal,
+        quantity: qty,
         displayImage: isUrl ? item.image : null,
         placeholderImage: !isUrl ? (item.image || '📦') : '📦'
       };
