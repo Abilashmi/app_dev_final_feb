@@ -23,6 +23,7 @@ import {
     Modal,
     Scrollable,
     ButtonGroup,
+    Frame,
 } from "@shopify/polaris";
 import {
     DiscountIcon,
@@ -68,8 +69,8 @@ export const action = async ({ request }) => {
     const selectedResources = JSON.parse(formData.get("selectedResources") || "[]");
 
     const minimumRequirementValue = formData.get("minimumRequirement");
-    const minimumPurchaseAmount = formData.get("minimumPurchaseAmount");
-    const minimumQuantity = formData.get("minimumQuantity");
+    const minimumPurchaseAmount = parseFloat(formData.get("minimumPurchaseAmount") || "0");
+    const minimumQuantity = parseInt(formData.get("minimumQuantity") || "0");
     const limitTotalUses = formData.get("limitTotalUses") === "true";
     const totalUsesLimit = parseInt(formData.get("totalUsesLimit") || "0");
     const limitOnePerCustomer = formData.get("limitOnePerCustomer") === "true";
@@ -105,7 +106,7 @@ export const action = async ({ request }) => {
                     value: {
                         [valueType === "percentage" ? "percentage" : "discountAmount"]: valueType === "percentage"
                             ? value / 100
-                            : { amount: value, currencyCode: "INR", appliesOnEachItem: !oncePerOrder }
+                            : { amount: value, appliesOnEachItem: type === "amount_off_order" ? false : !oncePerOrder }
                     },
                     items: (type === "amount_off_order" && selectionType === "all") ? { all: true } : {
                         [selectionType === "collections" ? "collections" : selectionType === "products" ? "products" : "all"]: selectionType === "all" ? true : {
@@ -114,7 +115,7 @@ export const action = async ({ request }) => {
                     }
                 },
                 appliesOncePerCustomer: limitOnePerCustomer,
-                ...(limitTotalUses && { usageLimit: totalUsesLimit }),
+                ...(limitTotalUses && totalUsesLimit > 0 && { usageLimit: totalUsesLimit }),
                 combinesWith: {
                     productDiscounts: combineProduct,
                     orderDiscounts: combineOrder,
@@ -186,13 +187,13 @@ export const action = async ({ request }) => {
 
         const buysType = formData.get("bxgyBuysType") === "collections" ? "collections" : "products";
         const buysResources = JSON.parse(formData.get("bxgyBuysResources") || "[]");
-        const buysQuantity = formData.get("bxgyBuysQuantity");
+        const buysQuantity = parseInt(formData.get("bxgyBuysQuantity") || "1");
 
         const getsType = formData.get("bxgyGetsType"); // same, products, collections
         const getsResources = JSON.parse(formData.get("bxgyGetsResources") || "[]");
         const getsValueType = formData.get("bxgyGetsValueType");
         const getsValue = parseFloat(formData.get("bxgyGetsValue") || "0");
-        const getsQuantity = formData.get("bxgyGetsQuantity");
+        const getsQuantity = parseInt(formData.get("bxgyGetsQuantity") || "1");
         const repeatOncePerOrder = formData.get("bxgyRepeatOncePerOrder") === "true";
 
         variables = {
@@ -217,7 +218,7 @@ export const action = async ({ request }) => {
                     },
                     value: {
                         [getsValueType === "free" ? "percentage" : getsValueType === "percentage" ? "percentage" : "discountAmount"]:
-                            getsValueType === "free" ? 1.0 : getsValueType === "percentage" ? getsValue / 100 : { amount: getsValue, currencyCode: "INR" }
+                            getsValueType === "free" ? 1.0 : getsValueType === "percentage" ? getsValue / 100 : { amount: getsValue }
                     },
                     quantity: { quantity: getsQuantity }
                 },
@@ -235,12 +236,23 @@ export const action = async ({ request }) => {
         const response = await admin.graphql(mutation, { variables });
         const responseJson = await response.json();
 
+        if (responseJson.errors) {
+            return { errors: responseJson.errors };
+        }
+
+        if (!responseJson.data) {
+            return { errors: [{ message: "Unexpected response from Shopify" }] };
+        }
+
         const mutationKey = Object.keys(responseJson.data)[0];
         const result = responseJson.data[mutationKey];
-        const errors = result.userErrors;
 
-        if (errors.length > 0) {
-            return { errors };
+        if (!result) {
+            return { errors: [{ message: "Mutation result not found" }] };
+        }
+
+        if (result.userErrors && result.userErrors.length > 0) {
+            return { errors: result.userErrors };
         }
 
         const createdDiscountId = result.codeDiscountNode?.id;
@@ -260,7 +272,7 @@ export const action = async ({ request }) => {
         return { success: true, discountId: createdDiscountId };
     } catch (error) {
         console.error("Error creating discount:", error);
-        return { errors: [{ message: "Failed to create discount" }] };
+        return { errors: [{ message: error.message || "Failed to create discount" }] };
     }
 };
 
@@ -457,738 +469,696 @@ export default function CreateDiscount() {
     /* ---------------- UI ---------------- */
 
     return (
-        <Page
-            title="Create discount"
-            backAction={{ content: "Discounts", onAction: () => navigate("/app/discount") }}
-            primaryAction={{
-                content: "Save discount",
-                onAction: () => {
-                    const formData = new FormData();
-                    formData.append("title", title || code);
-                    formData.append("code", code);
-                    formData.append("type", type[0]);
-                    formData.append("startDate", combineDateAndTime(startDate, startTime));
-                    if (hasEndDate) formData.append("endDate", combineDateAndTime(endDate, endTime));
+        <Frame>
+            <Page
+                title="Create discount"
+                backAction={{ content: "Discounts", onAction: () => navigate("/app/discount") }}
+                primaryAction={{
+                    content: "Save discount",
+                    onAction: () => {
+                        const formData = new FormData();
+                        formData.append("title", title || code);
+                        formData.append("code", code);
+                        formData.append("type", type[0]);
+                        formData.append("startDate", combineDateAndTime(startDate, startTime));
+                        if (hasEndDate) formData.append("endDate", combineDateAndTime(endDate, endTime));
 
-                    if (type[0] === "bxgy") {
-                        formData.append("bxgyBuysType", bxgyBuysType[0]);
-                        formData.append("bxgyBuysResources", JSON.stringify(bxgyBuysResources));
-                        formData.append("bxgyBuysQuantity", bxgyBuysQuantity);
-                        formData.append("bxgyGetsType", bxgyGetsType[0]);
-                        formData.append("bxgyGetsResources", JSON.stringify(bxgyGetsResources));
-                        formData.append("bxgyGetsValueType", bxgyGetsValueType);
-                        formData.append("bxgyGetsValue", bxgyGetsValue);
-                        formData.append("bxgyGetsQuantity", bxgyGetsQuantity);
-                        formData.append("bxgyRepeatOncePerOrder", bxgyRepeatOncePerOrder);
-                    } else if (type[0] === "free_shipping") {
-                        formData.append("countriesType", countriesType[0]);
-                        formData.append("selectedCountries", JSON.stringify(selectedCountries));
-                        formData.append("minimumRequirement", minimumRequirement[0]);
-                        formData.append("minimumPurchaseAmount", minimumPurchaseAmount);
-                        formData.append("minimumQuantity", minimumQuantity);
-                    } else {
-                        formData.append("valueType", discountValueType);
-                        formData.append("value", value);
-                        const selType = (type[0] === "amount_off_order") ? "all" : (appliesTo === "all_products" ? "all" : appliesTo === "specific_collections" ? "collections" : "products");
-                        formData.append("selectionType", selType);
-                        formData.append("selectedResources", JSON.stringify(selectedResources));
-                        formData.append("minimumRequirement", minimumRequirement[0]);
-                        formData.append("minimumPurchaseAmount", minimumPurchaseAmount);
-                        formData.append("minimumQuantity", minimumQuantity);
-                        formData.append("oncePerOrder", oncePerOrder);
-                    }
+                        if (type[0] === "bxgy") {
+                            formData.append("bxgyBuysType", bxgyBuysType[0]);
+                            formData.append("bxgyBuysResources", JSON.stringify(bxgyBuysResources));
+                            formData.append("bxgyBuysQuantity", bxgyBuysQuantity);
+                            formData.append("bxgyGetsType", bxgyGetsType[0]);
+                            formData.append("bxgyGetsResources", JSON.stringify(bxgyGetsResources));
+                            formData.append("bxgyGetsValueType", bxgyGetsValueType);
+                            formData.append("bxgyGetsValue", bxgyGetsValue);
+                            formData.append("bxgyGetsQuantity", bxgyGetsQuantity);
+                            formData.append("bxgyRepeatOncePerOrder", bxgyRepeatOncePerOrder);
+                        } else if (type[0] === "free_shipping") {
+                            formData.append("countriesType", countriesType[0]);
+                            formData.append("selectedCountries", JSON.stringify(selectedCountries));
+                            formData.append("minimumRequirement", minimumRequirement[0]);
+                            formData.append("minimumPurchaseAmount", minimumPurchaseAmount);
+                            formData.append("minimumQuantity", minimumQuantity);
+                        } else {
+                            formData.append("valueType", discountValueType);
+                            formData.append("value", value);
+                            const selType = (type[0] === "amount_off_order") ? "all" : (appliesTo === "all_products" ? "all" : appliesTo === "specific_collections" ? "collections" : "products");
+                            formData.append("selectionType", selType);
+                            formData.append("selectedResources", JSON.stringify(selectedResources));
+                            formData.append("minimumRequirement", minimumRequirement[0]);
+                            formData.append("minimumPurchaseAmount", minimumPurchaseAmount);
+                            formData.append("minimumQuantity", minimumQuantity);
+                            formData.append("oncePerOrder", oncePerOrder);
+                        }
 
-                    formData.append("limitTotalUses", limitTotalUses);
-                    formData.append("totalUsesLimit", totalUsesLimit);
-                    formData.append("limitOnePerCustomer", limitOnePerCustomer);
-                    formData.append("combineProduct", combineProduct);
-                    formData.append("combineOrder", combineOrder);
-                    formData.append("combineShipping", combineShipping);
-                    submit(formData, { method: "post" });
-                },
-                loading: isSubmitting,
-                disabled: !code || (type[0] !== "bxgy" && type[0] !== "free_shipping" && !value) || (type[0] === "amount_off_products" && appliesTo !== "all_products" && selectedResources.length === 0),
-            }}
-        >
-            <Layout>
-                <Layout.Section>
-                    <BlockStack gap="400">
-                        {/* DISCOUNT TYPE CARD */}
-                        <Card>
-                            <BlockStack gap="400">
-                                <Text variant="headingMd" as="h2">Discount type</Text>
-                                <ButtonGroup segmented>
-                                    <Button
-                                        pressed={type[0] === "amount_off_products"}
-                                        onClick={() => setType(["amount_off_products"])}
-                                    >
-                                        Amount off products
-                                    </Button>
-                                    <Button
-                                        pressed={type[0] === "amount_off_order"}
-                                        onClick={() => setType(["amount_off_order"])}
-                                    >
-                                        Amount off order
-                                    </Button>
-                                    <Button
-                                        pressed={type[0] === "bxgy"}
-                                        onClick={() => setType(["bxgy"])}
-                                    >
-                                        Buy X get Y
-                                    </Button>
-                                    <Button
-                                        pressed={type[0] === "free_shipping"}
-                                        onClick={() => setType(["free_shipping"])}
-                                    >
-                                        Free shipping
-                                    </Button>
-                                </ButtonGroup>
-                                <Divider />
-                                <TextField
-                                    label="Discount code"
-                                    value={code}
-                                    onChange={setCode}
-                                    autoComplete="off"
-                                    placeholder="e.g. SUMMER2024"
-                                    suffix={<Button onClick={() => setCode(Math.random().toString(36).substring(2, 10).toUpperCase())}>Generate</Button>}
-                                />
-                                <TextField label="Internal title" value={title} onChange={setTitle} autoComplete="off" />
-                            </BlockStack>
-                        </Card>
-
-                        {/* DISCOUNT VALUE CARD */}
-                        {type[0] !== "bxgy" && type[0] !== "free_shipping" && (
+                        formData.append("limitTotalUses", limitTotalUses);
+                        formData.append("totalUsesLimit", totalUsesLimit);
+                        formData.append("limitOnePerCustomer", limitOnePerCustomer);
+                        formData.append("combineProduct", combineProduct);
+                        formData.append("combineOrder", combineOrder);
+                        formData.append("combineShipping", combineShipping);
+                        submit(formData, { method: "post" });
+                    },
+                    loading: isSubmitting,
+                    disabled: !code || (type[0] !== "bxgy" && type[0] !== "free_shipping" && !value) || (type[0] === "amount_off_products" && appliesTo !== "all_products" && selectedResources.length === 0),
+                }}
+            >
+                <Layout>
+                    <Layout.Section>
+                        <BlockStack gap="400">
+                            {actionData?.errors && (
+                                <Banner tone="critical" title="There were issues saving this discount">
+                                    <List>
+                                        {actionData.errors.map((error, index) => (
+                                            <List.Item key={index}>{error.message}</List.Item>
+                                        ))}
+                                    </List>
+                                </Banner>
+                            )}
+                            {/* DISCOUNT TYPE CARD */}
                             <Card>
                                 <BlockStack gap="400">
-                                    <Text variant="headingMd" as="h2">Discount value</Text>
-                                    <Select
-                                        label="Discount type"
-                                        options={[
-                                            { label: "Percentage", value: "percentage" },
-                                            { label: "Fixed amount", value: "fixed_amount" },
-                                        ]}
-                                        value={discountValueType}
-                                        onChange={setDiscountValueType}
-                                    />
-                                    {discountValueType === "percentage" ? (
-                                        <BlockStack gap="200">
-                                            <TextField
-                                                label="Percentage"
-                                                type="number"
-                                                value={value}
-                                                onChange={setValue}
-                                                suffix="%"
-                                                autoComplete="off"
-                                            />
-                                            {type[0] === "amount_off_products" ? (
-                                                <Text variant="bodySm" tone="subdued">
-                                                    Applies a percentage discount to each eligible product.
-                                                </Text>
-                                            ) : type[0] === "amount_off_order" ? (
-                                                <BlockStack gap="100">
-                                                    <Text variant="bodySm" tone="subdued">
-                                                        Applies a percentage discount to the total order value.
-                                                    </Text>
-                                                    <Text variant="bodySm" tone="subdued">
-                                                        Example: 10% off means 10% is deducted from the cart total at checkout.
-                                                    </Text>
-                                                </BlockStack>
-                                            ) : null}
-                                        </BlockStack>
-                                    ) : (
-                                        <BlockStack gap="200">
-                                            <TextField
-                                                label="Fixed amount"
-                                                type="number"
-                                                value={value}
-                                                onChange={setValue}
-                                                prefix="₹"
-                                                autoComplete="off"
-                                            />
-                                            {type[0] === "amount_off_products" ? (
-                                                <>
-                                                    <Text variant="bodySm" tone="subdued">
-                                                        Applies a fixed discount to each eligible product. Example: ₹100 off means ₹100 is deducted from every qualifying product.
-                                                    </Text>
-                                                    <Checkbox
-                                                        label="Once per order"
-                                                        helpText="If not selected, the amount will be taken off each eligible item in an order."
-                                                        checked={oncePerOrder}
-                                                        onChange={setOncePerOrder}
-                                                    />
-                                                </>
-                                            ) : type[0] === "amount_off_order" ? (
-                                                <BlockStack gap="100">
-                                                    <Text variant="bodySm" tone="subdued">
-                                                        Applies a fixed discount to the total order value.
-                                                    </Text>
-                                                    <Text variant="bodySm" tone="subdued">
-                                                        Example: ₹200 off means ₹200 is deducted from the cart total at checkout.
-                                                    </Text>
-                                                </BlockStack>
-                                            ) : null}
-                                        </BlockStack>
-                                    )}
-                                </BlockStack>
-                            </Card>
-                        )}
-
-                        {/* BUY X GET Y: CUSTOMER BUYS (X) */}
-                        {type[0] === "bxgy" && (
-                            <Card>
-                                <BlockStack gap="400">
-                                    <Text variant="headingMd" as="h2">Customer buys</Text>
+                                    <Text variant="headingMd" as="h2">Discount type</Text>
                                     <ButtonGroup segmented>
                                         <Button
-                                            pressed={bxgyBuysType[0] === "products"}
-                                            onClick={() => setBxgyBuysType(["products"])}
+                                            pressed={type[0] === "amount_off_products"}
+                                            onClick={() => setType(["amount_off_products"])}
                                         >
-                                            Specific products
+                                            Amount off products
                                         </Button>
                                         <Button
-                                            pressed={bxgyBuysType[0] === "collections"}
-                                            onClick={() => setBxgyBuysType(["collections"])}
+                                            pressed={type[0] === "amount_off_order"}
+                                            onClick={() => setType(["amount_off_order"])}
                                         >
-                                            Specific collections
+                                            Amount off order
+                                        </Button>
+                                        <Button
+                                            pressed={type[0] === "bxgy"}
+                                            onClick={() => setType(["bxgy"])}
+                                        >
+                                            Buy X get Y
+                                        </Button>
+                                        <Button
+                                            pressed={type[0] === "free_shipping"}
+                                            onClick={() => setType(["free_shipping"])}
+                                        >
+                                            Free shipping
                                         </Button>
                                     </ButtonGroup>
-                                    <InlineStack gap="200">
-                                        <div style={{ flex: 1 }}>
-                                            <TextField
-                                                placeholder={`Search ${bxgyBuysType[0]}`}
-                                                value={resourceSearch}
-                                                onChange={setResourceSearch}
-                                                autoComplete="off"
-                                            />
-                                        </div>
-                                        <Button onClick={() => selectResources("buys")}>Browse</Button>
-                                    </InlineStack>
-                                    {bxgyBuysResources.length > 0 && (
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
-                                            {bxgyBuysResources.map(res => (
-                                                <Box key={res.id} padding="100" border="divider" borderRadius="200">
-                                                    <BlockStack align="center" gap="100">
-                                                        <Thumbnail source={res.image || (bxgyBuysType[0] === "collections" ? CollectionIcon : ProductIcon)} size="small" />
-                                                        <Text variant="bodyXs" truncate>{res.title}</Text>
-                                                    </BlockStack>
-                                                </Box>
-                                            ))}
-                                        </div>
-                                    )}
-                                    <TextField
-                                        label="Minimum quantity"
-                                        type="number"
-                                        value={bxgyBuysQuantity}
-                                        onChange={setBxgyBuysQuantity}
-                                        helpText="The customer must buy at least this quantity to qualify for the discount."
-                                        autoComplete="off"
-                                    />
-                                </BlockStack>
-                            </Card>
-                        )}
-
-                        {/* BUY X GET Y: CUSTOMER GETS (Y) */}
-                        {type[0] === "bxgy" && (
-                            <Card>
-                                <BlockStack gap="400">
-                                    <Text variant="headingMd" as="h2">Customer gets</Text>
-                                    <ButtonGroup segmented>
-                                        <Button
-                                            pressed={bxgyGetsType[0] === "same"}
-                                            onClick={() => setBxgyGetsType(["same"])}
-                                        >
-                                            Same products as X
-                                        </Button>
-                                        <Button
-                                            pressed={bxgyGetsType[0] === "products"}
-                                            onClick={() => setBxgyGetsType(["products"])}
-                                        >
-                                            Specific products
-                                        </Button>
-                                        <Button
-                                            pressed={bxgyGetsType[0] === "collections"}
-                                            onClick={() => setBxgyGetsType(["collections"])}
-                                        >
-                                            Specific collections
-                                        </Button>
-                                    </ButtonGroup>
-                                    {bxgyGetsType[0] !== "same" && (
-                                        <>
-                                            <InlineStack gap="200">
-                                                <div style={{ flex: 1 }}>
-                                                    <TextField
-                                                        placeholder={`Search ${bxgyGetsType[0]}`}
-                                                        value={resourceSearch}
-                                                        onChange={setResourceSearch}
-                                                        autoComplete="off"
-                                                    />
-                                                </div>
-                                                <Button onClick={() => selectResources("gets")}>Browse</Button>
-                                            </InlineStack>
-                                            {bxgyGetsResources.length > 0 && (
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
-                                                    {bxgyGetsResources.map(res => (
-                                                        <Box key={res.id} padding="100" border="divider" borderRadius="200">
-                                                            <BlockStack align="center" gap="100">
-                                                                <Thumbnail source={res.image || (bxgyGetsType[0] === "collections" ? CollectionIcon : ProductIcon)} size="small" />
-                                                                <Text variant="bodyXs" truncate>{res.title}</Text>
-                                                            </BlockStack>
-                                                        </Box>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
                                     <Divider />
-                                    <Select
-                                        label="Discount value"
-                                        options={[
-                                            { label: "Free", value: "free" },
-                                            { label: "Percentage off", value: "percentage" },
-                                            { label: "Amount off", value: "fixed_amount" },
-                                        ]}
-                                        value={bxgyGetsValueType}
-                                        onChange={setBxgyGetsValueType}
+                                    <TextField
+                                        label="Discount code"
+                                        value={code}
+                                        onChange={setCode}
+                                        autoComplete="off"
+                                        placeholder="e.g. SUMMER2024"
+                                        suffix={<Button onClick={() => setCode(Math.random().toString(36).substring(2, 10).toUpperCase())}>Generate</Button>}
                                     />
-                                    {bxgyGetsValueType !== "free" && (
+                                    <TextField label="Internal title" value={title} onChange={setTitle} autoComplete="off" />
+                                </BlockStack>
+                            </Card>
+
+                            {/* DISCOUNT VALUE CARD */}
+                            {type[0] !== "bxgy" && type[0] !== "free_shipping" && (
+                                <Card>
+                                    <BlockStack gap="400">
+                                        <Text variant="headingMd" as="h2">Discount value</Text>
+                                        <Select
+                                            label="Discount type"
+                                            options={[
+                                                { label: "Percentage", value: "percentage" },
+                                                { label: "Fixed amount", value: "fixed_amount" },
+                                            ]}
+                                            value={discountValueType}
+                                            onChange={setDiscountValueType}
+                                        />
+                                        {discountValueType === "percentage" ? (
+                                            <BlockStack gap="200">
+                                                <TextField
+                                                    label="Percentage"
+                                                    type="number"
+                                                    value={value}
+                                                    onChange={setValue}
+                                                    suffix="%"
+                                                    autoComplete="off"
+                                                />
+                                                {type[0] === "amount_off_products" ? (
+                                                    <Text variant="bodySm" tone="subdued">
+                                                        Applies a percentage discount to each eligible product.
+                                                    </Text>
+                                                ) : type[0] === "amount_off_order" ? (
+                                                    <BlockStack gap="100">
+                                                        <Text variant="bodySm" tone="subdued">
+                                                            Applies a percentage discount to the total order value.
+                                                        </Text>
+                                                        <Text variant="bodySm" tone="subdued">
+                                                            Example: 10% off means 10% is deducted from the cart total at checkout.
+                                                        </Text>
+                                                    </BlockStack>
+                                                ) : null}
+                                            </BlockStack>
+                                        ) : (
+                                            <BlockStack gap="200">
+                                                <TextField
+                                                    label="Fixed amount"
+                                                    type="number"
+                                                    value={value}
+                                                    onChange={setValue}
+                                                    prefix="₹"
+                                                    autoComplete="off"
+                                                />
+                                                {type[0] === "amount_off_products" ? (
+                                                    <>
+                                                        <Text variant="bodySm" tone="subdued">
+                                                            Applies a fixed discount to each eligible product. Example: ₹100 off means ₹100 is deducted from every qualifying product.
+                                                        </Text>
+                                                        <Checkbox
+                                                            label="Once per order"
+                                                            helpText="If not selected, the amount will be taken off each eligible item in an order."
+                                                            checked={oncePerOrder}
+                                                            onChange={setOncePerOrder}
+                                                        />
+                                                    </>
+                                                ) : type[0] === "amount_off_order" ? (
+                                                    <BlockStack gap="100">
+                                                        <Text variant="bodySm" tone="subdued">
+                                                            Applies a fixed discount to the total order value.
+                                                        </Text>
+                                                        <Text variant="bodySm" tone="subdued">
+                                                            Example: ₹200 off means ₹200 is deducted from the cart total at checkout.
+                                                        </Text>
+                                                    </BlockStack>
+                                                ) : null}
+                                            </BlockStack>
+                                        )}
+                                    </BlockStack>
+                                </Card>
+                            )}
+
+                            {/* BUY X GET Y: CUSTOMER BUYS (X) */}
+                            {type[0] === "bxgy" && (
+                                <Card>
+                                    <BlockStack gap="400">
+                                        <Text variant="headingMd" as="h2">Customer buys</Text>
+                                        <ButtonGroup segmented>
+                                            <Button
+                                                pressed={bxgyBuysType[0] === "products"}
+                                                onClick={() => setBxgyBuysType(["products"])}
+                                            >
+                                                Specific products
+                                            </Button>
+                                            <Button
+                                                pressed={bxgyBuysType[0] === "collections"}
+                                                onClick={() => setBxgyBuysType(["collections"])}
+                                            >
+                                                Specific collections
+                                            </Button>
+                                        </ButtonGroup>
+                                        <InlineStack gap="200">
+                                            <div style={{ flex: 1 }}>
+                                                <TextField
+                                                    placeholder={`Search ${bxgyBuysType[0]}`}
+                                                    value={resourceSearch}
+                                                    onChange={setResourceSearch}
+                                                    autoComplete="off"
+                                                />
+                                            </div>
+                                            <Button onClick={() => selectResources("buys")}>Browse</Button>
+                                        </InlineStack>
+                                        {bxgyBuysResources.length > 0 && (
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
+                                                {bxgyBuysResources.map(res => (
+                                                    <Box key={res.id} padding="100" border="divider" borderRadius="200">
+                                                        <BlockStack align="center" gap="100">
+                                                            <Thumbnail source={res.image || (bxgyBuysType[0] === "collections" ? CollectionIcon : ProductIcon)} size="small" />
+                                                            <Text variant="bodyXs" truncate>{res.title}</Text>
+                                                        </BlockStack>
+                                                    </Box>
+                                                ))}
+                                            </div>
+                                        )}
                                         <TextField
-                                            label={bxgyGetsValueType === "percentage" ? "Percentage off" : "Amount off"}
+                                            label="Minimum quantity"
                                             type="number"
-                                            value={bxgyGetsValue}
-                                            onChange={setBxgyGetsValue}
-                                            suffix={bxgyGetsValueType === "percentage" ? "%" : null}
-                                            prefix={bxgyGetsValueType === "fixed_amount" ? "₹" : null}
+                                            value={bxgyBuysQuantity}
+                                            onChange={setBxgyBuysQuantity}
+                                            helpText="The customer must buy at least this quantity to qualify for the discount."
                                             autoComplete="off"
                                         />
-                                    )}
-                                    <TextField
-                                        label="Quantity"
-                                        type="number"
-                                        value={bxgyGetsQuantity}
-                                        onChange={setBxgyGetsQuantity}
-                                        helpText="Number of items the customer will receive at a discount."
-                                        autoComplete="off"
-                                    />
-                                    <Checkbox
-                                        label="Apply discount once per order"
-                                        helpText="If unchecked, the discount repeats for every eligible group of items."
-                                        checked={bxgyRepeatOncePerOrder}
-                                        onChange={setBxgyRepeatOncePerOrder}
-                                    />
-                                </BlockStack>
-                            </Card>
-                        )}
+                                    </BlockStack>
+                                </Card>
+                            )}
 
-                        {/* FREE SHIPPING: COUNTRIES */}
-                        {type[0] === "free_shipping" && (
-                            <Card>
-                                <BlockStack gap="400">
-                                    <Text variant="headingMd" as="h2">Countries</Text>
-                                    <ButtonGroup segmented>
-                                        <Button
-                                            pressed={countriesType[0] === "all"}
-                                            onClick={() => setCountriesType(["all"])}
-                                        >
-                                            All countries
-                                        </Button>
-                                        <Button
-                                            pressed={countriesType[0] === "specific"}
-                                            onClick={() => setCountriesType(["specific"])}
-                                        >
-                                            Specific countries
-                                        </Button>
-                                    </ButtonGroup>
-                                    {countriesType[0] === "specific" && (
-                                        <BlockStack gap="300">
-                                            <InlineStack gap="200">
-                                                <div style={{ flex: 1 }}>
-                                                    <TextField
-                                                        placeholder="Search countries"
-                                                        value={""}
-                                                        autoComplete="off"
-                                                        readOnly
-                                                        onFocus={() => {
-                                                            setTempSelectedCountries(selectedCountries);
-                                                            setCountryModalActive(true);
-                                                        }}
-                                                    />
-                                                </div>
-                                                <Button onClick={() => {
-                                                    setTempSelectedCountries(selectedCountries);
-                                                    setCountryModalActive(true);
-                                                }}>Browse</Button>
-                                            </InlineStack>
-
-                                            {selectedCountries.length > 0 && (
-                                                <Box border="divider" borderRadius="200" padding="0">
-                                                    <Scrollable style={{ maxHeight: '150px' }}>
-                                                        <BlockStack gap="0">
-                                                            {selectedCountries.map(code => {
-                                                                const country = COUNTRIES.find(c => c.value === code);
-                                                                return (
-                                                                    <div key={code} style={{ padding: '8px 12px', borderBottom: '1px solid #f1f1f1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                                                        <InlineStack gap="200" blockAlign="center">
-                                                                            <Text variant="bodyMd">{country?.flag || "🏳️"}</Text>
-                                                                            <Text variant="bodyMd">{country?.label || code}</Text>
-                                                                        </InlineStack>
-                                                                        <Button
-                                                                            variant="tertiary"
-                                                                            icon={DiscountIcon} // Using a placeholder for cross or just text
-                                                                            onClick={() => setSelectedCountries(prev => prev.filter(c => c !== code))}
-                                                                        >
-                                                                            Remove
-                                                                        </Button>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </BlockStack>
-                                                    </Scrollable>
-                                                </Box>
-                                            )}
-
-                                            <Modal
-                                                open={countryModalActive}
-                                                onClose={() => setCountryModalActive(false)}
-                                                title="Select countries"
-                                                primaryAction={{
-                                                    content: `Add (${tempSelectedCountries.length})`,
-                                                    onAction: () => {
-                                                        setSelectedCountries(tempSelectedCountries);
-                                                        setCountryModalActive(false);
-                                                    }
-                                                }}
-                                                secondaryActions={[
-                                                    {
-                                                        content: "Cancel",
-                                                        onAction: () => setCountryModalActive(false)
-                                                    }
-                                                ]}
+                            {/* BUY X GET Y: CUSTOMER GETS (Y) */}
+                            {type[0] === "bxgy" && (
+                                <Card>
+                                    <BlockStack gap="400">
+                                        <Text variant="headingMd" as="h2">Customer gets</Text>
+                                        <ButtonGroup segmented>
+                                            <Button
+                                                pressed={bxgyGetsType[0] === "same"}
+                                                onClick={() => setBxgyGetsType(["same"])}
                                             >
-                                                <Modal.Section>
-                                                    <BlockStack gap="400">
+                                                Same products as X
+                                            </Button>
+                                            <Button
+                                                pressed={bxgyGetsType[0] === "products"}
+                                                onClick={() => setBxgyGetsType(["products"])}
+                                            >
+                                                Specific products
+                                            </Button>
+                                            <Button
+                                                pressed={bxgyGetsType[0] === "collections"}
+                                                onClick={() => setBxgyGetsType(["collections"])}
+                                            >
+                                                Specific collections
+                                            </Button>
+                                        </ButtonGroup>
+                                        {bxgyGetsType[0] !== "same" && (
+                                            <>
+                                                <InlineStack gap="200">
+                                                    <div style={{ flex: 1 }}>
                                                         <TextField
-                                                            prefix={<Icon source={DiscountIcon} />}
-                                                            placeholder="Search countries"
-                                                            value={countrySearch}
-                                                            onChange={setCountrySearch}
+                                                            placeholder={`Search ${bxgyGetsType[0]}`}
+                                                            value={resourceSearch}
+                                                            onChange={setResourceSearch}
                                                             autoComplete="off"
                                                         />
-                                                        <Scrollable style={{ height: '300px' }}>
-                                                            <div style={{ padding: '8px 0' }}>
-                                                                {COUNTRIES.filter(c => c.label.toLowerCase().includes(countrySearch.toLowerCase())).map(country => {
-                                                                    const isSelected = tempSelectedCountries.includes(country.value);
+                                                    </div>
+                                                    <Button onClick={() => selectResources("gets")}>Browse</Button>
+                                                </InlineStack>
+                                                {bxgyGetsResources.length > 0 && (
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
+                                                        {bxgyGetsResources.map(res => (
+                                                            <Box key={res.id} padding="100" border="divider" borderRadius="200">
+                                                                <BlockStack align="center" gap="100">
+                                                                    <Thumbnail source={res.image || (bxgyGetsType[0] === "collections" ? CollectionIcon : ProductIcon)} size="small" />
+                                                                    <Text variant="bodyXs" truncate>{res.title}</Text>
+                                                                </BlockStack>
+                                                            </Box>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                        <Divider />
+                                        <Select
+                                            label="Discount value"
+                                            options={[
+                                                { label: "Free", value: "free" },
+                                                { label: "Percentage off", value: "percentage" },
+                                                { label: "Amount off", value: "fixed_amount" },
+                                            ]}
+                                            value={bxgyGetsValueType}
+                                            onChange={setBxgyGetsValueType}
+                                        />
+                                        {bxgyGetsValueType !== "free" && (
+                                            <TextField
+                                                label={bxgyGetsValueType === "percentage" ? "Percentage off" : "Amount off"}
+                                                type="number"
+                                                value={bxgyGetsValue}
+                                                onChange={setBxgyGetsValue}
+                                                suffix={bxgyGetsValueType === "percentage" ? "%" : null}
+                                                prefix={bxgyGetsValueType === "fixed_amount" ? "₹" : null}
+                                                autoComplete="off"
+                                            />
+                                        )}
+                                        <TextField
+                                            label="Quantity"
+                                            type="number"
+                                            value={bxgyGetsQuantity}
+                                            onChange={setBxgyGetsQuantity}
+                                            helpText="Number of items the customer will receive at a discount."
+                                            autoComplete="off"
+                                        />
+                                        <Checkbox
+                                            label="Apply discount once per order"
+                                            helpText="If unchecked, the discount repeats for every eligible group of items."
+                                            checked={bxgyRepeatOncePerOrder}
+                                            onChange={setBxgyRepeatOncePerOrder}
+                                        />
+                                    </BlockStack>
+                                </Card>
+                            )}
+
+                            {/* FREE SHIPPING: COUNTRIES */}
+                            {type[0] === "free_shipping" && (
+                                <Card>
+                                    <BlockStack gap="400">
+                                        <Text variant="headingMd" as="h2">Countries</Text>
+                                        <ButtonGroup segmented>
+                                            <Button
+                                                pressed={countriesType[0] === "all"}
+                                                onClick={() => setCountriesType(["all"])}
+                                            >
+                                                All countries
+                                            </Button>
+                                            <Button
+                                                pressed={countriesType[0] === "specific"}
+                                                onClick={() => setCountriesType(["specific"])}
+                                            >
+                                                Specific countries
+                                            </Button>
+                                        </ButtonGroup>
+                                        {countriesType[0] === "specific" && (
+                                            <BlockStack gap="300">
+                                                <InlineStack gap="200">
+                                                    <div style={{ flex: 1 }}>
+                                                        <TextField
+                                                            placeholder="Search countries"
+                                                            value={""}
+                                                            autoComplete="off"
+                                                            readOnly
+                                                            onFocus={() => {
+                                                                setTempSelectedCountries(selectedCountries);
+                                                                setCountryModalActive(true);
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <Button onClick={() => {
+                                                        setTempSelectedCountries(selectedCountries);
+                                                        setCountryModalActive(true);
+                                                    }}>Browse</Button>
+                                                </InlineStack>
+
+                                                {selectedCountries.length > 0 && (
+                                                    <Box border="divider" borderRadius="200" padding="0">
+                                                        <Scrollable style={{ maxHeight: '150px' }}>
+                                                            <BlockStack gap="0">
+                                                                {selectedCountries.map(code => {
+                                                                    const country = COUNTRIES.find(c => c.value === code);
                                                                     return (
-                                                                        <div
-                                                                            key={country.value}
-                                                                            style={{
-                                                                                padding: '8px 12px',
-                                                                                display: 'flex',
-                                                                                justifyContent: 'space-between',
-                                                                                alignItems: 'center',
-                                                                                borderBottom: '1px solid #f1f1f1'
-                                                                            }}
-                                                                        >
+                                                                        <div key={code} style={{ padding: '8px 12px', borderBottom: '1px solid #f1f1f1', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                                                             <InlineStack gap="200" blockAlign="center">
-                                                                                <Text variant="bodyMd">{country.flag}</Text>
-                                                                                <Text variant="bodyMd">{country.label}</Text>
+                                                                                <Text variant="bodyMd">{country?.flag || "🏳️"}</Text>
+                                                                                <Text variant="bodyMd">{country?.label || code}</Text>
                                                                             </InlineStack>
                                                                             <Button
-                                                                                variant={isSelected ? "primary" : "secondary"}
-                                                                                onClick={() => {
-                                                                                    if (isSelected) {
-                                                                                        setTempSelectedCountries(prev => prev.filter(c => c !== country.value));
-                                                                                    } else {
-                                                                                        setTempSelectedCountries(prev => [...prev, country.value]);
-                                                                                    }
-                                                                                }}
+                                                                                variant="tertiary"
+                                                                                icon={DiscountIcon} // Using a placeholder for cross or just text
+                                                                                onClick={() => setSelectedCountries(prev => prev.filter(c => c !== code))}
                                                                             >
-                                                                                {isSelected ? "Remove" : "Add"}
+                                                                                Remove
                                                                             </Button>
                                                                         </div>
                                                                     );
                                                                 })}
-                                                            </div>
+                                                            </BlockStack>
                                                         </Scrollable>
-                                                    </BlockStack>
-                                                </Modal.Section>
-                                            </Modal>
-                                        </BlockStack>
-                                    )}
-                                </BlockStack>
-                            </Card>
-                        )}
+                                                    </Box>
+                                                )}
 
-                        {/* APPLIES TO CARD (UNIFIED) */}
-                        {(type[0] === "amount_off_products" || type[0] === "amount_off_order") && (
-                            <Card>
-                                <BlockStack gap="400">
-                                    <Text variant="headingMd" as="h2">Applies to</Text>
-                                    <Select
-                                        label="Applies to"
-                                        options={[
-                                            { label: type[0] === "amount_off_order" ? "Entire order" : "All products", value: "all_products" },
-                                            { label: "Specific collections", value: "specific_collections" },
-                                            { label: "Specific products", value: "specific_products" },
-                                        ]}
-                                        value={appliesTo}
-                                        onChange={(val) => { setAppliesTo(val); setSelectedResources([]); }}
-                                    />
-                                    {appliesTo === "all_products" && (
-                                        <Text variant="bodyMd">
-                                            {type[0] === "amount_off_order" ? "This discount applies to the entire order." : "This discount applies to all products."}
-                                        </Text>
-                                    )}
-                                    {appliesTo === "specific_collections" && (
-                                        <BlockStack gap="300">
-                                            <InlineStack gap="200">
-                                                <div style={{ flex: 1 }}>
-                                                    <TextField
-                                                        placeholder="Search collections"
-                                                        value={resourceSearch}
-                                                        onChange={setResourceSearch}
-                                                        autoComplete="off"
-                                                    />
-                                                </div>
-                                                <Button onClick={selectResources}>Browse</Button>
-                                            </InlineStack>
-                                            <Text variant="bodySm" tone="subdued">
-                                                The discount is applied per eligible product, not on the total order.
+                                                <Modal
+                                                    open={countryModalActive}
+                                                    onClose={() => setCountryModalActive(false)}
+                                                    title="Select countries"
+                                                    primaryAction={{
+                                                        content: `Add (${tempSelectedCountries.length})`,
+                                                        onAction: () => {
+                                                            setSelectedCountries(tempSelectedCountries);
+                                                            setCountryModalActive(false);
+                                                        }
+                                                    }}
+                                                    secondaryActions={[
+                                                        {
+                                                            content: "Cancel",
+                                                            onAction: () => setCountryModalActive(false)
+                                                        }
+                                                    ]}
+                                                >
+                                                    <Modal.Section>
+                                                        <BlockStack gap="400">
+                                                            <TextField
+                                                                prefix={<Icon source={DiscountIcon} />}
+                                                                placeholder="Search countries"
+                                                                value={countrySearch}
+                                                                onChange={setCountrySearch}
+                                                                autoComplete="off"
+                                                            />
+                                                            <Scrollable style={{ height: '300px' }}>
+                                                                <div style={{ padding: '8px 0' }}>
+                                                                    {COUNTRIES.filter(c => c.label.toLowerCase().includes(countrySearch.toLowerCase())).map(country => {
+                                                                        const isSelected = tempSelectedCountries.includes(country.value);
+                                                                        return (
+                                                                            <div
+                                                                                key={country.value}
+                                                                                style={{
+                                                                                    padding: '8px 12px',
+                                                                                    display: 'flex',
+                                                                                    justifyContent: 'space-between',
+                                                                                    alignItems: 'center',
+                                                                                    borderBottom: '1px solid #f1f1f1'
+                                                                                }}
+                                                                            >
+                                                                                <InlineStack gap="200" blockAlign="center">
+                                                                                    <Text variant="bodyMd">{country.flag}</Text>
+                                                                                    <Text variant="bodyMd">{country.label}</Text>
+                                                                                </InlineStack>
+                                                                                <Button
+                                                                                    variant={isSelected ? "primary" : "secondary"}
+                                                                                    onClick={() => {
+                                                                                        if (isSelected) {
+                                                                                            setTempSelectedCountries(prev => prev.filter(c => c !== country.value));
+                                                                                        } else {
+                                                                                            setTempSelectedCountries(prev => [...prev, country.value]);
+                                                                                        }
+                                                                                    }}
+                                                                                >
+                                                                                    {isSelected ? "Remove" : "Add"}
+                                                                                </Button>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </Scrollable>
+                                                        </BlockStack>
+                                                    </Modal.Section>
+                                                </Modal>
+                                            </BlockStack>
+                                        )}
+                                    </BlockStack>
+                                </Card>
+                            )}
+
+                            {/* APPLIES TO CARD (UNIFIED) */}
+                            {(type[0] === "amount_off_products" || type[0] === "amount_off_order") && (
+                                <Card>
+                                    <BlockStack gap="400">
+                                        <Text variant="headingMd" as="h2">Applies to</Text>
+                                        <Select
+                                            label="Applies to"
+                                            options={[
+                                                { label: type[0] === "amount_off_order" ? "Entire order" : "All products", value: "all_products" },
+                                                { label: "Specific collections", value: "specific_collections" },
+                                                { label: "Specific products", value: "specific_products" },
+                                            ]}
+                                            value={appliesTo}
+                                            onChange={(val) => { setAppliesTo(val); setSelectedResources([]); }}
+                                        />
+                                        {appliesTo === "all_products" && (
+                                            <Text variant="bodyMd">
+                                                {type[0] === "amount_off_order" ? "This discount applies to the entire order." : "This discount applies to all products."}
                                             </Text>
-                                            {selectedResources.length > 0 && (
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px' }}>
-                                                    {selectedResources.map(res => (
-                                                        <Box key={res.id} padding="100" border="divider" borderRadius="200">
-                                                            <BlockStack align="center" gap="100">
-                                                                <Thumbnail source={res.image || CollectionIcon} size="small" />
-                                                                <Text variant="bodyXs" truncate>{res.title}</Text>
-                                                            </BlockStack>
-                                                        </Box>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </BlockStack>
-                                    )}
-                                    {appliesTo === "specific_products" && (
-                                        <BlockStack gap="300">
-                                            <InlineStack gap="200">
-                                                <div style={{ flex: 1 }}>
-                                                    <TextField
-                                                        placeholder="Search products"
-                                                        value={resourceSearch}
-                                                        onChange={setResourceSearch}
-                                                        autoComplete="off"
-                                                    />
-                                                </div>
-                                                <Button onClick={selectResources}>Browse</Button>
-                                            </InlineStack>
-                                            {selectedResources.length > 0 && (
-                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px' }}>
-                                                    {selectedResources.map(res => (
-                                                        <Box key={res.id} padding="100" border="divider" borderRadius="200">
-                                                            <BlockStack align="center" gap="100">
-                                                                <Thumbnail source={res.image || ProductIcon} size="small" />
-                                                                <Text variant="bodyXs" truncate>{res.title}</Text>
-                                                            </BlockStack>
-                                                        </Box>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </BlockStack>
-                                    )}
-                                </BlockStack>
-                            </Card>
-                        )}
+                                        )}
+                                        {appliesTo === "specific_collections" && (
+                                            <BlockStack gap="300">
+                                                <InlineStack gap="200">
+                                                    <div style={{ flex: 1 }}>
+                                                        <TextField
+                                                            placeholder="Search collections"
+                                                            value={resourceSearch}
+                                                            onChange={setResourceSearch}
+                                                            autoComplete="off"
+                                                        />
+                                                    </div>
+                                                    <Button onClick={selectResources}>Browse</Button>
+                                                </InlineStack>
+                                                <Text variant="bodySm" tone="subdued">
+                                                    The discount is applied per eligible product, not on the total order.
+                                                </Text>
+                                                {selectedResources.length > 0 && (
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px' }}>
+                                                        {selectedResources.map(res => (
+                                                            <Box key={res.id} padding="100" border="divider" borderRadius="200">
+                                                                <BlockStack align="center" gap="100">
+                                                                    <Thumbnail source={res.image || CollectionIcon} size="small" />
+                                                                    <Text variant="bodyXs" truncate>{res.title}</Text>
+                                                                </BlockStack>
+                                                            </Box>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </BlockStack>
+                                        )}
+                                        {appliesTo === "specific_products" && (
+                                            <BlockStack gap="300">
+                                                <InlineStack gap="200">
+                                                    <div style={{ flex: 1 }}>
+                                                        <TextField
+                                                            placeholder="Search products"
+                                                            value={resourceSearch}
+                                                            onChange={setResourceSearch}
+                                                            autoComplete="off"
+                                                        />
+                                                    </div>
+                                                    <Button onClick={selectResources}>Browse</Button>
+                                                </InlineStack>
+                                                {selectedResources.length > 0 && (
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '10px' }}>
+                                                        {selectedResources.map(res => (
+                                                            <Box key={res.id} padding="100" border="divider" borderRadius="200">
+                                                                <BlockStack align="center" gap="100">
+                                                                    <Thumbnail source={res.image || ProductIcon} size="small" />
+                                                                    <Text variant="bodyXs" truncate>{res.title}</Text>
+                                                                </BlockStack>
+                                                            </Box>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </BlockStack>
+                                        )}
+                                    </BlockStack>
+                                </Card>
+                            )}
 
 
 
-                        {/* MINIMUM PURCHASE REQUIREMENTS CARD (STANDARD) */}
-                        {type[0] !== "bxgy" && (
-                            <Card>
-                                <BlockStack gap="400">
-                                    <Text variant="headingMd" as="h2">Minimum purchase requirements</Text>
-                                    <ButtonGroup segmented>
-                                        <Button
-                                            pressed={minimumRequirement[0] === "none"}
-                                            onClick={() => setMinimumRequirement(["none"])}
-                                        >
-                                            No minimum
-                                        </Button>
-                                        <Button
-                                            pressed={minimumRequirement[0] === "amount"}
-                                            onClick={() => setMinimumRequirement(["amount"])}
-                                        >
-                                            Purchase amount (₹)
-                                        </Button>
-                                        <Button
-                                            pressed={minimumRequirement[0] === "quantity"}
-                                            onClick={() => setMinimumRequirement(["quantity"])}
-                                        >
-                                            Quantity of items
-                                        </Button>
-                                    </ButtonGroup>
-                                    {minimumRequirement[0] === "amount" && (
-                                        <TextField
-                                            label="Minimum purchase amount"
-                                            type="number"
-                                            value={minimumPurchaseAmount}
-                                            onChange={setMinimumPurchaseAmount}
-                                            prefix="₹"
-                                            autoComplete="off"
-                                        />
-                                    )}
-                                    <Text variant="bodySm" tone="subdued">
-                                        The discount is applied only if the order meets the selected requirement.
-                                    </Text>
-                                    {minimumRequirement[0] === "quantity" && (
-                                        <TextField
-                                            label="Minimum quantity of items"
-                                            type="number"
-                                            value={minimumQuantity}
-                                            onChange={setMinimumQuantity}
-                                            autoComplete="off"
-                                        />
-                                    )}
-                                </BlockStack>
-                            </Card>
-                        )}
-
-                        {/* MAXIMUM DISCOUNT USES CARD */}
-                        <Card>
-                            <BlockStack gap="400">
-                                <Text variant="headingMd" as="h2">Maximum discount uses</Text>
-                                <BlockStack gap="200">
-                                    <Checkbox
-                                        label="Limit number of times this discount can be used in total"
-                                        checked={limitTotalUses}
-                                        onChange={setLimitTotalUses}
-                                    />
-                                    {limitTotalUses && (
-                                        <Box paddingInlineStart="800">
+                            {/* MINIMUM PURCHASE REQUIREMENTS CARD (STANDARD) */}
+                            {type[0] !== "bxgy" && (
+                                <Card>
+                                    <BlockStack gap="400">
+                                        <Text variant="headingMd" as="h2">Minimum purchase requirements</Text>
+                                        <ButtonGroup segmented>
+                                            <Button
+                                                pressed={minimumRequirement[0] === "none"}
+                                                onClick={() => setMinimumRequirement(["none"])}
+                                            >
+                                                No minimum
+                                            </Button>
+                                            <Button
+                                                pressed={minimumRequirement[0] === "amount"}
+                                                onClick={() => setMinimumRequirement(["amount"])}
+                                            >
+                                                Purchase amount (₹)
+                                            </Button>
+                                            <Button
+                                                pressed={minimumRequirement[0] === "quantity"}
+                                                onClick={() => setMinimumRequirement(["quantity"])}
+                                            >
+                                                Quantity of items
+                                            </Button>
+                                        </ButtonGroup>
+                                        {minimumRequirement[0] === "amount" && (
                                             <TextField
-                                                label="Total usage limit"
+                                                label="Minimum purchase amount"
                                                 type="number"
-                                                value={totalUsesLimit}
-                                                onChange={setTotalUsesLimit}
+                                                value={minimumPurchaseAmount}
+                                                onChange={setMinimumPurchaseAmount}
+                                                prefix="₹"
                                                 autoComplete="off"
                                             />
-                                        </Box>
-                                    )}
-                                </BlockStack>
-                                <Checkbox
-                                    label="Limit to one use per customer"
-                                    checked={limitOnePerCustomer}
-                                    onChange={setLimitOnePerCustomer}
-                                />
-                            </BlockStack>
-                        </Card>
+                                        )}
+                                        <Text variant="bodySm" tone="subdued">
+                                            The discount is applied only if the order meets the selected requirement.
+                                        </Text>
+                                        {minimumRequirement[0] === "quantity" && (
+                                            <TextField
+                                                label="Minimum quantity of items"
+                                                type="number"
+                                                value={minimumQuantity}
+                                                onChange={setMinimumQuantity}
+                                                autoComplete="off"
+                                            />
+                                        )}
+                                    </BlockStack>
+                                </Card>
+                            )}
 
-                        {/* COMBINATIONS CARD */}
-                        <Card>
-                            <BlockStack gap="400">
-                                <Text variant="headingMd" as="h2">Combinations</Text>
-                                <Checkbox
-                                    label="Product discounts"
-                                    checked={combineProduct}
-                                    onChange={setCombineProduct}
-                                />
-                                <Checkbox
-                                    label="Order discounts"
-                                    checked={combineOrder}
-                                    onChange={setCombineOrder}
-                                />
-                                <Checkbox
-                                    label="Shipping discounts"
-                                    checked={combineShipping}
-                                    onChange={setCombineShipping}
-                                />
-                            </BlockStack>
-                        </Card>
-
-                        {/* ACTIVE DATES CARD */}
-                        <Card>
-                            <BlockStack gap="400">
-                                <Text variant="headingMd" as="h2">Active dates</Text>
-
-                                {/* Start Date */}
-                                <InlineStack gap="300" blockAlign="end">
-                                    <Box minWidth="220px">
-                                        <BlockStack gap="100">
-                                            <Text variant="bodyMd" as="label" fontWeight="medium">Start date</Text>
-                                            <Popover
-                                                active={startPopoverActive}
-                                                activator={
-                                                    <Button
-                                                        onClick={() => setStartPopoverActive(prev => !prev)}
-                                                        icon={CalendarIcon}
-                                                        fullWidth
-                                                        textAlign="left"
-                                                    >
-                                                        {formatDate(startDate)}
-                                                    </Button>
-                                                }
-                                                onClose={() => setStartPopoverActive(false)}
-                                                autofocusTarget="none"
-                                                preferredAlignment="left"
-                                            >
-                                                <div style={{ padding: "16px" }}>
-                                                    <DatePicker
-                                                        month={startMonth}
-                                                        year={startYear}
-                                                        onChange={handleStartDateChange}
-                                                        onMonthChange={handleStartMonthChange}
-                                                        selected={startDate}
-                                                    />
-                                                </div>
-                                            </Popover>
-                                        </BlockStack>
-                                    </Box>
-                                    <Box minWidth="140px">
-                                        <TextField
-                                            label="Start time"
-                                            type="time"
-                                            value={startTime}
-                                            onChange={setStartTime}
+                            {/* MAXIMUM DISCOUNT USES CARD */}
+                            <Card>
+                                <BlockStack gap="400">
+                                    <Text variant="headingMd" as="h2">Maximum discount uses</Text>
+                                    <BlockStack gap="200">
+                                        <Checkbox
+                                            label="Limit number of times this discount can be used in total"
+                                            checked={limitTotalUses}
+                                            onChange={setLimitTotalUses}
                                         />
-                                    </Box>
-                                </InlineStack>
+                                        {limitTotalUses && (
+                                            <Box paddingInlineStart="800">
+                                                <TextField
+                                                    label="Total usage limit"
+                                                    type="number"
+                                                    value={totalUsesLimit}
+                                                    onChange={setTotalUsesLimit}
+                                                    autoComplete="off"
+                                                />
+                                            </Box>
+                                        )}
+                                    </BlockStack>
+                                    <Checkbox
+                                        label="Limit to one use per customer"
+                                        checked={limitOnePerCustomer}
+                                        onChange={setLimitOnePerCustomer}
+                                    />
+                                </BlockStack>
+                            </Card>
 
-                                {/* End Date Toggle */}
-                                <Checkbox
-                                    label="Set end date"
-                                    checked={hasEndDate}
-                                    onChange={setHasEndDate}
-                                />
+                            {/* COMBINATIONS CARD */}
+                            <Card>
+                                <BlockStack gap="400">
+                                    <Text variant="headingMd" as="h2">Combinations</Text>
+                                    <Checkbox
+                                        label="Product discounts"
+                                        checked={combineProduct}
+                                        onChange={setCombineProduct}
+                                    />
+                                    <Checkbox
+                                        label="Order discounts"
+                                        checked={combineOrder}
+                                        onChange={setCombineOrder}
+                                    />
+                                    <Checkbox
+                                        label="Shipping discounts"
+                                        checked={combineShipping}
+                                        onChange={setCombineShipping}
+                                    />
+                                </BlockStack>
+                            </Card>
 
-                                {/* End Date (conditional) */}
-                                {hasEndDate && (
+                            {/* ACTIVE DATES CARD */}
+                            <Card>
+                                <BlockStack gap="400">
+                                    <Text variant="headingMd" as="h2">Active dates</Text>
+
+                                    {/* Start Date */}
                                     <InlineStack gap="300" blockAlign="end">
                                         <Box minWidth="220px">
                                             <BlockStack gap="100">
-                                                <Text variant="bodyMd" as="label" fontWeight="medium">End date</Text>
+                                                <Text variant="bodyMd" as="label" fontWeight="medium">Start date</Text>
                                                 <Popover
-                                                    active={endPopoverActive}
+                                                    active={startPopoverActive}
                                                     activator={
                                                         <Button
-                                                            onClick={() => setEndPopoverActive(prev => !prev)}
+                                                            onClick={() => setStartPopoverActive(prev => !prev)}
                                                             icon={CalendarIcon}
                                                             fullWidth
                                                             textAlign="left"
                                                         >
-                                                            {formatDate(endDate)}
+                                                            {formatDate(startDate)}
                                                         </Button>
                                                     }
-                                                    onClose={() => setEndPopoverActive(false)}
+                                                    onClose={() => setStartPopoverActive(false)}
                                                     autofocusTarget="none"
                                                     preferredAlignment="left"
                                                 >
                                                     <div style={{ padding: "16px" }}>
                                                         <DatePicker
-                                                            month={endMonth}
-                                                            year={endYear}
-                                                            onChange={handleEndDateChange}
-                                                            onMonthChange={handleEndMonthChange}
-                                                            selected={endDate}
-                                                            disableDatesBefore={startDate}
+                                                            month={startMonth}
+                                                            year={startYear}
+                                                            onChange={handleStartDateChange}
+                                                            onMonthChange={handleStartMonthChange}
+                                                            selected={startDate}
                                                         />
                                                     </div>
                                                 </Popover>
@@ -1196,65 +1166,118 @@ export default function CreateDiscount() {
                                         </Box>
                                         <Box minWidth="140px">
                                             <TextField
-                                                label="End time"
+                                                label="Start time"
                                                 type="time"
-                                                value={endTime}
-                                                onChange={setEndTime}
+                                                value={startTime}
+                                                onChange={setStartTime}
                                             />
                                         </Box>
                                     </InlineStack>
-                                )}
-                            </BlockStack>
-                        </Card>
 
-                        {actionData?.errors && (
-                            <Banner tone="critical">
-                                <List>
-                                    {actionData.errors.map((error, i) => (
-                                        <List.Item key={i}>{error.message}</List.Item>
-                                    ))}
-                                </List>
-                            </Banner>
-                        )}
-                    </BlockStack>
-                </Layout.Section>
+                                    {/* End Date Toggle */}
+                                    <Checkbox
+                                        label="Set end date"
+                                        checked={hasEndDate}
+                                        onChange={setHasEndDate}
+                                    />
 
-                {/* SIDEBAR SUMMARY */}
-                <Layout.Section variant="oneThird">
-                    <BlockStack gap="400">
-                        <Card>
-                            <BlockStack gap="300">
-                                <Text variant="headingMd" as="h2">Summary</Text>
-                                {code && (
-                                    <Box padding="200" background="bg-surface-secondary" borderRadius="200">
-                                        <InlineStack align="center" gap="200">
-                                            <Icon source={DiscountIcon} tone="base" />
-                                            <Text variant="headingLg" as="p">{code}</Text>
+                                    {/* End Date (conditional) */}
+                                    {hasEndDate && (
+                                        <InlineStack gap="300" blockAlign="end">
+                                            <Box minWidth="220px">
+                                                <BlockStack gap="100">
+                                                    <Text variant="bodyMd" as="label" fontWeight="medium">End date</Text>
+                                                    <Popover
+                                                        active={endPopoverActive}
+                                                        activator={
+                                                            <Button
+                                                                onClick={() => setEndPopoverActive(prev => !prev)}
+                                                                icon={CalendarIcon}
+                                                                fullWidth
+                                                                textAlign="left"
+                                                            >
+                                                                {formatDate(endDate)}
+                                                            </Button>
+                                                        }
+                                                        onClose={() => setEndPopoverActive(false)}
+                                                        autofocusTarget="none"
+                                                        preferredAlignment="left"
+                                                    >
+                                                        <div style={{ padding: "16px" }}>
+                                                            <DatePicker
+                                                                month={endMonth}
+                                                                year={endYear}
+                                                                onChange={handleEndDateChange}
+                                                                onMonthChange={handleEndMonthChange}
+                                                                selected={endDate}
+                                                                disableDatesBefore={startDate}
+                                                            />
+                                                        </div>
+                                                    </Popover>
+                                                </BlockStack>
+                                            </Box>
+                                            <Box minWidth="140px">
+                                                <TextField
+                                                    label="End time"
+                                                    type="time"
+                                                    value={endTime}
+                                                    onChange={setEndTime}
+                                                />
+                                            </Box>
                                         </InlineStack>
-                                    </Box>
-                                )}
-                                <Divider />
-                                <List type="bullet">
-                                    {summaryItems.map((item, i) => (
-                                        <List.Item key={i}>{item}</List.Item>
-                                    ))}
-                                </List>
-                            </BlockStack>
-                        </Card>
+                                    )}
+                                </BlockStack>
+                            </Card>
 
-                        <Banner title="Discount Tip" tone="info">
-                            <p>Code-based discounts allow you to track specific marketing campaigns.</p>
-                        </Banner>
-                    </BlockStack>
-                </Layout.Section>
-            </Layout>
+                            {actionData?.errors && (
+                                <Banner tone="critical">
+                                    <List>
+                                        {actionData.errors.map((error, i) => (
+                                            <List.Item key={i}>{error.message}</List.Item>
+                                        ))}
+                                    </List>
+                                </Banner>
+                            )}
+                        </BlockStack>
+                    </Layout.Section>
 
-            {showToast && (
-                <Toast
-                    content="Discount created successfully"
-                    onDismiss={() => setShowToast(false)}
-                />
-            )}
-        </Page>
+                    {/* SIDEBAR SUMMARY */}
+                    <Layout.Section variant="oneThird">
+                        <BlockStack gap="400">
+                            <Card>
+                                <BlockStack gap="300">
+                                    <Text variant="headingMd" as="h2">Summary</Text>
+                                    {code && (
+                                        <Box padding="200" background="bg-surface-secondary" borderRadius="200">
+                                            <InlineStack align="center" gap="200">
+                                                <Icon source={DiscountIcon} tone="base" />
+                                                <Text variant="headingLg" as="p">{code}</Text>
+                                            </InlineStack>
+                                        </Box>
+                                    )}
+                                    <Divider />
+                                    <List type="bullet">
+                                        {summaryItems.map((item, i) => (
+                                            <List.Item key={i}>{item}</List.Item>
+                                        ))}
+                                    </List>
+                                </BlockStack>
+                            </Card>
+
+                            <Banner title="Discount Tip" tone="info">
+                                <p>Code-based discounts allow you to track specific marketing campaigns.</p>
+                            </Banner>
+                        </BlockStack>
+                    </Layout.Section>
+                </Layout>
+
+                {showToast && (
+                    <Toast
+                        content="Discount created successfully"
+                        onDismiss={() => setShowToast(false)}
+                    />
+                )}
+            </Page>
+        </Frame>
     );
 }

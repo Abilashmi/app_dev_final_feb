@@ -30,11 +30,23 @@ export { loader } from "./api.shopify-coupons";
 function statusBadge(status) {
   switch (status) {
     case "ACTIVE":
-      return <Badge progress="complete">Active</Badge>;
+      return <Badge tone="success">Active</Badge>;
     case "SCHEDULED":
-      return <Badge progress="partiallyComplete" tone="info">Scheduled</Badge>;
+      return <Badge tone="attention">Scheduled</Badge>;
     case "EXPIRED":
-      return <Badge tone="critical">Expired</Badge>;
+      return (
+        <span style={{
+          backgroundColor: "#d5ebff",
+          color: "#004499",
+          padding: "2px 8px",
+          borderRadius: "12px",
+          fontSize: "12px",
+          fontWeight: "500",
+          display: "inline-block"
+        }}>
+          Expired
+        </span>
+      );
     default:
       return <Badge>Unknown</Badge>;
   }
@@ -106,9 +118,9 @@ function buildCSV(coupons, format) {
 
 const STAT_STYLES = {
   total: { bg: "#f4f6f8", iconBg: "#e4e5e7" },
-  active: { bg: "#e3f1df", iconBg: "#bbddb1" },
-  scheduled: { bg: "#eaf0ff", iconBg: "#c9d7ff" },
-  expired: { bg: "#fcebea", iconBg: "#fcc4be" },
+  active: { bg: "#e6f4ea", iconBg: "#bdf1d0" }, // Success Green theme
+  scheduled: { bg: "#fff4e5", iconBg: "#ffe3b2" }, // Attention Yellow theme
+  expired: { bg: "#d5ebff", iconBg: "#aed9ff" }, // Light Blue theme
 };
 
 function StatCard({ label, value, variant }) {
