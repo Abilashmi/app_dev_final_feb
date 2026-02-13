@@ -729,6 +729,7 @@ export default function CartDrawerAdmin() {
   const [milestones, setMilestones] = useState([]);
   const [progressMode, setProgressMode] = useState('amount'); // 'amount' or 'quantity'
   const [selectedMilestoneProduct, setSelectedMilestoneProduct] = useState(null);
+  const [selectedMilestoneText, setSelectedMilestoneText] = useState("");
   const [showProductModal, setShowProductModal] = useState(false);
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productSearchQuery, setProductSearchQuery] = useState('');
@@ -1101,9 +1102,11 @@ export default function CartDrawerAdmin() {
     setShowProductModal(false);
   };
 
-  const handleMilestoneProductClick = async (productIds) => {
-    const products = await mockApi.getProducts(productIds);
+  const handleMilestoneProductClick = (productIds, rewardText) => {
+    const allAvailableProducts = [...mockProducts, ...(loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts)];
+    const products = allAvailableProducts.filter(p => productIds.includes(p.id));
     setSelectedMilestoneProduct(products);
+    setSelectedMilestoneText(rewardText || "");
     setShowProductModal(true);
   };
 
@@ -1386,10 +1389,11 @@ export default function CartDrawerAdmin() {
 
   // Calculate discount for a specific coupon
   const calculateCouponDiscount = (coupon, subtotal) => {
+    const val = Number(coupon.discountValue) || 0;
     if (coupon.discountType === 'percentage') {
-      return (subtotal * coupon.discountValue) / 100;
+      return (subtotal * val) / 100;
     } else if (coupon.discountType === 'fixed') {
-      return Math.min(coupon.discountValue, subtotal);
+      return Math.min(val, subtotal);
     }
     return 0;
   };
@@ -1973,7 +1977,7 @@ export default function CartDrawerAdmin() {
             </Card>
 
             {/* SECTION 3: Active Milestones Display */}
-            <Card>
+            {/* <Card>
               <BlockStack gap="300">
                 <Text variant="headingMd" as="h2">Active milestones</Text>
 
@@ -2002,7 +2006,7 @@ export default function CartDrawerAdmin() {
                 )}
               </BlockStack>
             </Card>
-
+ */}
 
 
             {/* SECTION 5: Tier Settings */}
@@ -3015,6 +3019,51 @@ export default function CartDrawerAdmin() {
 
     const maxTargetSetting = progressBarSettings.maxTarget || 1000;
 
+    // Derive unlocked rewards for the items list
+    const currentProgressVal = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
+    const reachedWithProducts = previewMilestones.filter(ms => currentProgressVal >= ms.target && ms.associatedProducts.length > 0);
+    const allReachedProductIds = [...new Set(reachedWithProducts.flatMap(ms => ms.associatedProducts))];
+
+    const unlockedRewards = allReachedProductIds.map((productId, idx) => {
+      const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
+      if (!product) return null;
+      const isUrl = product.image && (product.image.startsWith('http') || product.image.startsWith('//'));
+      const priceVal = product.price ? Number(product.price) : 0;
+      return {
+        id: `reward-${idx}`,
+        name: product.title,
+        price: isNaN(priceVal) ? 0 : priceVal,
+        quantity: 1,
+        displayImage: isUrl ? product.image : null,
+        placeholderImage: !isUrl ? (product.image || '🎁') : '🎁',
+        isAddedByCondition: true
+      };
+    }).filter(Boolean);
+
+    const normalizedMockItems = mockCartItems.map(item => {
+      const isUrl = item.image && (item.image.startsWith('http') || item.image.startsWith('//'));
+      const priceVal = item.price ? Number(item.price) : 0;
+      return {
+        ...item,
+        price: isNaN(priceVal) ? 0 : priceVal,
+        displayImage: isUrl ? item.image : null,
+        placeholderImage: !isUrl ? (item.image || '📦') : '📦'
+      };
+    });
+
+    const itemsToRender = [...normalizedMockItems, ...unlockedRewards];
+
+    // Recalculate totals including automatic additions
+    const totalWithRewards = itemsToRender.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+    // Calculate total discount for preview based on new subtotal
+    const previewTotalDiscount = appliedCouponIds.reduce((sum, couponId) => {
+      const coupon = allCoupons.find(c => c.id === couponId);
+      return sum + (coupon ? calculateCouponDiscount(coupon, totalWithRewards) : 0);
+    }, 0);
+
+    const previewFinalTotal = Math.max(0, totalWithRewards - previewTotalDiscount);
+
     return (
       <div style={{ position: 'relative', height: '100%', backgroundColor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
         {/* Drawer Background (simulated storefront) */}
@@ -3164,7 +3213,7 @@ export default function CartDrawerAdmin() {
                           alignItems: 'center',
                           cursor: ms.associatedProducts.length > 0 ? 'pointer' : 'default',
                         }}
-                        onClick={() => ms.associatedProducts.length > 0 && handleMilestoneProductClick(ms.associatedProducts)}
+                        onClick={() => handleMilestoneProductClick(ms.associatedProducts, ms.rewardText)}
                       >
                         {/* Node Circle */}
                         {/* Node Circle */}
@@ -3172,34 +3221,53 @@ export default function CartDrawerAdmin() {
                           const isNext = !isCompleted && (idx === 0 || ((progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity) >= previewMilestones[idx - 1].target));
                           return (
                             <div style={{
-                              width: isCompleted || isNext ? '36px' : '28px',
-                              height: isCompleted || isNext ? '36px' : '28px',
-                              borderRadius: '50%',
+                              width: isCompleted || isNext ? '40px' : '32px',
+                              height: isCompleted || isNext ? '40px' : '32px',
+                              borderRadius: '12px',
                               backgroundColor: isCompleted ? (progressBarSettings.barForegroundColor || '#2563eb') : '#ffffff',
                               border: `2px solid ${isCompleted ? (progressBarSettings.barForegroundColor || '#2563eb') : (isNext ? (progressBarSettings.barForegroundColor || '#2563eb') : '#cbd5e1')}`,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              fontSize: isCompleted || isNext ? '16px' : '12px',
+                              fontSize: isCompleted || isNext ? '18px' : '14px',
                               boxShadow: isCompleted ? `0 4px 12px ${progressBarSettings.barForegroundColor || '#2563eb'}66` : '0 2px 5px rgba(0,0,0,0.05)',
                               color: isCompleted ? '#fff' : '#94a3b8',
                               animation: isNext ? 'pulse-ring 2s infinite' : 'none',
-                              position: 'relative'
+                              position: 'relative',
+                              overflow: 'hidden',
+                              transition: 'all 0.3s ease'
                             }}>
-                              {icon}
+                              {(() => {
+                                if (ms.associatedProducts.length > 0) {
+                                  const firstProd = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === ms.associatedProducts[0]);
+                                  if (firstProd && firstProd.image && (firstProd.image.startsWith('http') || firstProd.image.startsWith('//'))) {
+                                    return <img src={firstProd.image} alt="Reward" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isCompleted ? 1 : 0.5 }} />;
+                                  }
+                                  return firstProd?.image || icon;
+                                }
+                                return icon;
+                              })()}
+
                               {isCompleted && (
                                 <div style={{
                                   position: 'absolute',
-                                  top: '-4px',
-                                  right: '-4px',
-                                  width: '14px',
-                                  height: '14px',
-                                  backgroundColor: '#10b981',
-                                  borderRadius: '50%',
-                                  border: '2px solid #fff',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: '8px', color: '#fff'
-                                }}>✓</div>
+                                  inset: 0,
+                                  backgroundColor: (progressBarSettings.barForegroundColor || '#2563eb') + '40',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  zIndex: 1
+                                }}>
+                                  <div style={{
+                                    width: '18px',
+                                    height: '18px',
+                                    backgroundColor: '#10b981',
+                                    borderRadius: '50%',
+                                    border: '2px solid #fff',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '10px', color: '#fff'
+                                  }}>✓</div>
+                                </div>
                               )}
                             </div>
                           );
@@ -3316,7 +3384,10 @@ export default function CartDrawerAdmin() {
                                 <span style={{ fontSize: '10px', fontWeight: '700', color: '#1e293b', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {product.title}
                                 </span>
-                                <span style={{ fontSize: '8px', fontWeight: '800', color: '#10b981' }}>FREE</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span style={{ fontSize: '8px', fontWeight: '800', backgroundColor: '#e2e8f0', color: '#64748b', padding: '1px 3px', borderRadius: '2px' }}>ADDED</span>
+                                  <span style={{ fontSize: '9px', fontWeight: '700', color: '#10b981' }}>₹{Number(product.price || 0).toFixed(0)}</span>
+                                </div>
                               </div>
                             </div>
                           );
@@ -3337,19 +3408,69 @@ export default function CartDrawerAdmin() {
             ) : (
               <>
                 {/* Cart Items */}
-                {mockCartItems.map((item, idx) => (
-                  <div key={idx} style={{ display: 'flex', gap: '12px', padding: '12px', backgroundColor: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                    <div style={{ width: '60px', height: '60px', backgroundColor: '#d1d5db', borderRadius: '6px', flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: '600', color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
-                      <p style={{ margin: '0 0 6px 0', fontSize: '12px', color: '#6b7280' }}>₹{item.price.toFixed(0)}</p>
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        <button style={{ padding: '2px 8px', fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', cursor: 'pointer' }}>−</button>
-                        <span style={{ fontSize: '13px', fontWeight: '500', minWidth: '20px', textAlign: 'center' }}>{item.quantity}</span>
-                        <button style={{ padding: '2px 8px', fontSize: '12px', border: '1px solid #d1d5db', borderRadius: '4px', background: '#fff', cursor: 'pointer' }}>+</button>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', padding: '0 4px' }}>
+                  <p style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.01em' }}>Items included</p>
+                  <div style={{ backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '6px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: '#64748b' }}>{itemsToRender.length} ITEMS</span>
+                  </div>
+                </div>
+
+                {itemsToRender.map((item, idx) => (
+                  <div key={idx} style={{
+                    display: 'flex',
+                    gap: '12px',
+                    padding: '12px',
+                    backgroundColor: item.isAddedByCondition ? '#f8fafc' : '#f9fafb',
+                    borderRadius: '16px',
+                    border: '1px solid #f1f5f9',
+                    transition: 'all 0.3s ease',
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
+                    position: 'relative'
+                  }}>
+                    {/* Item Image */}
+                    <div style={{
+                      width: '64px',
+                      height: '64px',
+                      backgroundColor: '#fff',
+                      borderRadius: '12px',
+                      flexShrink: 0,
+                      border: '1px solid #f1f5f9',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+                    }}>
+                      {item.displayImage ? (
+                        <img src={item.displayImage} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : (
+                        <span style={{ fontSize: '28px' }}>{item.placeholderImage}</span>
+                      )}
+                    </div>
+
+                    {/* Item Info */}
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                      <p style={{ margin: '0 0 2px 0', fontSize: '14px', fontWeight: '700', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.name}
+                      </p>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>₹{(Number(item.price) || 0).toFixed(0)}</span>
+                          <span style={{ fontSize: '12px', color: '#94a3b8' }}>× {item.quantity}</span>
+                        </div>
+                        {item.isAddedByCondition && (
+                          <span style={{ fontSize: '9px', fontWeight: '800', backgroundColor: '#e2e8f0', color: '#64748b', padding: '1px 4px', borderRadius: '3px', textTransform: 'uppercase' }}>Auto-Added</span>
+                        )}
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right', fontWeight: '600', fontSize: '13px', color: '#111' }}>₹{(item.price * item.quantity).toFixed(0)}</div>
+
+                    {/* Subtotal */}
+                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '60px' }}>
+                      <span style={{ fontWeight: '800', fontSize: '15px', color: '#0f172a' }}>
+                        ₹{((Number(item.price) || 0) * item.quantity).toFixed(0)}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </>
@@ -3880,14 +4001,14 @@ export default function CartDrawerAdmin() {
                 <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb', backgroundColor: '#f9fafb', flexShrink: 0 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '14px' }}>
                     <span style={{ color: '#6b7280', fontWeight: '500' }}>Subtotal</span>
-                    <span style={{ fontWeight: '600', color: '#111' }}>₹{cartTotal.toFixed(0)}</span>
+                    <span style={{ fontWeight: '600', color: '#111' }}>₹{totalWithRewards.toFixed(0)}</span>
                   </div>
 
                   {/* Show applied discounts */}
                   {appliedCouponIds.length > 0 && appliedCouponIds.map(couponId => {
                     const coupon = allCoupons.find(c => c.id === couponId);
                     if (!coupon) return null;
-                    const discount = calculateCouponDiscount(coupon, cartTotal);
+                    const discount = calculateCouponDiscount(coupon, totalWithRewards);
                     return (
                       <div key={couponId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '13px' }}>
                         <span style={{ color: '#10b981', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -3905,11 +4026,11 @@ export default function CartDrawerAdmin() {
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', fontSize: '15px' }}>
                     <span style={{ color: '#111', fontWeight: '700' }}>Total</span>
-                    <span style={{ fontWeight: '700', color: '#111', fontSize: '18px' }}>₹{finalTotal.toFixed(0)}</span>
+                    <span style={{ fontWeight: '700', color: '#111', fontSize: '18px' }}>₹{previewFinalTotal.toFixed(0)}</span>
                   </div>
 
                   <button style={{ width: '100%', padding: '12px', backgroundColor: '#000', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
-                    Checkout • ₹{finalTotal.toFixed(0)}
+                    Checkout • ₹{previewFinalTotal.toFixed(0)}
                   </button>
                 </div>
               )
@@ -3964,22 +4085,52 @@ export default function CartDrawerAdmin() {
         >
           <Modal.Section>
             <BlockStack gap="400">
-              {selectedMilestoneProduct && selectedMilestoneProduct.map(product => (
-                <Card key={product.id}>
-                  <InlineStack align="space-between" blockAlign="center">
-                    <BlockStack gap="200">
-                      <Text variant="headingSm" as="h3">{product.image} {product.title}</Text>
-                      <Text as="p" tone="subdued">₹{product.price}</Text>
-                    </BlockStack>
-                    <Button
-                      onClick={() => handleAddToCart(product)}
-                      variant="primary"
-                    >
-                      Add to Cart
-                    </Button>
-                  </InlineStack>
-                </Card>
-              ))}
+              {selectedMilestoneText && (
+                <div style={{ backgroundColor: '#f0fdf4', padding: '12px', borderRadius: '8px', border: '1px solid #dcfce7', textAlign: 'center' }}>
+                  <Text variant="headingMd" tone="success">✨ {selectedMilestoneText}</Text>
+                </div>
+              )}
+
+              {selectedMilestoneProduct && selectedMilestoneProduct.length > 0 ? (
+                <BlockStack gap="300">
+                  <Text variant="bodySm" tone="subdued">The following products will be automatically added to your cart when this milestone is reached:</Text>
+                  {selectedMilestoneProduct.map(product => {
+                    const isUrl = product.image && (product.image.startsWith('http') || product.image.startsWith('//'));
+                    return (
+                      <Card key={product.id}>
+                        <InlineStack align="space-between" blockAlign="center">
+                          <InlineStack gap="300" blockAlign="center">
+                            <div style={{
+                              width: '48px',
+                              height: '48px',
+                              backgroundColor: '#f6f6f7',
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              border: '1px solid #e1e3e5'
+                            }}>
+                              {isUrl ? (
+                                <img src={product.image} alt={product.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                <span style={{ fontSize: '24px' }}>{product.image || '🎁'}</span>
+                              )}
+                            </div>
+                            <BlockStack gap="050">
+                              <Text variant="headingSm" as="h3">{product.title}</Text>
+                              <Text as="p" tone="subdued" variant="bodySm">₹{Number(product.price || 0).toFixed(0)}</Text>
+                            </BlockStack>
+                          </InlineStack>
+                          <Badge tone="info">Automatic</Badge>
+                        </InlineStack>
+                      </Card>
+                    );
+                  })}
+                </BlockStack>
+              ) : (
+                !selectedMilestoneText && <Text variant="bodyMd" tone="subdued" textAlign="center">No specific rewards associated with this milestone.</Text>
+              )}
             </BlockStack>
           </Modal.Section>
         </Modal>
