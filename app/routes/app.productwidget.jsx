@@ -744,6 +744,11 @@ function CouponsSection({ config, onSave, saving }) {
         });
     };
 
+    const handleDiscard = () => {
+        setActiveTemplate(config?.activeTemplate || "template1");
+        setTemplates(config?.templates || FAKE_COUPON_CONFIG.templates);
+    };
+
     const currentTemplate = templates[activeTemplate];
 
     return (
@@ -835,88 +840,95 @@ function CouponsSection({ config, onSave, saving }) {
 
                 {/* RIGHT: Customization */}
                 <Card>
-                    <BlockStack gap="400">
-                        <Text as="h3" variant="headingMd">Customize: {currentTemplate.name}</Text>
+                    <div style={{ maxHeight: "480px", overflowY: "auto" }}>
+                        <BlockStack gap="400">
+                            <Text as="h3" variant="headingMd">Customize: {currentTemplate.name}</Text>
 
-                        <Divider />
+                            <Divider />
 
-                        <Text as="h4" variant="headingSm">Text Content</Text>
-                        <TextField
-                            label="Heading Text"
-                            value={currentTemplate.headingText}
-                            onChange={(v) => updateTemplate("headingText", v)}
-                        />
-                        <TextField
-                            label="Subtext"
-                            value={currentTemplate.subtextText}
-                            onChange={(v) => updateTemplate("subtextText", v)}
-                        />
-
-                        <Divider />
-
-                        <Text as="h4" variant="headingSm">Colors</Text>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                            <ColorPickerField
-                                label="Background"
-                                value={currentTemplate.bgColor}
-                                onChange={(v) => updateTemplate("bgColor", v)}
+                            <Text as="h4" variant="headingSm">Text Content</Text>
+                            <TextField
+                                label="Heading Text"
+                                value={currentTemplate.headingText}
+                                onChange={(v) => updateTemplate("headingText", v)}
                             />
-                            <ColorPickerField
-                                label="Text Color"
-                                value={currentTemplate.textColor}
-                                onChange={(v) => updateTemplate("textColor", v)}
+                            <TextField
+                                label="Subtext"
+                                value={currentTemplate.subtextText}
+                                onChange={(v) => updateTemplate("subtextText", v)}
                             />
-                            <ColorPickerField
-                                label="Accent"
-                                value={currentTemplate.accentColor}
-                                onChange={(v) => updateTemplate("accentColor", v)}
-                            />
-                            <ColorPickerField
-                                label="Button Color"
-                                value={currentTemplate.buttonColor}
-                                onChange={(v) => updateTemplate("buttonColor", v)}
-                            />
-                            <ColorPickerField
-                                label="Button Text"
-                                value={currentTemplate.buttonTextColor}
-                                onChange={(v) => updateTemplate("buttonTextColor", v)}
-                            />
-                        </div>
 
-                        <Divider />
+                            <Divider />
 
-                        <Text as="h4" variant="headingSm">Styling</Text>
-                        <RangeSlider
-                            label={`Border Radius: ${currentTemplate.borderRadius}px`}
-                            value={currentTemplate.borderRadius}
-                            onChange={(v) => updateTemplate("borderRadius", v)}
-                            min={0}
-                            max={24}
-                            output
-                        />
-                        <RangeSlider
-                            label={`Font Size: ${currentTemplate.fontSize}px`}
-                            value={currentTemplate.fontSize}
-                            onChange={(v) => updateTemplate("fontSize", v)}
-                            min={12}
-                            max={24}
-                            output
-                        />
-                        <RangeSlider
-                            label={`Padding: ${currentTemplate.padding}px`}
-                            value={currentTemplate.padding}
-                            onChange={(v) => updateTemplate("padding", v)}
-                            min={8}
-                            max={32}
-                            output
-                        />
-                    </BlockStack>
+                            <Text as="h4" variant="headingSm">Colors</Text>
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                <ColorPickerField
+                                    label="Background"
+                                    value={currentTemplate.bgColor}
+                                    onChange={(v) => updateTemplate("bgColor", v)}
+                                />
+                                <ColorPickerField
+                                    label="Text Color"
+                                    value={currentTemplate.textColor}
+                                    onChange={(v) => updateTemplate("textColor", v)}
+                                />
+                                <ColorPickerField
+                                    label="Accent"
+                                    value={currentTemplate.accentColor}
+                                    onChange={(v) => updateTemplate("accentColor", v)}
+                                />
+                                <ColorPickerField
+                                    label="Button Color"
+                                    value={currentTemplate.buttonColor}
+                                    onChange={(v) => updateTemplate("buttonColor", v)}
+                                />
+                                <ColorPickerField
+                                    label="Button Text"
+                                    value={currentTemplate.buttonTextColor}
+                                    onChange={(v) => updateTemplate("buttonTextColor", v)}
+                                />
+                            </div>
+
+                            <Divider />
+
+                            <Text as="h4" variant="headingSm">Styling</Text>
+                            <RangeSlider
+                                label={`Border Radius: ${currentTemplate.borderRadius}px`}
+                                value={currentTemplate.borderRadius}
+                                onChange={(v) => updateTemplate("borderRadius", v)}
+                                min={0}
+                                max={24}
+                                output
+                            />
+                            <RangeSlider
+                                label={`Font Size: ${currentTemplate.fontSize}px`}
+                                value={currentTemplate.fontSize}
+                                onChange={(v) => updateTemplate("fontSize", v)}
+                                min={12}
+                                max={24}
+                                output
+                            />
+                            <RangeSlider
+                                label={`Padding: ${currentTemplate.padding}px`}
+                                value={currentTemplate.padding}
+                                onChange={(v) => updateTemplate("padding", v)}
+                                min={8}
+                                max={32}
+                                output
+                            />
+                        </BlockStack>
+                    </div>
                 </Card>
             </div>
 
-            <Button variant="primary" onClick={handleSave} loading={saving}>
-                Save Coupon Settings
-            </Button>
+            <InlineStack align="end" gap="200">
+                <Button variant="primary" tone="critical" onClick={handleDiscard}>
+                    Discard
+                </Button>
+                <Button variant="primary" onClick={handleSave} loading={saving}>
+                    Save
+                </Button>
+            </InlineStack>
         </BlockStack>
     );
 }
@@ -1721,35 +1733,42 @@ export default function ProductWidgetPage() {
     const isSaving = fetcher.state === "submitting";
 
     return (
-        <Page
-            title="Product Widgets"
-            backAction={{ content: "Back", onAction: () => window.history.back() }}
-        >
-            <Layout>
-                <Layout.Section>
-                    <Card>
-                        <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange}>
-                            <Box padding="400">
-                                {selectedTab === 0 && (
-                                    <CouponsSection
-                                        config={couponConfig}
-                                        onSave={handleCouponSave}
-                                        saving={isSaving}
-                                    />
-                                )}
-                                {selectedTab === 1 && (
-                                    <FBTSection
-                                        config={fbtConfig}
-                                        products={products}
-                                        onSave={handleFBTSave}
-                                        saving={isSaving}
-                                    />
-                                )}
-                            </Box>
-                        </Tabs>
-                    </Card>
-                </Layout.Section>
-            </Layout>
-        </Page>
+        <>
+            <style>{`
+                .Polaris-Icon.Polaris-Icon--tonePrimary {
+                    margin: 0 !important;
+                }
+            `}</style>
+            <Page
+                title="Product Widgets"
+                backAction={{ content: "Back", onAction: () => window.history.back() }}
+            >
+                <Layout>
+                    <Layout.Section>
+                        <Card>
+                            <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange}>
+                                <Box padding="400">
+                                    {selectedTab === 0 && (
+                                        <CouponsSection
+                                            config={couponConfig}
+                                            onSave={handleCouponSave}
+                                            saving={isSaving}
+                                        />
+                                    )}
+                                    {selectedTab === 1 && (
+                                        <FBTSection
+                                            config={fbtConfig}
+                                            products={products}
+                                            onSave={handleFBTSave}
+                                            saving={isSaving}
+                                        />
+                                    )}
+                                </Box>
+                            </Tabs>
+                        </Card>
+                    </Layout.Section>
+                </Layout>
+            </Page>
+        </>
     );
 }
