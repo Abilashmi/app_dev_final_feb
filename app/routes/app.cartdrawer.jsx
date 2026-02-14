@@ -109,7 +109,6 @@ const ColorPickerField = ({ label, value, onChange }) => {
   useEffect(() => {
     setColor(hexToHsb(value || '#000000'));
   }, [value]);
-
   const handleColorChange = (newColor) => {
     setColor(newColor);
     const rgb = hsbToRgb(newColor);
@@ -150,73 +149,48 @@ const ColorPickerField = ({ label, value, onChange }) => {
   );
 };
 
-// Mock milestones
-const mockMilestones = [
-  {
-    id: 'm1',
-    type: 'amount',
-    target: 500,
-    label: '₹500',
-    rewardText: 'Free Shipping',
-    associatedProducts: [101],
-  },
-];
-
-// Mock quantity-based milestones
-const mockQuantityMilestones = [
-  {
-    id: 'qm1',
-    type: 'quantity',
-    target: 5,
-    label: '5 items',
-    rewardText: '10% OFF',
-    associatedProducts: [103],
-  },
-];
-
-// Mock products
-const mockProducts = [
-  { id: 101, title: 'Gift Card', price: 0, image: 'https://cdn.shopify.com/s/files/1/0668/0025/5043/files/gift_card.png?v=1765536575' },
-  { id: 102, title: 'Premium Mug', price: 0, image: '☕' },
-  { id: 103, title: '10% Discount Code', price: 0, image: '🏷️' },
-  { id: 104, title: 'Surprise Mystery Gift', price: 0, image: '🎉' },
-];
+// Initial empty states for hydration from API
+const initialCartData = { cartValue: 0, totalQuantity: 0, items: [] };
+const initialProducts = [];
+const initialMilestones = [];
 
 // Mock API functions - fetches from route endpoints
 const mockApi = {
   getCartData: async () => {
     try {
-      const response = await fetch(`/api/cart-settings?shop=${SHOP_ID}`);
+      const response = await fetch(`/api/sample?shop=${SHOP_ID}`);
       const data = await response.json();
-      return data.cartData || mockCartData;
+      return data.cartData || initialCartData;
     } catch {
-      return mockCartData;
+      return initialCartData;
     }
   },
   getMilestones: async (mode = 'amount') => {
     try {
-      const response = await fetch(`/api/cart-settings?shop=${SHOP_ID}`);
+      const response = await fetch(`/api/sample?shop=${SHOP_ID}`);
       const data = await response.json();
-      const progressBar = data.settings?.progressBar;
-      if (progressBar) {
-        return progressBar.tiers;
-      }
-      return mode === 'amount' ? mockMilestones : mockQuantityMilestones;
+      return data.settings?.progressBar?.tiers || initialMilestones;
     } catch {
-      return mode === 'amount' ? mockMilestones : mockQuantityMilestones;
+      return initialMilestones;
     }
   },
   getProducts: async (productIds) => {
-    // Return from local mock for simplicity in this demo pick
-    return mockProducts.filter(p => productIds.includes(p.id));
+    try {
+      const response = await fetch(`/api/sample?shop=${SHOP_ID}`);
+      const data = await response.json();
+      const allProducts = [...(data.shopifyProducts || []), ...(data.cartData?.items || [])];
+      return allProducts.filter(p => productIds.includes(p.id));
+    } catch {
+      return [];
+    }
   },
   getShopifyProducts: async () => {
     try {
-      const response = await fetch(`/api/cart-settings?shop=${SHOP_ID}`);
+      const response = await fetch(`/api/sample?shop=${SHOP_ID}`);
       const data = await response.json();
-      return data.shopifyProducts || shopifyProducts;
+      return data.shopifyProducts || [];
     } catch {
-      return shopifyProducts;
+      return [];
     }
   },
 };
@@ -684,7 +658,7 @@ export default function CartDrawerAdmin() {
   // ==========================================
 
   // Global cart status
-  const [cartStatus, setCartStatus] = useState(true); // true = active, false = inactive
+  const [cartStatus, setCartStatus] = useState(false); // false = inactive (per request)
 
   // Deactivate modal
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
@@ -697,8 +671,8 @@ export default function CartDrawerAdmin() {
 
   // Feature enable states
   const [featureStates, setFeatureStates] = useState({
-    progressBarEnabled: true,
-    couponSliderEnabled: true,
+    progressBarEnabled: false,
+    couponSliderEnabled: false,
     upsellEnabled: false,
   });
 
@@ -725,7 +699,7 @@ export default function CartDrawerAdmin() {
   const [activeTierIndex, setActiveTierIndex] = useState(0);
 
   // Progress Bar Calculation State
-  const [cartData, setCartData] = useState(mockCartData);
+  const [cartData, setCartData] = useState(initialCartData);
   const [milestones, setMilestones] = useState([]);
   const [progressMode, setProgressMode] = useState('amount'); // 'amount' or 'quantity'
   const [selectedMilestoneProduct, setSelectedMilestoneProduct] = useState(null);
@@ -851,8 +825,8 @@ export default function CartDrawerAdmin() {
   useEffect(() => {
     async function loadAppConfig() {
       try {
-        console.log('[App] Loading initial configuration from /api/cart-settings');
-        const response = await fetch(`/api/cart-settings?shop=${SHOP_ID}`, {
+        console.log('[App] Loading initial configuration from /api/sample');
+        const response = await fetch(`/api/sample?shop=${SHOP_ID}`, {
           headers: { 'X-Shop-ID': SHOP_ID }
         });
 
@@ -884,7 +858,7 @@ export default function CartDrawerAdmin() {
 
           // 2. Update Feature States
           setFeatureStates({
-            progressBarEnabled: settings.progressBar?.enabled ?? true,
+            progressBarEnabled: settings.progressBar?.enabled ?? false,
             couponSliderEnabled: settings.coupons?.enabled ?? false,
             upsellEnabled: settings.upsell?.enabled ?? false,
           });
@@ -942,11 +916,8 @@ export default function CartDrawerAdmin() {
     loadAppConfig();
   }, []);
 
-  // Mock cart items for preview
-  const mockCartItems = [
-    { id: 1, productId: 'sp-6', name: 'Premium Mug Set', price: 15.99, quantity: 1, image: 'https://via.placeholder.com/80' },
-    { id: 2, productId: 'sp-2', name: 'The Inventory Not Tracked Snowboard', price: 949.95, quantity: 1, image: 'https://via.placeholder.com/80' },
-  ];
+  // Mock items are now part of cartData loaded from API
+  const mockCartItems = cartData.items || [];
 
   const cartTotal = mockCartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
@@ -955,7 +926,21 @@ export default function CartDrawerAdmin() {
   // ==========================================
 
   const toggleFeature = (feature) => {
-    setFeatureStates(prev => ({ ...prev, [feature]: !prev[feature] }));
+    const newValue = !featureStates[feature];
+    setFeatureStates(prev => ({ ...prev, [feature]: newValue }));
+
+    // Unify state for specific features
+    if (feature === 'progressBarEnabled') {
+      setProgressBarSettings(prev => ({ ...prev, enabled: newValue }));
+    } else if (feature === 'couponSliderEnabled') {
+      // Sync with any coupon-specific settings if they exist
+    } else if (feature === 'upsellEnabled') {
+      setUpsellConfig(prev => ({ ...prev, enabled: newValue }));
+    }
+
+    // Trigger immediate sync to sample API
+    // We pass null to use the current cartStatus, but we update the features in the payload
+    handleSaveAll(null, { [feature]: newValue });
   };
 
   const handleDeactivateClick = () => {
@@ -965,12 +950,16 @@ export default function CartDrawerAdmin() {
     } else {
       // If currently inactive, just activate it
       setCartStatus(true);
+      // Trigger sync to sample API when activating
+      handleSaveAll(true);
     }
   };
 
   const handleConfirmDeactivate = () => {
     setCartStatus(false);
     setShowDeactivateModal(false);
+    // Explicitly sync 'inactive' status if needed, though user only asked for activate
+    handleSaveAll(false);
   };
 
   const handleCancelDeactivate = () => {
@@ -1052,8 +1041,8 @@ export default function CartDrawerAdmin() {
         setIsLoadingActiveCoupons(true);
         setActiveCouponWarning(null);
         try {
-          console.log('[Coupon] Fetching coupons from /api/shopify-coupons');
-          const response = await fetch('/api/shopify-coupons');
+          console.log('[Coupon] Fetching coupons from /api/sample');
+          const response = await fetch('/api/sample');
           if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
           const data = await response.json();
           console.log('[Coupon] Shopify coupons response:', data);
@@ -1105,7 +1094,8 @@ export default function CartDrawerAdmin() {
   };
 
   const handleMilestoneProductClick = (productIds, rewardText) => {
-    const allAvailableProducts = [...mockProducts, ...(loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts)];
+    // Collect all products from currently loaded states
+    const allAvailableProducts = [...loadedShopifyProducts, ...initialProducts];
     const products = allAvailableProducts.filter(p => productIds.includes(p.id));
     setSelectedMilestoneProduct(products);
     setSelectedMilestoneText(rewardText || "");
@@ -1277,49 +1267,9 @@ export default function CartDrawerAdmin() {
       return;
     }
 
-    setIsSaving(true);
-    setActiveCouponWarning(null);
-    console.log('[Coupon] Save initiated — selected active coupons:', selectedActiveCoupons);
-
-    // Save only IDs + overrides (never full coupon data)
-    try {
-      console.log('[Coupon] Sending POST to /api/cart-settings?action=coupon-selections');
-      const response = await fetch('/api/cart-settings?action=coupon-selections', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Shop-ID': SHOP_ID,
-        },
-        body: JSON.stringify({
-          selectedCouponIds: selectedActiveCoupons,
-          style: selectedCouponStyle,
-          displaySettings: {
-            position: couponPosition,
-            layout: couponLayout,
-            alignment: couponAlignment,
-          },
-          couponOverrides: couponOverrides,
-        }),
-      });
-
-      console.log('[Coupon] Response status:', response.status);
-
-      if (!response.ok) {
-        throw new Error(`Failed to save coupon selections: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log('[Coupon] Saved successfully:', result);
-
-      setSaveToastMessage('Coupon selections saved successfully');
-      setShowSaveToast(true);
-    } catch (error) {
-      console.error('[Coupon] Save error:', error);
-      setSaveToastMessage('Failed to save coupon selections');
-      setShowSaveToast(true);
-    } finally {
-      setIsSaving(false);
-    }
+    // Now only using sample API as requested
+    console.log('[Coupon] Saving exclusively to sample API');
+    await handleSaveAll();
   };
 
   const handleCancelCoupon = () => {
@@ -1329,43 +1279,17 @@ export default function CartDrawerAdmin() {
   };
 
   const handleSaveStyle = async () => {
-    setIsSaving(true);
-    try {
-      console.log('[Style] Saving selected style:', selectedCouponStyle);
-      const url = `/api/cart-settings?action=coupon-style`;
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Shop-ID': SHOP_ID,
-        },
-        body: JSON.stringify({
-          selectedStyle: selectedCouponStyle,
-          position: couponPosition,
-          layout: couponLayout,
-          alignment: couponAlignment
-        }),
-      });
+    // Now only using sample API as requested
+    console.log('[Style] Saving style exclusively to sample API');
 
-      if (!response.ok) {
-        throw new Error(`Failed to save style: ${response.status}`);
-      }
+    setInitialCouponSettings({
+      style: selectedCouponStyle,
+      position: couponPosition,
+      layout: couponLayout,
+      alignment: couponAlignment
+    });
 
-      setInitialCouponSettings({
-        style: selectedCouponStyle,
-        position: couponPosition,
-        layout: couponLayout,
-        alignment: couponAlignment
-      });
-      setSaveToastMessage('Coupon style saved successfully');
-      setShowSaveToast(true);
-    } catch (error) {
-      console.error('[Style] Save error:', error);
-      setSaveToastMessage('Failed to save coupon style');
-      setShowSaveToast(true);
-    } finally {
-      setIsSaving(false);
-    }
+    await handleSaveAll();
   };
 
   const handleCancelStyle = () => {
@@ -1477,32 +1401,67 @@ export default function CartDrawerAdmin() {
   };
 
   const handleSaveProgressBarSettings = async () => {
+    // Now only using sample API as requested
+    console.log('[Progress] Saving exclusively to sample API');
+    await handleSaveAll();
+  };
+
+  const handleSaveAll = async (forcedStatus = null, featureOverrides = {}) => {
+    // Determine status: use forcedStatus if provided, else use current state
+    const targetStatus = forcedStatus !== null
+      ? (forcedStatus ? 'active' : 'inactive')
+      : (cartStatus ? 'active' : 'inactive');
+
+    // Merge state with overrides
+    const isProgressOn = featureOverrides.progressBarEnabled !== undefined ? featureOverrides.progressBarEnabled : featureStates.progressBarEnabled;
+    const isCouponOn = featureOverrides.couponSliderEnabled !== undefined ? featureOverrides.couponSliderEnabled : featureStates.couponSliderEnabled;
+    const isUpsellOn = featureOverrides.upsellEnabled !== undefined ? featureOverrides.upsellEnabled : featureStates.upsellEnabled;
+
+    const sampleData = {
+      Id: SHOP_ID,
+      shop: SHOP_ID,
+      cartstatus: targetStatus,
+      progress_data: JSON.stringify(progressBarSettings),
+      coupon_data: JSON.stringify({
+        style: selectedCouponStyle,
+        position: couponPosition,
+        layout: couponLayout,
+        alignment: couponAlignment,
+        selectedActiveCoupons,
+        couponOverrides
+      }),
+      upsell_data: JSON.stringify(upsellConfig),
+      progress_status: isProgressOn ? 1 : 0,
+      coupon_status: isCouponOn ? 1 : 0,
+      upsell_status: isUpsellOn ? 1 : 0
+    };
+
+    console.log('[Sample API] Sending payload:', sampleData);
+    setIsSaving(true);
+
     try {
-      console.log('[Progress] Saving settings:', progressBarSettings);
-      const response = await fetch(`/api/cart-settings?action=progress-bar`, {
+      const response = await fetch('/api/sample', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Shop-ID': SHOP_ID
         },
-        body: JSON.stringify({
-          ...progressBarSettings,
-          enabled: featureStates.progressBarEnabled,
-          mode: progressMode
-        })
+        body: JSON.stringify(sampleData)
       });
 
       if (response.ok) {
-        setSaveToastMessage('Progress bar settings saved successfully!');
+        setSaveToastMessage(`✅ Configuration synced (${targetStatus})`);
         setShowSaveToast(true);
       } else {
-        setSaveToastMessage('Failed to save settings.');
+        setSaveToastMessage(`❌ Sample API returned ${response.status}`);
         setShowSaveToast(true);
       }
-    } catch (err) {
-      console.error('[Progress] Save error:', err);
-      setSaveToastMessage('Error saving settings.');
+    } catch (error) {
+      console.error('[Sample API] Fetch error:', error);
+      setSaveToastMessage('❌ Failed to connect to sample API');
       setShowSaveToast(true);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1516,62 +1475,10 @@ export default function CartDrawerAdmin() {
       return;
     }
 
-    setUpsellSaving(true);
-    try {
-      // Prepare config with manual upsell rules
-      const configToSave = {
-        enabled: upsellConfig.enabled,
-        upsellTitle: upsellConfig.upsellTitle,
-        position: upsellConfig.position,
-        layout: upsellConfig.layout,
-        alignment: upsellConfig.alignment,
-        activeTemplate: upsellConfig.activeTemplate,
-        showOnEmptyCart: upsellConfig.showOnEmptyCart,
-        upsellMode: upsellConfig.upsellMode,
-        useAI: upsellConfig.upsellMode === 'ai',
-        manualRules: manualUpsellRules,
-      };
-
-      console.log('[Upsell] Saving upsell rules via API');
-
-      // Save to API route
-      const response = await fetch('/api/cart-settings?action=upsell', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Shop-ID': SHOP_ID,
-        },
-        body: JSON.stringify(configToSave),
-      });
-
-      console.log('[Upsell] Response status:', response.status);
-
-      if (!response.ok) {
-        throw new Error(`Failed to save upsell: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log('✅ Upsell rules saved:', result);
-      setInitialUpsellConfig(upsellConfig);
-      setSaveToastMessage('✅ Upsell rules saved successfully');
-      setShowSaveToast(true);
-
-      try {
-        trackUpsellEvent('upsell_config_saved', {
-          enabled: configToSave.enabled,
-          mode: configToSave.upsellMode,
-          rulesCount: manualUpsellRules.length,
-        });
-      } catch (trackingError) {
-        console.warn('Analytics tracking failed:', trackingError);
-      }
-    } catch (error) {
-      console.error('❌ Error saving upsell rules:', error);
-      setSaveToastMessage(error.message || 'Failed to save upsell rules');
-      setShowSaveToast(true);
-    } finally {
-      setUpsellSaving(false);
-    }
+    // Now only using sample API as requested
+    console.log('[Upsell] Saving exclusively to sample API');
+    setInitialUpsellConfig(upsellConfig);
+    await handleSaveAll();
   };
 
   const handleCancelUpsellRules = () => {
@@ -1672,17 +1579,12 @@ export default function CartDrawerAdmin() {
 
     setUpsellSaving(true);
     try {
-      // saveUpsellConfig is now called via API fetch
-      const shopId = SHOP_ID;
-      const configData = {
-        useAI: useAIUpsells,
-        manualRules: manualUpsellRules,
-      };
-
-      const response = await saveUpsellConfig(shopId, configData);
-      console.log('✅ Manual upsell rules saved:', response);
-
+      console.log('[Upsell Builder] Saving exclusively to sample API');
       setInitialManualUpsellRules(JSON.parse(JSON.stringify(manualUpsellRules)));
+
+      // Also sync to sample API for the overall payload
+      await handleSaveAll();
+
       setSaveToastMessage('✅ Upsell rules saved successfully');
       setShowSaveToast(true);
       setShowManualUpsellBuilder(false);
@@ -1741,6 +1643,7 @@ export default function CartDrawerAdmin() {
                 <Button
                   onClick={handleDeactivateClick}
                   variant={cartStatus ? 'primary' : 'secondary'}
+                  loading={isSaving}
                   fullWidth
                 >
                   {cartStatus ? 'Deactivate' : 'Activate'}
@@ -1772,30 +1675,53 @@ export default function CartDrawerAdmin() {
             <Card>
               <BlockStack gap="300">
                 <Text variant="headingMd" as="h2">Features</Text>
-                <ButtonGroup variant="segmented" fullWidth>
-                  <Button
-                    pressed={selectedTab === 'progress-bar'}
-                    onClick={() => setSelectedTab('progress-bar')}
-                  >
-                    Progress Bar
-                  </Button>
-                </ButtonGroup>
-                <ButtonGroup variant="segmented" fullWidth>
-                  <Button
-                    pressed={selectedTab === 'coupon'}
-                    onClick={() => setSelectedTab('coupon')}
-                  >
-                    Coupon Slider
-                  </Button>
-                </ButtonGroup>
-                <ButtonGroup variant="segmented" fullWidth>
-                  <Button
-                    pressed={selectedTab === 'upsell'}
-                    onClick={() => setSelectedTab('upsell')}
-                  >
-                    Upsell Products
-                  </Button>
-                </ButtonGroup>
+
+                <BlockStack gap="200">
+                  <div style={{ position: 'relative' }}>
+                    <Button
+                      pressed={selectedTab === 'progress-bar'}
+                      onClick={() => setSelectedTab('progress-bar')}
+                      fullWidth
+                    >
+                      <InlineStack align="space-between" blockAlign="center" style={{ width: '100%' }}>
+                        <Text as="span">Progress Bar</Text>
+                        <Badge tone={featureStates.progressBarEnabled ? 'success' : 'subdued'}>
+                          {featureStates.progressBarEnabled ? 'On' : 'Off'}
+                        </Badge>
+                      </InlineStack>
+                    </Button>
+                  </div>
+
+                  <div style={{ position: 'relative' }}>
+                    <Button
+                      pressed={selectedTab === 'coupon'}
+                      onClick={() => setSelectedTab('coupon')}
+                      fullWidth
+                    >
+                      <InlineStack align="space-between" blockAlign="center" style={{ width: '100%' }}>
+                        <Text as="span">Coupon Slider</Text>
+                        <Badge tone={featureStates.couponSliderEnabled ? 'success' : 'subdued'}>
+                          {featureStates.couponSliderEnabled ? 'On' : 'Off'}
+                        </Badge>
+                      </InlineStack>
+                    </Button>
+                  </div>
+
+                  <div style={{ position: 'relative' }}>
+                    <Button
+                      pressed={selectedTab === 'upsell'}
+                      onClick={() => setSelectedTab('upsell')}
+                      fullWidth
+                    >
+                      <InlineStack align="space-between" blockAlign="center" style={{ width: '100%' }}>
+                        <Text as="span">Upsell Products</Text>
+                        <Badge tone={featureStates.upsellEnabled ? 'success' : 'subdued'}>
+                          {featureStates.upsellEnabled ? 'On' : 'Off'}
+                        </Badge>
+                      </InlineStack>
+                    </Button>
+                  </div>
+                </BlockStack>
               </BlockStack>
             </Card>
           </BlockStack>
@@ -2679,10 +2605,10 @@ export default function CartDrawerAdmin() {
                   <Text variant="bodySm" tone="subdued">Recommend products to customers based on cart contents</Text>
                 </BlockStack>
                 <Button
-                  variant={upsellConfig.enabled ? 'primary' : 'secondary'}
-                  onClick={() => setUpsellConfig({ ...upsellConfig, enabled: !upsellConfig.enabled })}
+                  variant={featureStates.upsellEnabled ? 'primary' : 'secondary'}
+                  onClick={() => toggleFeature('upsellEnabled')}
                 >
-                  {upsellConfig.enabled ? 'Enabled' : 'Disabled'}
+                  {featureStates.upsellEnabled ? 'Enabled' : 'Disabled'}
                 </Button>
               </InlineStack>
             </BlockStack>

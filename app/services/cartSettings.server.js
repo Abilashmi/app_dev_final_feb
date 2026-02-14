@@ -5,7 +5,7 @@
 
 let CART_SETTINGS = {
   progressBar: {
-    enabled: true,
+    enabled: false,
     mode: "amount",
     showOnEmpty: true,
     barBackgroundColor: "#e5e7eb",
