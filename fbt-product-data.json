@@ -1,0 +1,97 @@
+{
+  "fbt": {
+    "activeTemplate": "fbt3",
+    "templates": {
+      "fbt1": {
+        "name": "Classic Grid",
+        "layout": "horizontal",
+        "interactionType": "classic",
+        "bgColor": "#ffffff",
+        "textColor": "#111827",
+        "priceColor": "#059669",
+        "buttonColor": "#111827",
+        "buttonTextColor": "#ffffff",
+        "borderColor": "#e5e7eb",
+        "borderRadius": 8,
+        "showPrices": true,
+        "showAddAllButton": true
+      },
+      "fbt2": {
+        "name": "Modern Cards",
+        "layout": "horizontal",
+        "interactionType": "bundle",
+        "bgColor": "#f9fafb",
+        "textColor": "#374151",
+        "priceColor": "#dc2626",
+        "buttonColor": "#4f46e5",
+        "buttonTextColor": "#ffffff",
+        "borderColor": "#d1d5db",
+        "borderRadius": 12,
+        "showPrices": true,
+        "showAddAllButton": true
+      },
+      "fbt3": {
+        "name": "Vertical List",
+        "layout": "vertical",
+        "interactionType": "quickAdd",
+        "bgColor": "#ffffff",
+        "textColor": "#1f2937",
+        "priceColor": "#2563eb",
+        "buttonColor": "#10b981",
+        "buttonTextColor": "#ffffff",
+        "borderColor": "#f3f4f6",
+        "borderRadius": 4,
+        "showPrices": true,
+        "showAddAllButton": true
+      }
+    },
+    "mode": "manual",
+    "openaiKey": "",
+    "manualRules": []
+  },
+  "couponSlider": {
+    "activeTemplate": "template1",
+    "templates": {
+      "template1": {
+        "name": "Classic Banner",
+        "headingText": "GET 10% OFF!",
+        "subtextText": "Apply at checkout for savings",
+        "bgColor": "#ffffff",
+        "textColor": "#111827",
+        "accentColor": "#3b82f6",
+        "buttonColor": "#3b82f6",
+        "buttonTextColor": "#ffffff",
+        "borderRadius": 12,
+        "fontSize": 16,
+        "padding": 16
+      },
+      "template2": {
+        "name": "Minimal Card",
+        "headingText": "SPECIAL OFFER",
+        "subtextText": "Free shipping on orders over ₹500",
+        "bgColor": "#f9fafb",
+        "textColor": "#374151",
+        "accentColor": "#10b981",
+        "buttonColor": "#10b981",
+        "buttonTextColor": "#ffffff",
+        "borderRadius": 8,
+        "fontSize": 14,
+        "padding": 14
+      },
+      "template3": {
+        "name": "Bold & Vibrant",
+        "headingText": "FLASH SALE!",
+        "subtextText": "Use code: BOLD25 for extra 25% OFF",
+        "bgColor": "#4f46e5",
+        "textColor": "#ffffff",
+        "accentColor": "#f59e0b",
+        "buttonColor": "#f59e0b",
+        "buttonTextColor": "#111827",
+        "borderRadius": 16,
+        "fontSize": 18,
+        "padding": 20
+      }
+    },
+    "selectedActiveCoupons": []
+  }
+}

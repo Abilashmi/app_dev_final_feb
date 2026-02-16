@@ -12,9 +12,7 @@ import {
   getProductsByIds,
   validateUpsellRule,
 } from '../services/api.cart-settings.shared';
-
 // In-memory storage is replaced by Prisma db.upsellRule
-
 const collectUpsellProductIds = (config) => {
   const ids = [
     ...(config?.rule1?.enabled ? (config.rule1.upsellProducts || []) : []),

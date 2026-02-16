@@ -7,7 +7,6 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useLoaderData, useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import db from "../db.server";
 import {
     Page,
     Layout,
@@ -31,6 +30,9 @@ import {
     Popover,
     ColorPicker,
     RangeSlider,
+    Modal,
+    Spinner,
+    Tag,
 } from "@shopify/polaris";
 import {
     DiscountIcon,
@@ -38,6 +40,8 @@ import {
     MagicIcon,
     SettingsIcon,
     ColorIcon,
+    ChevronLeftIcon,
+    ChevronRightIcon,
 } from "@shopify/polaris-icons";
 
 // --- UTILITY FUNCTIONS ---
@@ -110,6 +114,7 @@ function hexToHsb(hex) {
 
 const FAKE_COUPON_CONFIG = {
     activeTemplate: "template1",
+    selectedActiveCoupons: [],
     templates: {
         template1: {
             name: "Classic Banner",
@@ -245,117 +250,51 @@ export async function loader({ request }) {
         console.error("Failed to fetch products:", e);
     }
 
-    // Fetch real settings from DB
+    // Fetch configurations from separate APIs
     let couponConfig = FAKE_COUPON_CONFIG;
     let fbtConfig = FAKE_FBT_CONFIG;
+    const url = new URL(request.url);
 
     try {
-        const settings = await db.widgetSettings.findUnique({
-            where: { shop }
-        });
-
-        if (settings) {
-            couponConfig = JSON.parse(settings.coupons);
-            fbtConfig = JSON.parse(settings.fbt);
+        // 1. Fetch Coupon Config
+        const couponRes = await fetch(`${url.origin}/api/coupon-slider`);
+        const couponData = await couponRes.json();
+        if (couponData.success && couponData.config) {
+            console.log("Fetched coupon data successfully");
+            couponConfig = couponData.config;
         }
     } catch (e) {
-        console.error("Failed to fetch settings from DB:", e);
+        console.error("Failed to fetch coupon settings:", e);
+    }
+
+    try {
+        // 2. Fetch FBT Config
+        const fbtRes = await fetch(`${url.origin}/api/product-sample`);
+        const fbtData = await fbtRes.json();
+
+        // Handle both old nested structure and new structure if api.product-sample is updated
+        if (fbtData.success) {
+            if (fbtData.settings?.productWidgetConfig?.fbt) {
+                fbtConfig = fbtData.settings.productWidgetConfig.fbt;
+            } else if (fbtData.fbt) {
+                fbtConfig = fbtData.fbt;
+            }
+            console.log("Fetched FBT data successfully");
+        }
+    } catch (e) {
+        console.error("Failed to fetch FBT settings:", e);
     }
 
     return {
         couponConfig,
         fbtConfig,
         products,
+        shop,
     };
 }
 
 // --- ACTION ---
 
-export async function action({ request }) {
-    const { session } = await authenticate.admin(request);
-    const formData = await request.formData();
-    const actionType = formData.get("actionType");
-
-    if (actionType === "saveCouponConfig") {
-        const activeTemplate = formData.get("activeTemplate");
-        const templateData = formData.get("templateData");
-
-        if (!activeTemplate || !templateData) {
-            return { success: false, error: "Missing required fields" };
-        }
-
-        try {
-            const parsedTemplates = JSON.parse(templateData);
-            const couponConfig = { activeTemplate, templates: parsedTemplates };
-
-            // Fetch current settings to preserve FBT
-            const currentSettings = await db.widgetSettings.findUnique({ where: { shop: session.shop } });
-            const fbtConfig = currentSettings ? currentSettings.fbt : JSON.stringify(FAKE_FBT_CONFIG);
-
-            await db.widgetSettings.upsert({
-                where: { shop: session.shop },
-                update: { coupons: JSON.stringify(couponConfig) },
-                create: {
-                    shop: session.shop,
-                    coupons: JSON.stringify(couponConfig),
-                    fbt: fbtConfig
-                }
-            });
-
-            return { success: true, message: "Coupon configuration saved!" };
-        } catch (e) {
-            console.error("Save Coupon Failure:", e);
-            return { success: false, error: "Failed to save to database" };
-        }
-    }
-
-    if (actionType === "saveFBTConfig") {
-        const mode = formData.get("mode");
-        const configData = formData.get("configData");
-        const activeTemplate = formData.get("activeTemplate");
-        const openaiKey = formData.get("openaiKey");
-        const templateData = formData.get("templateData"); // The serialized templates object
-
-        if (!mode || !["manual", "ai"].includes(mode)) {
-            return { success: false, error: "Invalid mode" };
-        }
-
-        if (mode === "ai" && (!openaiKey || openaiKey.trim() === "")) {
-            return { success: false, error: "OpenAI API Key is required for AI mode" };
-        }
-
-        try {
-            const fbtConfig = {
-                activeTemplate,
-                mode,
-                openaiKey,
-                templates: JSON.parse(templateData),
-                manualRules: configData ? JSON.parse(configData) : []
-            };
-
-            // Fetch current settings to preserve Coupons
-            const currentSettings = await db.widgetSettings.findUnique({ where: { shop: session.shop } });
-            const couponConfig = currentSettings ? currentSettings.coupons : JSON.stringify(FAKE_COUPON_CONFIG);
-
-            await db.widgetSettings.upsert({
-                where: { shop: session.shop },
-                update: { fbt: JSON.stringify(fbtConfig) },
-                create: {
-                    shop: session.shop,
-                    fbt: JSON.stringify(fbtConfig),
-                    coupons: couponConfig
-                }
-            });
-
-            return { success: true, message: "Frequently Bought Together configuration saved!" };
-        } catch (e) {
-            console.error("Save FBT Failure:", e);
-            return { success: false, error: "Failed to save to database" };
-        }
-    }
-
-    return { success: false, error: "Unknown action type" };
-}
 
 // --- COLOR PICKER COMPONENT ---
 
@@ -725,31 +664,157 @@ function ProductCard({ product, template, interactionType, isSelected, isRequire
 function CouponsSection({ config, onSave, saving }) {
     const [activeTemplate, setActiveTemplate] = useState(config?.activeTemplate || "template1");
     const [templates, setTemplates] = useState(config?.templates || FAKE_COUPON_CONFIG.templates);
+    const [selectedActiveCoupons, setSelectedActiveCoupons] = useState(config?.selectedActiveCoupons || []);
+    // State for per-coupon overrides
+    const [couponOverrides, setCouponOverrides] = useState(config?.couponOverrides || {});
+
+    // State for preview navigation
+    const [activePreviewCouponId, setActivePreviewCouponId] = useState(null);
+
+    const [activeCouponsFromAPI, setActiveCouponsFromAPI] = useState([]);
+    const [isLoadingActiveCoupons, setIsLoadingActiveCoupons] = useState(false);
+    const [showCouponPickerModal, setShowCouponPickerModal] = useState(false);
+    const [tempSelectedCouponIds, setTempSelectedCouponIds] = useState([]);
+
+    // Fetch active coupons from Shopify Admin API
+    useEffect(() => {
+        const shouldFetch = (showCouponPickerModal || selectedActiveCoupons.length > 0) && activeCouponsFromAPI.length === 0 && !isLoadingActiveCoupons;
+
+        if (shouldFetch) {
+            const fetchActiveCoupons = async () => {
+                setIsLoadingActiveCoupons(true);
+                try {
+                    const response = await fetch('/api/coupons-active');
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const data = await response.json();
+                    if (data.coupons && data.coupons.length > 0) {
+                        const normalized = data.coupons.map(c => ({
+                            id: c.id,
+                            code: c.code || c.heading,
+                            label: c.heading || c.code,
+                            discountType: c.discountType || 'percentage',
+                            discountValue: c.discountValue || 0,
+                            status: c.status?.toLowerCase() || 'active',
+                            source: c.source || 'native'
+                        }));
+                        setActiveCouponsFromAPI(normalized);
+                    } else {
+                        setActiveCouponsFromAPI([]);
+                    }
+                } catch (error) {
+                    console.error('[Coupon] Error fetching active coupons:', error);
+                    setActiveCouponsFromAPI([]);
+                } finally {
+                    setIsLoadingActiveCoupons(false);
+                }
+            };
+            fetchActiveCoupons();
+        }
+    }, [showCouponPickerModal, selectedActiveCoupons.length, activeCouponsFromAPI.length, isLoadingActiveCoupons]);
+
+    // Set default preview to first selected coupon if not set
+    useEffect(() => {
+        if (selectedActiveCoupons.length > 0 && !activePreviewCouponId) {
+            setActivePreviewCouponId(selectedActiveCoupons[0]);
+        } else if (selectedActiveCoupons.length === 0) {
+            setActivePreviewCouponId(null);
+        }
+    }, [selectedActiveCoupons, activePreviewCouponId]);
+
+    // Handlers for coupon picker modal
+    const handleOpenCouponPicker = () => {
+        setTempSelectedCouponIds([...selectedActiveCoupons]);
+        setShowCouponPickerModal(true);
+    };
+
+    const handleCouponPickerToggle = (couponId) => {
+        setTempSelectedCouponIds(prev =>
+            prev.includes(couponId)
+                ? prev.filter(id => id !== couponId)
+                : [...prev, couponId]
+        );
+    };
+
+    const handleCouponPickerAdd = () => {
+        setSelectedActiveCoupons([...tempSelectedCouponIds]);
+        setShowCouponPickerModal(false);
+    };
+
+    const handleCouponPickerCancel = () => {
+        setTempSelectedCouponIds([]);
+        setShowCouponPickerModal(false);
+    };
 
     const handleTemplateSelect = (templateKey) => {
         setActiveTemplate(templateKey);
     };
 
     const updateTemplate = (field, value) => {
-        setTemplates({
-            ...templates,
-            [activeTemplate]: { ...templates[activeTemplate], [field]: value },
-        });
+        if (activePreviewCouponId) {
+            // Apply customization to the specific active coupon override
+            setCouponOverrides(prev => ({
+                ...prev,
+                [activePreviewCouponId]: {
+                    ...prev[activePreviewCouponId],
+                    [field]: value
+                }
+            }));
+        } else {
+            // Fallback to global template update (though usually activePreviewCouponId is set if coupons exist)
+            setTemplates({
+                ...templates,
+                [activeTemplate]: { ...templates[activeTemplate], [field]: value },
+            });
+        }
     };
 
     const handleSave = () => {
         onSave({
             activeTemplate,
-            templateData: JSON.stringify(templates),
+            templateData: templates,
+            selectedActiveCoupons,
+            couponOverrides,
         });
     };
 
     const handleDiscard = () => {
         setActiveTemplate(config?.activeTemplate || "template1");
         setTemplates(config?.templates || FAKE_COUPON_CONFIG.templates);
+        setSelectedActiveCoupons(config?.selectedActiveCoupons || []);
+        setCouponOverrides(config?.couponOverrides || {});
     };
 
-    const currentTemplate = templates[activeTemplate];
+    // Determine preview content based on selected coupon (or active preview one)
+    const previewCouponId = activePreviewCouponId || (selectedActiveCoupons.length > 0 ? selectedActiveCoupons[0] : null);
+    const previewCoupon = previewCouponId
+        ? activeCouponsFromAPI.find(c => c.id === previewCouponId)
+        : null;
+
+    // Calculate effective template settings (Global + Overrides)
+    const baseTemplate = templates[activeTemplate];
+    const activeOverride = activePreviewCouponId ? (couponOverrides[activePreviewCouponId] || {}) : {};
+
+    // Merge base + overrides, BUT intelligently handle text defaults
+    // If override exists -> Use it
+    // If not, and we have a coupon -> Use coupon code/desc
+    // Else -> Use base template default ("GET 10% OFF!")
+    const effectiveHeading = activeOverride.headingText !== undefined
+        ? activeOverride.headingText
+        : (previewCoupon ? (previewCoupon.code || previewCoupon.label) : baseTemplate.headingText);
+
+    const effectiveSubtext = activeOverride.subtextText !== undefined
+        ? activeOverride.subtextText
+        : (previewCoupon ? (previewCoupon.description || previewCoupon.label) : baseTemplate.subtextText);
+
+    const currentTemplate = {
+        ...baseTemplate,
+        ...activeOverride,
+        headingText: effectiveHeading,
+        subtextText: effectiveSubtext
+    };
+
+    const displayHeading = currentTemplate.headingText;
+    const displaySubtext = currentTemplate.subtextText;
 
     return (
         <BlockStack gap="400">
@@ -787,50 +852,81 @@ function CouponsSection({ config, onSave, saving }) {
                 <Card>
                     <BlockStack gap="300">
                         <Text as="h3" variant="headingMd">Preview</Text>
-                        <div
-                            style={{
-                                padding: `${currentTemplate.padding}px`,
-                                borderRadius: `${currentTemplate.borderRadius}px`,
-                                background: currentTemplate.bgColor,
-                                color: currentTemplate.textColor,
-                                minHeight: "200px",
-                                display: "flex",
-                                flexDirection: "column",
-                                justifyContent: "center",
-                                alignItems: "center",
-                                textAlign: "center",
-                                boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
-                                border: `2px dashed ${currentTemplate.accentColor || currentTemplate.textColor}44`,
-                                position: "relative",
-                                overflow: "hidden"
-                            }}
-                        >
-                            {/* Decorative Cutouts for Ticket Look */}
-                            <div style={{ position: "absolute", left: "-10px", top: "50%", transform: "translateY(-50%)", width: "20px", height: "20px", borderRadius: "50%", background: "#fff", border: "1px solid rgba(0,0,0,0.05)" }} />
-                            <div style={{ position: "absolute", right: "-10px", top: "50%", transform: "translateY(-50%)", width: "20px", height: "20px", borderRadius: "50%", background: "#fff", border: "1px solid rgba(0,0,0,0.05)" }} />
 
-                            <div style={{ fontSize: `${currentTemplate.fontSize + 4}px`, fontWeight: "800", marginBottom: "8px", color: currentTemplate.textColor }}>
-                                {currentTemplate.headingText}
+                        <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+                            {/* Left Arrow */}
+                            {selectedActiveCoupons.length > 1 && (
+                                <Button
+                                    icon={ChevronLeftIcon}
+                                    onClick={() => {
+                                        const idx = selectedActiveCoupons.indexOf(activePreviewCouponId);
+                                        const prev = idx > 0 ? selectedActiveCoupons[idx - 1] : selectedActiveCoupons[selectedActiveCoupons.length - 1];
+                                        setActivePreviewCouponId(prev);
+                                    }}
+                                />
+                            )}
+
+                            {/* Main Preview Area */}
+                            <div style={{ flex: 1 }}>
+                                <div
+                                    style={{
+                                        padding: `${currentTemplate.padding}px`,
+                                        borderRadius: `${currentTemplate.borderRadius}px`,
+                                        background: currentTemplate.bgColor,
+                                        color: currentTemplate.textColor,
+                                        minHeight: "200px",
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        justifyContent: "center",
+                                        alignItems: "center",
+                                        textAlign: "center",
+                                        boxShadow: "0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)",
+                                        border: `2px dashed ${currentTemplate.accentColor || currentTemplate.textColor}44`,
+                                        position: "relative",
+                                        overflow: "hidden",
+                                        width: "100%"
+                                    }}
+                                >
+                                    {/* Decorative Cutouts for Ticket Look */}
+                                    <div style={{ position: "absolute", left: "-10px", top: "50%", transform: "translateY(-50%)", width: "20px", height: "20px", borderRadius: "50%", background: "#fff", border: "1px solid rgba(0,0,0,0.05)" }} />
+                                    <div style={{ position: "absolute", right: "-10px", top: "50%", transform: "translateY(-50%)", width: "20px", height: "20px", borderRadius: "50%", background: "#fff", border: "1px solid rgba(0,0,0,0.05)" }} />
+
+                                    <div style={{ fontSize: `${currentTemplate.fontSize + 4}px`, fontWeight: "800", marginBottom: "8px", color: currentTemplate.textColor }}>
+                                        {displayHeading}
+                                    </div>
+                                    <div style={{ fontSize: `${currentTemplate.fontSize}px`, opacity: 0.8, marginBottom: "20px", color: currentTemplate.textColor }}>
+                                        {displaySubtext}
+                                    </div>
+                                    <div
+                                        style={{
+                                            padding: "12px 32px",
+                                            background: currentTemplate.buttonColor,
+                                            borderRadius: "8px",
+                                            color: currentTemplate.buttonTextColor,
+                                            fontWeight: "bold",
+                                            fontSize: "16px",
+                                            cursor: "pointer",
+                                            boxShadow: `0 4px 14px ${currentTemplate.buttonColor}44`,
+                                            textTransform: "uppercase",
+                                            letterSpacing: "1px"
+                                        }}
+                                    >
+                                        COPY CODE
+                                    </div>
+                                </div>
                             </div>
-                            <div style={{ fontSize: `${currentTemplate.fontSize}px`, opacity: 0.8, marginBottom: "20px", color: currentTemplate.textColor }}>
-                                {currentTemplate.subtextText}
-                            </div>
-                            <div
-                                style={{
-                                    padding: "12px 32px",
-                                    background: currentTemplate.buttonColor,
-                                    borderRadius: "8px",
-                                    color: currentTemplate.buttonTextColor,
-                                    fontWeight: "bold",
-                                    fontSize: "16px",
-                                    cursor: "pointer",
-                                    boxShadow: `0 4px 14px ${currentTemplate.buttonColor}44`,
-                                    textTransform: "uppercase",
-                                    letterSpacing: "1px"
-                                }}
-                            >
-                                COPY CODE
-                            </div>
+
+                            {/* Right Arrow */}
+                            {selectedActiveCoupons.length > 1 && (
+                                <Button
+                                    icon={ChevronRightIcon}
+                                    onClick={() => {
+                                        const idx = selectedActiveCoupons.indexOf(activePreviewCouponId);
+                                        const next = idx < selectedActiveCoupons.length - 1 ? selectedActiveCoupons[idx + 1] : selectedActiveCoupons[0];
+                                        setActivePreviewCouponId(next);
+                                    }}
+                                />
+                            )}
                         </div>
                         <Box>
                             <InlineStack align="center">
@@ -845,6 +941,35 @@ function CouponsSection({ config, onSave, saving }) {
                     <div style={{ maxHeight: "480px", overflowY: "auto" }}>
                         <BlockStack gap="400">
                             <Text as="h3" variant="headingMd">Customize: {currentTemplate.name}</Text>
+
+                            <Divider />
+
+                            <BlockStack gap="200">
+                                <Text variant="headingSm" as="h4">Select Active Coupons</Text>
+                                <Text tone="subdued" as="p">Choose coupons from the app to display in this slider.</Text>
+                                <InlineStack gap="300" blockAlign="center">
+                                    <Button onClick={handleOpenCouponPicker} variant="secondary">
+                                        Select Coupons
+                                    </Button>
+                                    {selectedActiveCoupons.length > 0 && (
+                                        <Badge tone="success">
+                                            {selectedActiveCoupons.length} selected
+                                        </Badge>
+                                    )}
+                                </InlineStack>
+
+                                {/* Show selected coupon codes as tags */}
+                                {selectedActiveCoupons.length > 0 && (
+                                    <InlineStack gap="200" wrap>
+                                        {selectedActiveCoupons.map(couponId => {
+                                            const coupon = activeCouponsFromAPI.find(c => c.id === couponId);
+                                            return coupon ? (
+                                                <Tag key={couponId}>{coupon.code}</Tag>
+                                            ) : null;
+                                        })}
+                                    </InlineStack>
+                                )}
+                            </BlockStack>
 
                             <Divider />
 
@@ -931,6 +1056,98 @@ function CouponsSection({ config, onSave, saving }) {
                     Save
                 </Button>
             </InlineStack>
+
+            {/* Coupon Picker Modal */}
+            <Modal
+                open={showCouponPickerModal}
+                onClose={handleCouponPickerCancel}
+                title="Select App Coupons"
+                primaryAction={{
+                    content: `Add${tempSelectedCouponIds.length > 0 ? ` (${tempSelectedCouponIds.length})` : ''}`,
+                    onAction: handleCouponPickerAdd,
+                }}
+                secondaryActions={[
+                    {
+                        content: 'Cancel',
+                        onAction: handleCouponPickerCancel,
+                    },
+                ]}
+            >
+                <Modal.Section>
+                    {/* Loading State */}
+                    {isLoadingActiveCoupons && (
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}>
+                            <BlockStack gap="200" inlineAlign="center">
+                                <Spinner size="small" />
+                                <Text tone="subdued" variant="bodySm">Fetching coupons...</Text>
+                            </BlockStack>
+                        </div>
+                    )}
+
+                    {/* No App Coupons found */}
+                    {!isLoadingActiveCoupons && activeCouponsFromAPI.length === 0 && (
+                        <Banner tone="info">
+                            <p>No active coupons were found in your store. Please create a coupon from the **Coupon Dashboard** first.</p>
+                        </Banner>
+                    )}
+
+                    {/* Active Coupons List with Checkboxes */}
+                    {!isLoadingActiveCoupons && activeCouponsFromAPI.length > 0 && (
+                        <BlockStack gap="200">
+                            <Text variant="bodySm" tone="subdued">
+                                Select active coupons to display in the product widget
+                            </Text>
+                            {activeCouponsFromAPI.map(coupon => {
+                                const isChecked = tempSelectedCouponIds.includes(coupon.id);
+                                return (
+                                    <div
+                                        key={coupon.id}
+                                        onClick={() => handleCouponPickerToggle(coupon.id)}
+                                        style={{
+                                            padding: '12px 16px',
+                                            backgroundColor: isChecked ? '#f0f7ff' : '#f9fafb',
+                                            border: `1px solid ${isChecked ? '#2c6ecb' : '#e5e7eb'}`,
+                                            borderRadius: '8px',
+                                            transition: 'all 0.2s',
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        <InlineStack align="space-between" blockAlign="center" gap="200">
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                                                <div style={{
+                                                    width: '36px', height: '36px', borderRadius: '8px',
+                                                    backgroundColor: '#dcfce7', display: 'flex',
+                                                    alignItems: 'center', justifyContent: 'center', fontSize: '16px',
+                                                }}>
+                                                    {coupon.discountType === 'percentage' ? '🏷️' :
+                                                        coupon.discountType === 'free_shipping' ? '🚚' : '💰'}
+                                                </div>
+                                                <BlockStack gap="100">
+                                                    <InlineStack gap="200" blockAlign="center">
+                                                        <Text variant="bodyMd" fontWeight="semibold" truncate>{coupon.code}</Text>
+                                                        <Badge tone="info" size="small">{coupon.discountType.replace('_', ' ')}</Badge>
+                                                    </InlineStack>
+                                                    <Text variant="bodySm" tone="subdued" truncate>
+                                                        {coupon.label} — {coupon.discountType === 'percentage'
+                                                            ? `${coupon.discountValue}% off`
+                                                            : coupon.discountType === 'free_shipping'
+                                                                ? 'Free Shipping'
+                                                                : `₹${coupon.discountValue} off`}
+                                                    </Text>
+                                                </BlockStack>
+                                            </div>
+                                            <Checkbox
+                                                checked={isChecked}
+                                                onChange={() => handleCouponPickerToggle(coupon.id)}
+                                            />
+                                        </InlineStack>
+                                    </div>
+                                );
+                            })}
+                        </BlockStack>
+                    )}
+                </Modal.Section>
+            </Modal>
         </BlockStack>
     );
 }
@@ -1057,20 +1274,20 @@ function FBTSection({ config, products, onSave, saving }) {
     const handleSave = () => {
         onSave({
             activeTemplate,
-            templateData: JSON.stringify(templates),
+            templateData: templates,
             mode,
             openaiKey: mode === "ai" ? openaiKey : "",
-            configData: mode === "manual" ? JSON.stringify(manualRules) : "",
+            configData: mode === "manual" ? manualRules : [],
         });
     };
 
     const handleSaveTemplate = () => {
         onSave({
             activeTemplate,
-            templateData: JSON.stringify(templates),
+            templateData: templates,
             mode,
             openaiKey: mode === "ai" ? openaiKey : "",
-            configData: mode === "manual" ? JSON.stringify(manualRules) : "",
+            configData: mode === "manual" ? manualRules : [],
             _toastMessage: "Template is saved!",
         });
     };
@@ -1712,7 +1929,7 @@ function FBTSection({ config, products, onSave, saving }) {
 // --- MAIN COMPONENT ---
 
 export default function ProductWidgetPage() {
-    const { couponConfig, fbtConfig, products } = useLoaderData();
+    const { couponConfig, fbtConfig, products, shop } = useLoaderData();
     const fetcher = useFetcher();
     const shopify = useAppBridge();
 
@@ -1757,8 +1974,10 @@ export default function ProductWidgetPage() {
                 actionType: "saveCouponConfig",
                 activeTemplate: data.activeTemplate,
                 templateData: data.templateData,
+                selectedActiveCoupons: data.selectedActiveCoupons,
+                shop,
             },
-            { method: "POST" }
+            { method: "POST", encType: "application/json", action: "/api/coupon-slider" }
         );
     };
 
@@ -1773,9 +1992,10 @@ export default function ProductWidgetPage() {
                 templateData: data.templateData,
                 mode: data.mode,
                 openaiKey: data.openaiKey || "",
-                configData: data.configData || "",
+                configData: data.configData || [],
+                shop,
             },
-            { method: "POST" }
+            { method: "POST", encType: "application/json", action: "/api/product-sample" }
         );
     };
 
