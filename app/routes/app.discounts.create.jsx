@@ -35,7 +35,7 @@ import { useNavigate, useActionData, useNavigation, useSubmit, useLoaderData } f
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getStoredCoupons } from "./api.create_coupon-sample";
+import { getStoredCoupons, storeCoupon } from "./api.create_coupon-sample";
 
 const COUNTRIES = [
     { label: "India", value: "IN", flag: "🇮🇳" },
@@ -262,8 +262,8 @@ export const action = async ({ request }) => {
         const createdDiscountId = result.codeDiscountNode?.id;
 
         // Send to sample API
+        // Save to local storage directly
         try {
-            const origin = new URL(request.url).origin;
             const samplePayload = {
                 title, code, type, valueType, value, startDate, endDate,
                 selectionType, selectedResources,
@@ -285,13 +285,9 @@ export const action = async ({ request }) => {
                 shopifyId: createdDiscountId
             };
 
-            await fetch(`${origin}/api/create_coupon-sample`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(samplePayload)
-            });
+            await storeCoupon(samplePayload);
         } catch (sampleErr) {
-            console.error("Error sending to sample API:", sampleErr);
+            console.error("Error saving to local storage:", sampleErr);
         }
 
 

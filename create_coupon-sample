@@ -197,5 +197,46 @@
     "bxgyGetsQuantity": null,
     "bxgyRepeatOncePerOrder": false,
     "shopifyId": "gid://shopify/DiscountCodeNode/1287234977859"
+  },
+  {
+    "id": "1771313692040",
+    "createdAt": "2026-02-17T07:34:52.040Z",
+    "title": "sgunkngtrrugnm",
+    "code": "NQIY45N4",
+    "type": "amount_off_products",
+    "valueType": "fixed_amount",
+    "value": 222,
+    "startDate": "2026-02-17T06:30:00.000Z",
+    "endDate": null,
+    "selectionType": "collections",
+    "selectedResources": [
+      {
+        "id": "gid://shopify/Collection/299664015427",
+        "title": "Hydrogen",
+        "handle": "hydrogen"
+      }
+    ],
+    "minimumRequirementValue": "none",
+    "minimumPurchaseAmount": 0,
+    "minimumQuantity": 0,
+    "limitTotalUses": false,
+    "totalUsesLimit": 0,
+    "limitOnePerCustomer": false,
+    "combineProduct": false,
+    "combineOrder": false,
+    "combineShipping": false,
+    "oncePerOrder": false,
+    "countriesType": null,
+    "selectedCountries": [],
+    "bxgyBuysType": null,
+    "bxgyBuysResources": [],
+    "bxgyBuysQuantity": null,
+    "bxgyGetsType": null,
+    "bxgyGetsResources": [],
+    "bxgyGetsValueType": null,
+    "bxgyGetsValue": null,
+    "bxgyGetsQuantity": null,
+    "bxgyRepeatOncePerOrder": false,
+    "shopifyId": "gid://shopify/DiscountCodeNode/1287235797059"
   }
 ]
