@@ -31,11 +31,11 @@ import {
     CollectionIcon,
     CalendarIcon,
 } from "@shopify/polaris-icons";
-import { useNavigate, useActionData, useNavigation, useSubmit } from "react-router";
+import { useNavigate, useActionData, useNavigation, useSubmit, useLoaderData } from "react-router";
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { sendToFakeApi } from "../services/fakeApi.server";
+import { getStoredCoupons } from "./api.create_coupon-sample";
 
 const COUNTRIES = [
     { label: "India", value: "IN", flag: "🇮🇳" },
@@ -108,11 +108,13 @@ export const action = async ({ request }) => {
                             ? value / 100
                             : { amount: value, appliesOnEachItem: type === "amount_off_order" ? false : !oncePerOrder }
                     },
-                    items: (type === "amount_off_order" && selectionType === "all") ? { all: true } : {
-                        [selectionType === "collections" ? "collections" : selectionType === "products" ? "products" : "all"]: selectionType === "all" ? true : {
-                            add: selectedResources.map(r => r.id)
-                        }
-                    }
+                    items: (type === "amount_off_order" && selectionType === "all")
+                        ? { all: true }
+                        : (selectionType === "collections")
+                            ? { collections: { add: selectedResources.map(r => r.id) } }
+                            : (selectionType === "products")
+                                ? { products: { productsToAdd: selectedResources.map(r => r.id) } }
+                                : { all: true }
                 },
                 appliesOncePerCustomer: limitOnePerCustomer,
                 ...(limitTotalUses && totalUsesLimit > 0 && { usageLimit: totalUsesLimit }),
@@ -205,17 +207,19 @@ export const action = async ({ request }) => {
                 customerSelection: { all: true },
                 usesPerCustomerLimit: limitOnePerCustomer ? 1 : null,
                 buys: {
-                    items: {
-                        [buysType]: { add: buysResources.map(r => r.id) }
-                    },
+                    items: buysType === "collections"
+                        ? { collections: { add: buysResources.map(r => r.id) } }
+                        : { products: { productsToAdd: buysResources.map(r => r.id) } },
                     value: { quantity: buysQuantity }
                 },
                 gets: {
-                    items: getsType === "same" ? {
-                        [buysType]: { add: buysResources.map(r => r.id) }
-                    } : {
-                        [getsType]: { add: getsResources.map(r => r.id) }
-                    },
+                    items: getsType === "same"
+                        ? (buysType === "collections"
+                            ? { collections: { add: buysResources.map(r => r.id) } }
+                            : { products: { productsToAdd: buysResources.map(r => r.id) } })
+                        : (getsType === "collections"
+                            ? { collections: { add: getsResources.map(r => r.id) } }
+                            : { products: { productsToAdd: getsResources.map(r => r.id) } }),
                     value: {
                         [getsValueType === "free" ? "percentage" : getsValueType === "percentage" ? "percentage" : "discountAmount"]:
                             getsValueType === "free" ? 1.0 : getsValueType === "percentage" ? getsValue / 100 : { amount: getsValue }
@@ -257,17 +261,40 @@ export const action = async ({ request }) => {
 
         const createdDiscountId = result.codeDiscountNode?.id;
 
-        await sendToFakeApi({
-            shopifyId: createdDiscountId,
-            title,
-            code,
-            type,
-            value,
-            startDate,
-            endDate,
-            selectionType,
-            numResources: selectedResources.length
-        });
+        // Send to sample API
+        try {
+            const origin = new URL(request.url).origin;
+            const samplePayload = {
+                title, code, type, valueType, value, startDate, endDate,
+                selectionType, selectedResources,
+                minimumRequirementValue, minimumPurchaseAmount, minimumQuantity,
+                limitTotalUses, totalUsesLimit, limitOnePerCustomer,
+                combineProduct, combineOrder, combineShipping, oncePerOrder,
+                // Extract conditional fields
+                countriesType: formData.get("countriesType"),
+                selectedCountries: JSON.parse(formData.get("selectedCountries") || "[]"),
+                bxgyBuysType: formData.get("bxgyBuysType"),
+                bxgyBuysResources: JSON.parse(formData.get("bxgyBuysResources") || "[]"),
+                bxgyBuysQuantity: formData.get("bxgyBuysQuantity"),
+                bxgyGetsType: formData.get("bxgyGetsType"),
+                bxgyGetsResources: JSON.parse(formData.get("bxgyGetsResources") || "[]"),
+                bxgyGetsValueType: formData.get("bxgyGetsValueType"),
+                bxgyGetsValue: formData.get("bxgyGetsValue"),
+                bxgyGetsQuantity: formData.get("bxgyGetsQuantity"),
+                bxgyRepeatOncePerOrder: formData.get("bxgyRepeatOncePerOrder") === "true",
+                shopifyId: createdDiscountId
+            };
+
+            await fetch(`${origin}/api/create_coupon-sample`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(samplePayload)
+            });
+        } catch (sampleErr) {
+            console.error("Error sending to sample API:", sampleErr);
+        }
+
+
 
         return { success: true, discountId: createdDiscountId };
     } catch (error) {
@@ -276,11 +303,19 @@ export const action = async ({ request }) => {
     }
 };
 
+/* ---------------- SERVER-SIDE LOADER ---------------- */
+
+export const loader = async () => {
+    const coupons = await getStoredCoupons();
+    return { coupons };
+};
+
 /* ---------------- COMPONENT ---------------- */
 
 export default function CreateDiscount() {
     const navigate = useNavigate();
     const actionData = useActionData();
+    const { coupons } = useLoaderData() || { coupons: [] };
     const navigation = useNavigation();
     const submit = useSubmit();
     const shopify = useAppBridge();
@@ -356,6 +391,10 @@ export default function CreateDiscount() {
     const [hasEndDate, setHasEndDate] = useState(false);
 
     const [showToast, setShowToast] = useState(false);
+
+    useEffect(() => {
+        console.log("Loaded coupons for verification:", coupons);
+    }, [coupons]);
 
     useEffect(() => {
         if (actionData?.success) {

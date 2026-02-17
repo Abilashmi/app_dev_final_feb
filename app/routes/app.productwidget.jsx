@@ -2,7 +2,6 @@
  * Product Widgets Configuration Page
  * Features: Coupons and Frequently Bought Together tabs with templates and color pickers
  */
-
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useLoaderData, useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -42,6 +41,7 @@ import {
     ColorIcon,
     ChevronLeftIcon,
     ChevronRightIcon,
+    XSmallIcon,
 } from "@shopify/polaris-icons";
 
 // --- UTILITY FUNCTIONS ---
@@ -675,6 +675,7 @@ function CouponsSection({ config, onSave, saving }) {
     const [isLoadingActiveCoupons, setIsLoadingActiveCoupons] = useState(false);
     const [showCouponPickerModal, setShowCouponPickerModal] = useState(false);
     const [tempSelectedCouponIds, setTempSelectedCouponIds] = useState([]);
+    const [showLimitWarning, setShowLimitWarning] = useState(false);
 
     // Fetch active coupons from Shopify Admin API
     useEffect(() => {
@@ -724,15 +725,23 @@ function CouponsSection({ config, onSave, saving }) {
     // Handlers for coupon picker modal
     const handleOpenCouponPicker = () => {
         setTempSelectedCouponIds([...selectedActiveCoupons]);
+        setShowLimitWarning(false);
         setShowCouponPickerModal(true);
     };
 
     const handleCouponPickerToggle = (couponId) => {
-        setTempSelectedCouponIds(prev =>
-            prev.includes(couponId)
-                ? prev.filter(id => id !== couponId)
-                : [...prev, couponId]
-        );
+        setTempSelectedCouponIds(prev => {
+            if (prev.includes(couponId)) {
+                setShowLimitWarning(false);
+                return prev.filter(id => id !== couponId);
+            } else {
+                if (prev.length >= 6) {
+                    setShowLimitWarning(true);
+                    return prev;
+                }
+                return [...prev, couponId];
+            }
+        });
     };
 
     const handleCouponPickerAdd = () => {
@@ -964,7 +973,59 @@ function CouponsSection({ config, onSave, saving }) {
                                         {selectedActiveCoupons.map(couponId => {
                                             const coupon = activeCouponsFromAPI.find(c => c.id === couponId);
                                             return coupon ? (
-                                                <Tag key={couponId}>{coupon.code}</Tag>
+                                                <div
+                                                    key={couponId}
+                                                    style={{
+                                                        display: "inline-flex",
+                                                        alignItems: "center",
+                                                        backgroundColor: activePreviewCouponId === couponId ? "#eff6ff" : "#f1f2f4",
+                                                        border: activePreviewCouponId === couponId ? "1px solid #2563eb" : "1px solid #d1d5db",
+                                                        borderRadius: "6px",
+                                                        fontSize: "13px",
+                                                        fontWeight: "500",
+                                                        color: "#374151",
+                                                        overflow: "hidden",
+                                                    }}
+                                                >
+                                                    <div
+                                                        onClick={() => setActivePreviewCouponId(couponId)}
+                                                        style={{
+                                                            padding: "4px 8px",
+                                                            cursor: "pointer",
+                                                            color: activePreviewCouponId === couponId ? "#1e40af" : "inherit",
+                                                            userSelect: "none",
+                                                        }}
+                                                    >
+                                                        {coupon.code}
+                                                    </div>
+                                                    <div
+                                                        style={{ width: "1px", height: "16px", backgroundColor: activePreviewCouponId === couponId ? "#bfdbfe" : "#d1d5db" }}
+                                                    />
+                                                    <div
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            const newSelection = selectedActiveCoupons.filter(id => id !== couponId);
+                                                            setSelectedActiveCoupons(newSelection);
+                                                            if (activePreviewCouponId === couponId) {
+                                                                setActivePreviewCouponId(newSelection.length > 0 ? newSelection[0] : null);
+                                                            }
+                                                        }}
+                                                        style={{
+                                                            padding: "4px 6px",
+                                                            cursor: "pointer",
+                                                            display: "flex",
+                                                            alignItems: "center",
+                                                            justifyContent: "center",
+                                                            opacity: 0.7,
+                                                        }}
+                                                        onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
+                                                        onMouseLeave={(e) => e.currentTarget.style.opacity = 0.7}
+                                                    >
+                                                        <div style={{ width: "16px", height: "16px" }}>
+                                                            <Icon source={XSmallIcon} />
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             ) : null;
                                         })}
                                     </InlineStack>
@@ -1091,6 +1152,15 @@ function CouponsSection({ config, onSave, saving }) {
                         </Banner>
                     )}
 
+                    {/* Limit Warning */}
+                    {showLimitWarning && (
+                        <Box paddingBlockEnd="300">
+                            <Banner tone="warning" onDismiss={() => setShowLimitWarning(false)}>
+                                <p>You can only select a maximum of 6 coupons.</p>
+                            </Banner>
+                        </Box>
+                    )}
+
                     {/* Active Coupons List with Checkboxes */}
                     {!isLoadingActiveCoupons && activeCouponsFromAPI.length > 0 && (
                         <BlockStack gap="200">
@@ -1099,17 +1169,19 @@ function CouponsSection({ config, onSave, saving }) {
                             </Text>
                             {activeCouponsFromAPI.map(coupon => {
                                 const isChecked = tempSelectedCouponIds.includes(coupon.id);
+                                const isDisabled = !isChecked && tempSelectedCouponIds.length >= 6;
                                 return (
                                     <div
                                         key={coupon.id}
-                                        onClick={() => handleCouponPickerToggle(coupon.id)}
+                                        onClick={() => !isDisabled && handleCouponPickerToggle(coupon.id)}
                                         style={{
                                             padding: '12px 16px',
-                                            backgroundColor: isChecked ? '#f0f7ff' : '#f9fafb',
+                                            backgroundColor: isChecked ? '#f0f7ff' : isDisabled ? '#f4f4f4' : '#f9fafb',
                                             border: `1px solid ${isChecked ? '#2c6ecb' : '#e5e7eb'}`,
                                             borderRadius: '8px',
                                             transition: 'all 0.2s',
-                                            cursor: 'pointer',
+                                            cursor: isDisabled ? 'not-allowed' : 'pointer',
+                                            opacity: isDisabled ? 0.6 : 1,
                                         }}
                                     >
                                         <InlineStack align="space-between" blockAlign="center" gap="200">
@@ -1138,6 +1210,7 @@ function CouponsSection({ config, onSave, saving }) {
                                             </div>
                                             <Checkbox
                                                 checked={isChecked}
+                                                disabled={isDisabled}
                                                 onChange={() => handleCouponPickerToggle(coupon.id)}
                                             />
                                         </InlineStack>

@@ -1,5 +1,5 @@
 {
-  "activeTemplate": "template1",
+  "activeTemplate": "template3",
   "templates": {
     "template1": {
       "name": "Classic Banner",
@@ -42,8 +42,8 @@
     }
   },
   "selectedActiveCoupons": [
-    "gid://shopify/DiscountCodeNode/1286987710531",
     "gid://shopify/DiscountCodeNode/1286191087683",
-    "gid://shopify/DiscountCodeNode/1286188105795"
+    "gid://shopify/DiscountCodeNode/1286188105795",
+    "gid://shopify/DiscountAutomaticNode/1275746189379"
   ]
 }

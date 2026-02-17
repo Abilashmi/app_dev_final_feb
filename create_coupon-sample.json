@@ -1,0 +1,43 @@
+[
+  {
+    "id": "1771311880652",
+    "createdAt": "2026-02-17T07:04:40.652Z",
+    "title": "wdrfghjkl,mnb v",
+    "code": "VINI9X8T",
+    "type": "amount_off_products",
+    "valueType": "fixed_amount",
+    "value": 2466,
+    "startDate": "2026-02-17T06:30:00.000Z",
+    "endDate": null,
+    "selectionType": "products",
+    "selectedResources": [
+      {
+        "id": "gid://shopify/Product/7570275958851",
+        "title": "Green Snowboard",
+        "handle": "green-snowboard-1"
+      }
+    ],
+    "minimumRequirementValue": "none",
+    "minimumPurchaseAmount": 0,
+    "minimumQuantity": 0,
+    "limitTotalUses": false,
+    "totalUsesLimit": 0,
+    "limitOnePerCustomer": false,
+    "combineProduct": false,
+    "combineOrder": false,
+    "combineShipping": false,
+    "oncePerOrder": true,
+    "countriesType": null,
+    "selectedCountries": [],
+    "bxgyBuysType": null,
+    "bxgyBuysResources": [],
+    "bxgyBuysQuantity": null,
+    "bxgyGetsType": null,
+    "bxgyGetsResources": [],
+    "bxgyGetsValueType": null,
+    "bxgyGetsValue": null,
+    "bxgyGetsQuantity": null,
+    "bxgyRepeatOncePerOrder": false,
+    "shopifyId": "gid://shopify/DiscountCodeNode/1287234093123"
+  }
+]
