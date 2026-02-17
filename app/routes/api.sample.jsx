@@ -1,4 +1,4 @@
-// Sample Data Configuration
+// ---------------- SAMPLE DATA ----------------
 const SAMPLE_DATA = {
     success: true,
     cartData: {
@@ -36,48 +36,78 @@ const SAMPLE_DATA = {
             manualRules: [],
             activeTemplate: 'grid'
         }
-    },
-    shopifyProducts: [
-        { id: 'sp-1', title: 'Wireless Headphones', price: 99.99, image: '🎧' },
-        { id: 'sp-2', title: 'Smart Watch', price: 199.99, image: '⌚' },
-        { id: 'sp-3', title: 'Portable Speaker', price: 59.99, image: '🔊' },
-        { id: 'sp-4', title: 'Leather Wallet', price: 39.99, image: '👛' },
-        { id: 'sp-5', title: 'Running Shoes', price: 120.00, image: '👟' }
-    ],
-    shopifyCollections: [
-        { id: 'sc-1', title: 'Trending Now', productCount: 12 },
-        { id: 'sc-2', title: 'New Arrivals', productCount: 8 }
-    ],
-    coupons: [
-        { id: 'cp-1', status: 'ACTIVE', code: 'SAVE10', heading: '10% Discount', discountType: 'percentage', discountValue: 10 },
-        { id: 'cp-2', status: 'ACTIVE', code: 'OFF50', heading: '₹50 OFF Your Order', discountType: 'fixed', discountValue: 50 },
-        { id: 'cp-3', status: 'ACTIVE', code: 'SHIPFREE', heading: 'Free Shipping', discountType: 'fixed', discountValue: 0 }
-    ]
+    }
 };
 
+import { getStoredCoupons } from "./api.create_coupon-sample";
+
+// ---------------- LOADER ----------------
 export async function loader() {
-    return Response.json(SAMPLE_DATA);
+    const storedCoupons = await getStoredCoupons();
+
+    // Map stored coupons to the format app.cartdrawer.jsx expects
+    const formattedCoupons = storedCoupons.map(c => ({
+        id: c.id,
+        code: c.code,
+        heading: c.title || c.code,
+        subtext: c.type === 'amount_off_order' ? 'Order Discount' : 'Product Discount',
+        discountType: c.valueType === 'percentage' ? 'percentage' : 'fixed',
+        discountValue: parseFloat(c.value || 0),
+        ends_at: c.endDate,
+        status: 'ACTIVE' // Force active to ensure it shows in the "Active Coupons" list
+    }));
+
+    return Response.json({
+        ...SAMPLE_DATA,
+        coupons: formattedCoupons
+    });
 }
 
+// ---------------- ACTION ----------------
 export async function action({ request }) {
     if (request.method !== "POST") {
-        return Response.json({ error: "Method not allowed" }, { status: 405 });
+        return Response.json(
+            { error: "Method not allowed" },
+            { status: 405 }
+        );
     }
 
     try {
         const data = await request.json();
+
         console.log("------------------------------------------");
         console.log("RECEIVED DATA ON SAMPLE API:");
         console.log(JSON.stringify(data, null, 2));
         console.log("------------------------------------------");
 
+        // SEND DATA TO PHP ENDPOINT
+        const externalResponse = await fetch(
+            "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/test.php",
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(data)
+            }
+        );
+
+        const externalResult = await externalResponse.json();
+
         return Response.json({
             success: true,
-            message: "Data successfully synced to sample API",
+            message: "Data successfully synced",
+            externalResponse: externalResult,
             receivedAt: new Date().toISOString()
-        }, { status: 200 });
+        });
+
     } catch (error) {
         console.error("Sample API Error:", error);
-        return Response.json({ success: false, error: "Invalid JSON" }, { status: 400 });
+
+        return Response.json(
+            { success: false, error: "Invalid JSON or forwarding failed" },
+            { status: 400 }
+        );
     }
 }
+

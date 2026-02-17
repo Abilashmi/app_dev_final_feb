@@ -747,6 +747,8 @@ export default function CartDrawerAdmin() {
   const [isLoadingActiveCoupons, setIsLoadingActiveCoupons] = useState(false);
   const [activeCouponWarning, setActiveCouponWarning] = useState(null);
   const [editingCouponSource, setEditingCouponSource] = useState(null); // 'sample' or 'active'
+  const [isCouponSelectionModalOpen, setIsCouponSelectionModalOpen] = useState(false);
+  const [tempSelectedCouponIds, setTempSelectedCouponIds] = useState([]);
 
   // ==========================================
   // UPSELL EDITOR STATE (RULE 1/2/3 CONFIG)
@@ -982,9 +984,9 @@ export default function CartDrawerAdmin() {
 
   const addTier = () => {
     const newTier = {
-      id: progressBarSettings.tiers.length + 1,
+      id: Date.now(), // Use timestamp for unique ID instead of index
       rewardType: 'product',
-      minValue: progressBarSettings.rewardsCalculation[0] === 'cartTotal' ? 100 : 10,
+      minValue: (progressBarSettings.rewardsCalculation && progressBarSettings.rewardsCalculation[0]) === 'cartTotal' ? 100 : 10,
       description: '',
       titleBeforeAchieving: "You're {COUNT} away from ____",
       products: [],
@@ -1209,6 +1211,30 @@ export default function CartDrawerAdmin() {
         : [...prev, couponId]
     );
     setActiveCouponWarning(null);
+  };
+
+  const handleOpenCouponModal = () => {
+    setTempSelectedCouponIds([...selectedActiveCoupons]);
+    setIsCouponSelectionModalOpen(true);
+  };
+
+  const handleCloseCouponModal = () => {
+    setIsCouponSelectionModalOpen(false);
+    setTempSelectedCouponIds([]);
+  };
+
+  const handleToggleTempCoupon = (couponId) => {
+    setTempSelectedCouponIds(prev =>
+      prev.includes(couponId)
+        ? prev.filter(id => id !== couponId)
+        : [...prev, couponId]
+    );
+  };
+
+  const handleConfirmCouponSelection = () => {
+    setSelectedActiveCoupons(tempSelectedCouponIds);
+    setIsCouponSelectionModalOpen(false);
+    setActiveCouponWarning(null); // Clear any previous warnings
   };
 
   const updateCouponOverride = (couponId, field, value) => {
@@ -1642,7 +1668,7 @@ export default function CartDrawerAdmin() {
                 </InlineStack>
                 <Button
                   onClick={handleDeactivateClick}
-                  variant={cartStatus ? 'primary' : 'secondary'}
+                  variant={cartStatus ? 'secondary' : 'primary'}
                   loading={isSaving}
                   fullWidth
                 >
@@ -1769,10 +1795,10 @@ export default function CartDrawerAdmin() {
             <InlineStack align="space-between" blockAlign="center">
               <Text variant="headingLg" as="h1">Progress Bar Settings</Text>
               <Button
-                variant={featureStates.progressBarEnabled ? 'primary' : 'secondary'}
+                variant={featureStates.progressBarEnabled ? 'secondary' : 'primary'}
                 onClick={() => toggleFeature('progressBarEnabled')}
               >
-                {featureStates.progressBarEnabled ? 'Enabled' : 'Disabled'}
+                {featureStates.progressBarEnabled ? 'Disable' : 'Enable'}
               </Button>
             </InlineStack>
 
@@ -2105,14 +2131,13 @@ export default function CartDrawerAdmin() {
               </BlockStack>
             </Card>
 
-            <div style={{ marginTop: '20px', paddingBottom: '40px' }}>
+            <div style={{ marginTop: '20px', paddingBottom: '40px', display: 'flex', justifyContent: 'flex-end' }}>
               <Button
-                primary
-                fullWidth
-                size="large"
+                variant="primary"
+                size="slim"
                 onClick={handleSaveProgressBarSettings}
               >
-                Save Settings
+                Save
               </Button>
             </div>
           </BlockStack >
@@ -2128,10 +2153,10 @@ export default function CartDrawerAdmin() {
             <InlineStack align="space-between" blockAlign="center">
               <Text variant="headingLg" as="h1">Coupon Slider Settings</Text>
               <Button
-                variant={featureStates.couponSliderEnabled ? 'primary' : 'secondary'}
+                variant={featureStates.couponSliderEnabled ? 'secondary' : 'primary'}
                 onClick={() => toggleFeature('couponSliderEnabled')}
               >
-                {featureStates.couponSliderEnabled ? 'Enabled' : 'Disabled'}
+                {featureStates.couponSliderEnabled ? 'Disable' : 'Enable'}
               </Button>
             </InlineStack>
 
@@ -2351,7 +2376,7 @@ export default function CartDrawerAdmin() {
                     <BlockStack gap="400">
                       <BlockStack gap="200">
                         <Text variant="headingMd" as="h2">Active Coupons</Text>
-                        <Text tone="subdued" as="p">Select which active coupons to display in the cart slider. These are fetched from your Shopify dashboard.</Text>
+                        <Text tone="subdued" as="p">Select which active coupons to display in the cart slider.</Text>
                       </BlockStack>
 
                       {/* Loading State */}
@@ -2364,68 +2389,132 @@ export default function CartDrawerAdmin() {
                         </div>
                       )}
 
-                      {/* No Active Coupons */}
-                      {!isLoadingActiveCoupons && activeCouponsFromAPI.length === 0 && (
-                        <Banner tone="info">
-                          <p>No active coupons found. Create coupons in your <strong>Coupon Dashboard</strong> and make sure they have an <strong>Active</strong> status.</p>
-                        </Banner>
-                      )}
+                      {!isLoadingActiveCoupons && (
+                        <BlockStack gap="400">
+                          {/* Selection Summary */}
+                          <div style={{
+                            padding: '16px',
+                            backgroundColor: '#f9fafb',
+                            borderRadius: '8px',
+                            border: '1px solid #e5e7eb'
+                          }}>
+                            <InlineStack align="space-between" blockAlign="center">
+                              <BlockStack gap="100">
+                                <Text variant="bodyMd" fontWeight="semibold">
+                                  {selectedActiveCoupons.length} coupon{selectedActiveCoupons.length !== 1 ? 's' : ''} selected
+                                </Text>
+                                <Text variant="bodySm" tone="subdued">
+                                  Coupons selected here will appear in the cart slider.
+                                </Text>
+                              </BlockStack>
+                              <Button onClick={handleOpenCouponModal}>Select Coupons</Button>
+                            </InlineStack>
+                          </div>
 
-                      {/* Active Coupons List */}
-                      {!isLoadingActiveCoupons && activeCouponsFromAPI.length > 0 && (
-                        <BlockStack gap="200">
-                          {activeCouponsFromAPI.map(coupon => {
-                            const isSelected = selectedActiveCoupons.includes(coupon.id);
-                            const isEditing = activeCouponTab === coupon.id && editingCouponSource === 'active';
-                            return (
-                              <div
-                                key={coupon.id}
-                                onClick={() => handleCouponTabClick(coupon.id, 'active')}
-                                style={{
-                                  padding: '12px 16px',
-                                  backgroundColor: isEditing ? '#f0fff4' : isSelected ? '#f0f7ff' : '#f9fafb',
-                                  border: `1px solid ${isEditing ? '#22c55e' : isSelected ? '#2c6ecb' : '#e5e7eb'}`,
-                                  borderRadius: '8px',
-                                  transition: 'all 0.2s',
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                <InlineStack align="space-between" blockAlign="center" gap="200">
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-                                    <div style={{
-                                      width: '36px', height: '36px', borderRadius: '8px',
-                                      backgroundColor: '#dcfce7', display: 'flex',
-                                      alignItems: 'center', justifyContent: 'center', fontSize: '16px',
-                                    }}>
-                                      {coupon.discountType === 'percentage' ? '🏷️' :
-                                        coupon.discountType === 'free_shipping' ? '🚚' : '💰'}
-                                    </div>
-                                    <BlockStack gap="100">
-                                      <InlineStack gap="200" blockAlign="center">
-                                        <Text variant="bodyMd" fontWeight="semibold" truncate>{coupon.code}</Text>
+                          {/* Selected Coupons List (Preview) */}
+                          {selectedActiveCoupons.length > 0 && (
+                            <BlockStack gap="200">
+                              <Text variant="bodySm" fontWeight="semibold" tone="subdued">SELECTED COUPONS:</Text>
+                              {selectedActiveCoupons.map(couponId => {
+                                const coupon = activeCouponsFromAPI.find(c => c.id === couponId);
+                                if (!coupon) return null;
+                                const isEditing = activeCouponTab === coupon.id && editingCouponSource === 'active';
+                                return (
+                                  <div
+                                    key={coupon.id}
+                                    style={{
+                                      padding: '12px 16px',
+                                      backgroundColor: '#fff',
+                                      border: '1px solid #e5e7eb',
+                                      borderRadius: '8px',
+                                    }}
+                                  >
+                                    <InlineStack align="space-between" blockAlign="center">
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <div style={{
+                                          width: '32px', height: '32px', borderRadius: '6px',
+                                          backgroundColor: '#f1f5f9', display: 'flex',
+                                          alignItems: 'center', justifyContent: 'center', fontSize: '16px',
+                                        }}>
+                                          🏷️
+                                        </div>
+                                        <Text variant="bodyMd" fontWeight="semibold">{coupon.code}</Text>
                                         <Badge tone="success" size="small">Active</Badge>
-                                      </InlineStack>
-                                      <Text variant="bodySm" tone="subdued" truncate>
-                                        {coupon.label} — {coupon.discountType === 'percentage'
-                                          ? `${coupon.discountValue}% off`
-                                          : coupon.discountType === 'free_shipping'
-                                            ? 'Free Shipping'
-                                            : `₹${coupon.discountValue} off`}
-                                      </Text>
-                                    </BlockStack>
+                                      </div>
+                                      <Button size="slim" onClick={() => handleCouponTabClick(coupon.id, 'active')}>Edit Appearance</Button>
+                                    </InlineStack>
                                   </div>
-                                  <Checkbox
-                                    checked={isSelected}
-                                    onChange={() => toggleActiveCouponSelection(coupon.id)}
-                                  />
-                                </InlineStack>
-                              </div>
-                            );
-                          })}
+                                );
+                              })}
+                            </BlockStack>
+                          )}
                         </BlockStack>
                       )}
                     </BlockStack>
                   </Card>
+
+                  {/* Coupon Selection Modal */}
+                  <Modal
+                    open={isCouponSelectionModalOpen}
+                    onClose={handleCloseCouponModal}
+                    title="Select Active Coupons"
+                    primaryAction={{
+                      content: 'Add',
+                      onAction: handleConfirmCouponSelection,
+                    }}
+                    secondaryActions={[
+                      {
+                        content: 'Cancel',
+                        onAction: handleCloseCouponModal,
+                      },
+                    ]}
+                  >
+                    <Modal.Section>
+                      <BlockStack gap="400">
+                        {activeCouponsFromAPI.length === 0 ? (
+                          <Banner tone="info">
+                            <p>No active coupons found. Create coupons in your <strong>Coupon Dashboard</strong> and make sure they have an <strong>Active</strong> status.</p>
+                          </Banner>
+                        ) : (
+                          <BlockStack gap="200">
+                            {activeCouponsFromAPI.map(coupon => {
+                              const isSelected = tempSelectedCouponIds.includes(coupon.id);
+                              return (
+                                <div
+                                  key={coupon.id}
+                                  onClick={() => handleToggleTempCoupon(coupon.id)}
+                                  style={{
+                                    padding: '12px',
+                                    backgroundColor: isSelected ? '#f0f7ff' : '#fff',
+                                    border: `1px solid ${isSelected ? '#2c6ecb' : '#e5e7eb'}`,
+                                    borderRadius: '8px',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s',
+                                  }}
+                                >
+                                  <InlineStack align="space-between" blockAlign="center">
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                      <Checkbox
+                                        checked={isSelected}
+                                        onChange={() => handleToggleTempCoupon(coupon.id)}
+                                      />
+                                      <BlockStack gap="050">
+                                        <Text variant="bodyMd" fontWeight="semibold">{coupon.code}</Text>
+                                        <Text variant="bodySm" tone="subdued">
+                                          {coupon.discountType === 'percentage' ? `${coupon.discountValue}% off` : `₹${coupon.discountValue} off`}
+                                        </Text>
+                                      </BlockStack>
+                                    </div>
+                                    <Badge tone="success">Active</Badge>
+                                  </InlineStack>
+                                </div>
+                              );
+                            })}
+                          </BlockStack>
+                        )}
+                      </BlockStack>
+                    </Modal.Section>
+                  </Modal>
 
                   <Divider />
 
@@ -2605,10 +2694,10 @@ export default function CartDrawerAdmin() {
                   <Text variant="bodySm" tone="subdued">Recommend products to customers based on cart contents</Text>
                 </BlockStack>
                 <Button
-                  variant={featureStates.upsellEnabled ? 'primary' : 'secondary'}
+                  variant={featureStates.upsellEnabled ? 'secondary' : 'primary'}
                   onClick={() => toggleFeature('upsellEnabled')}
                 >
-                  {featureStates.upsellEnabled ? 'Enabled' : 'Disabled'}
+                  {featureStates.upsellEnabled ? 'Disable' : 'Enable'}
                 </Button>
               </InlineStack>
             </BlockStack>
