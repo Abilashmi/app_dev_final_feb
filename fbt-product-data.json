@@ -1,6 +1,6 @@
 {
   "fbt": {
-    "activeTemplate": "fbt3",
+    "activeTemplate": "fbt2",
     "templates": {
       "fbt1": {
         "name": "Classic Grid",
@@ -23,7 +23,7 @@
         "bgColor": "#f9fafb",
         "textColor": "#374151",
         "priceColor": "#dc2626",
-        "buttonColor": "#000000",
+        "buttonColor": "#2c723b",
         "buttonTextColor": "#ffffff",
         "borderColor": "#d1d5db",
         "borderRadius": 12,

@@ -1,5 +1,5 @@
 {
-  "activeTemplate": "template3",
+  "activeTemplate": "template2",
   "templates": {
     "template1": {
       "name": "Classic Banner",
@@ -42,8 +42,31 @@
     }
   },
   "selectedActiveCoupons": [
-    "gid://shopify/DiscountCodeNode/1286191087683",
-    "gid://shopify/DiscountCodeNode/1286188105795",
     "gid://shopify/DiscountAutomaticNode/1275746189379"
-  ]
+  ],
+  "selectedTemplate": "template2",
+  "selectedCouponNames": [
+    "HI"
+  ],
+  "textContent": {
+    "headingText": "SPECIAL OFFER",
+    "subtext": "Hell oooho"
+  },
+  "color": {
+    "bgColor": "#f9fafb",
+    "textColor": "#374151",
+    "accent": "#10b981",
+    "buttonColor": "#10b981",
+    "buttonText": "#ffffff"
+  },
+  "styling": {
+    "borderRadius": 8,
+    "fontSize": 14,
+    "padding": 14
+  },
+  "couponOverrides": {
+    "gid://shopify/DiscountAutomaticNode/1275746189379": {
+      "subtextText": "Hell oooho"
+    }
+  }
 }

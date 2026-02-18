@@ -778,10 +778,24 @@ function CouponsSection({ config, onSave, saving }) {
     };
 
     const handleSave = () => {
+        // Enrich selected coupons with their full data (names/codes)
+        const enrichedCoupons = selectedActiveCoupons.map(id => {
+            const coupon = activeCouponsFromAPI.find(c => c.id === id);
+            if (coupon) {
+                return {
+                    id: coupon.id,
+                    title: coupon.code || coupon.label,
+                    code: coupon.code,
+                    ...coupon
+                };
+            }
+            return id;
+        });
+
         onSave({
             activeTemplate,
             templateData: templates,
-            selectedActiveCoupons,
+            selectedActiveCoupons: enrichedCoupons,
             couponOverrides,
         });
     };
@@ -2048,6 +2062,7 @@ export default function ProductWidgetPage() {
                 activeTemplate: data.activeTemplate,
                 templateData: data.templateData,
                 selectedActiveCoupons: data.selectedActiveCoupons,
+                couponOverrides: data.couponOverrides, // Send overrides
                 shop,
             },
             { method: "POST", encType: "application/json", action: "/api/coupon-slider" }

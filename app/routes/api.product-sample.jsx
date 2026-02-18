@@ -1,10 +1,10 @@
 import { promises as fs } from "fs";
 import path from "path";
 
-// JSON file path for persisting data (stored alongside this route file)
 const DATA_FILE = path.resolve("fbt-product-data.json");
 
-// Default configurations
+/* ---------------- DEFAULT CONFIGS ---------------- */
+
 const DEFAULT_COUPON_DATA = {
     activeTemplate: "template1",
     selectedActiveCoupons: [],
@@ -102,12 +102,13 @@ const DEFAULT_FBT_DATA = {
     manualRules: [],
 };
 
-// --- Helper: Read stored data from JSON file ---
+/* ---------------- FILE HELPERS ---------------- */
+
 async function readStoredData() {
     try {
         const raw = await fs.readFile(DATA_FILE, "utf-8");
         return JSON.parse(raw);
-    } catch (err) {
+    } catch {
         return {
             couponSlider: DEFAULT_COUPON_DATA,
             fbt: DEFAULT_FBT_DATA
@@ -115,24 +116,30 @@ async function readStoredData() {
     }
 }
 
-// --- Helper: Write data to JSON file ---
 async function writeStoredData(data) {
     await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
 }
 
-// --- LOADER: Return stored FBT data ---
+/* ---------------- LOADER ---------------- */
+
 export async function loader() {
     const storedData = await readStoredData();
+
     return Response.json({
         success: true,
         fbt: storedData.fbt || DEFAULT_FBT_DATA
-    }, { status: 200 });
+    });
 }
 
-// --- ACTION: Save FBT configuration data to JSON file ---
+/* ---------------- ACTION ---------------- */
+
 export async function action({ request }) {
+
     if (request.method !== "POST") {
-        return Response.json({ error: "Method not allowed" }, { status: 405 });
+        return Response.json(
+            { error: "Method not allowed" },
+            { status: 405 }
+        );
     }
 
     try {
@@ -140,27 +147,69 @@ export async function action({ request }) {
         const { actionType, shop } = data;
 
         if (!actionType) {
-            return Response.json({ success: false, error: "Missing actionType" }, { status: 400 });
+            return Response.json(
+                { success: false, error: "Missing actionType" },
+                { status: 400 }
+            );
         }
 
         const storedData = await readStoredData();
 
         if (actionType === "saveFBTConfig") {
-            const { activeTemplate, templateData, mode, openaiKey, configData } = data;
+
+            const {
+                activeTemplate,
+                templateData,
+                mode,
+                openaiKey,
+                configData
+            } = data;
+
             storedData.fbt = {
                 activeTemplate,
-                templates: typeof templateData === 'string' ? JSON.parse(templateData) : templateData,
+                templates: typeof templateData === "string"
+                    ? JSON.parse(templateData)
+                    : templateData,
                 mode,
                 openaiKey: openaiKey || "",
-                manualRules: typeof configData === 'string' ? JSON.parse(configData) : (configData || [])
+                manualRules: typeof configData === "string"
+                    ? JSON.parse(configData)
+                    : (configData || [])
             };
+
+            await writeStoredData(storedData);
+
+            /* -------- SEND DATA TO PHP ENDPOINT -------- */
+
+            try {
+                const response = await fetch(
+                    "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/fbt.php",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({
+                            shop,
+                            fbt: storedData.fbt
+                        })
+                    }
+                );
+
+                const result = await response.text();
+                console.log("[FBT PUSH RESPONSE]", result);
+
+            } catch (pushError) {
+                console.error("[FBT PUSH FAILED]", pushError);
+            }
+
         } else {
-            return Response.json({ success: false, error: "Unsupported actionType for this endpoint. Use /api/coupon-slider for coupons." }, { status: 400 });
+            return Response.json(
+                { success: false, error: "Unsupported actionType" },
+                { status: 400 }
+            );
         }
 
-        await writeStoredData(storedData);
-
-        // Explicit logging for verification
         console.log("==========================================");
         console.log("[SAVED] FBT CONFIGURATION");
         console.log("Shop:", shop);
@@ -172,14 +221,14 @@ export async function action({ request }) {
             message: "FBT configuration saved successfully!",
             shop,
             config: storedData.fbt
-        }, { status: 200 });
+        });
 
     } catch (error) {
         console.error("Product Sample API Error:", error);
+
         return Response.json(
             { success: false, error: "Invalid JSON or internal error" },
             { status: 400 }
         );
     }
 }
-
