@@ -41,16 +41,12 @@
       "padding": 20
     }
   },
-  "selectedActiveCoupons": [
-    "gid://shopify/DiscountAutomaticNode/1275746189379"
-  ],
+  "selectedActiveCoupons": [],
   "selectedTemplate": "template2",
-  "selectedCouponNames": [
-    "HI"
-  ],
+  "selectedCouponNames": [],
   "textContent": {
     "headingText": "SPECIAL OFFER",
-    "subtext": "Hell oooho"
+    "subtext": "Free shipping on orders over ₹500"
   },
   "color": {
     "bgColor": "#f9fafb",
@@ -67,6 +63,15 @@
   "couponOverrides": {
     "gid://shopify/DiscountAutomaticNode/1275746189379": {
       "subtextText": "Hell oooho"
+    },
+    "gid://shopify/DiscountCodeNode/1288830812227": {
+      "headingText": "hi"
     }
-  }
+  },
+  "displayCondition": "collection_handle",
+  "productHandles": [],
+  "collectionHandles": [
+    "hydrogen"
+  ],
+  "displayTags": []
 }

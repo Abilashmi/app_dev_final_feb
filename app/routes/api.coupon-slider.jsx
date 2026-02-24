@@ -8,6 +8,10 @@ const DATA_FILE = path.resolve("coupon-slider-data.json");
 const DEFAULT_COUPON_DATA = {
     activeTemplate: "template1",
     selectedActiveCoupons: [],
+    displayCondition: "all",
+    productHandles: [],
+    collectionHandles: [],
+    displayTags: [],
     templates: {
         template1: {
             name: "Classic Banner",
@@ -112,7 +116,11 @@ export async function action({ request }) {
             activeTemplate,
             templateData,
             selectedActiveCoupons,
-            couponOverrides // Received from frontend
+            couponOverrides, // Received from frontend
+            displayCondition,
+            productHandles,
+            collectionHandles,
+            displayTags,
         } = data;
 
         // Parse templates
@@ -171,6 +179,12 @@ export async function action({ request }) {
             padding: effectiveTpl.padding
         };
 
+        // Parse display condition data
+        const parsedDisplayCondition = displayCondition || "all";
+        const parsedProductHandles = Array.isArray(productHandles) ? productHandles : [];
+        const parsedCollectionHandles = Array.isArray(collectionHandles) ? collectionHandles : [];
+        const parsedDisplayTags = Array.isArray(displayTags) ? displayTags : [];
+
         const newConfig = {
             activeTemplate,
             templates,
@@ -182,7 +196,12 @@ export async function action({ request }) {
             textContent,
             color,
             styling,
-            couponOverrides: overrides // Save overrides to config
+            couponOverrides: overrides, // Save overrides to config
+            // Display condition fields
+            displayCondition: parsedDisplayCondition,
+            productHandles: parsedProductHandles,
+            collectionHandles: parsedCollectionHandles,
+            displayTags: parsedDisplayTags,
         };
 
         // Save locally
@@ -224,6 +243,10 @@ export async function action({ request }) {
         console.log("Text Content:", textContent);
         console.log("Color:", color);
         console.log("Styling:", styling);
+        console.log("Display Condition:", parsedDisplayCondition);
+        if (parsedDisplayCondition === "product_handle") console.log("Product Handles:", parsedProductHandles);
+        if (parsedDisplayCondition === "collection_handle") console.log("Collection Handles:", parsedCollectionHandles);
+        if (parsedDisplayCondition === "tag") console.log("Display Tags:", parsedDisplayTags);
         console.log("==========================================");
 
         return Response.json(

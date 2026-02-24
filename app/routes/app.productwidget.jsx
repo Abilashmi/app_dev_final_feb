@@ -115,6 +115,10 @@ function hexToHsb(hex) {
 const FAKE_COUPON_CONFIG = {
     activeTemplate: "template1",
     selectedActiveCoupons: [],
+    displayCondition: "all",
+    productHandles: [],
+    collectionHandles: [],
+    displayTags: [],
     templates: {
         template1: {
             name: "Classic Banner",
@@ -662,6 +666,7 @@ function ProductCard({ product, template, interactionType, isSelected, isRequire
 // --- COUPONS SECTION ---
 
 function CouponsSection({ config, onSave, saving }) {
+    const shopify = useAppBridge();
     const [activeTemplate, setActiveTemplate] = useState(config?.activeTemplate || "template1");
     const [templates, setTemplates] = useState(config?.templates || FAKE_COUPON_CONFIG.templates);
     const [selectedActiveCoupons, setSelectedActiveCoupons] = useState(config?.selectedActiveCoupons || []);
@@ -676,6 +681,15 @@ function CouponsSection({ config, onSave, saving }) {
     const [showCouponPickerModal, setShowCouponPickerModal] = useState(false);
     const [tempSelectedCouponIds, setTempSelectedCouponIds] = useState([]);
     const [showLimitWarning, setShowLimitWarning] = useState(false);
+
+    // --- Display Condition State ---
+    const [displayCondition, setDisplayCondition] = useState(config?.displayCondition || "all");
+    const [productHandles, setProductHandles] = useState(config?.productHandles || []);
+    const [collectionHandles, setCollectionHandles] = useState(config?.collectionHandles || []);
+    const [displayTags, setDisplayTags] = useState(config?.displayTags || []);
+    const [handleInput, setHandleInput] = useState("");
+    const [collectionInput, setCollectionInput] = useState("");
+    const [tagInput, setTagInput] = useState("");
 
     // Fetch active coupons from Shopify Admin API
     useEffect(() => {
@@ -797,6 +811,10 @@ function CouponsSection({ config, onSave, saving }) {
             templateData: templates,
             selectedActiveCoupons: enrichedCoupons,
             couponOverrides,
+            displayCondition,
+            productHandles,
+            collectionHandles,
+            displayTags,
         });
     };
 
@@ -805,6 +823,82 @@ function CouponsSection({ config, onSave, saving }) {
         setTemplates(config?.templates || FAKE_COUPON_CONFIG.templates);
         setSelectedActiveCoupons(config?.selectedActiveCoupons || []);
         setCouponOverrides(config?.couponOverrides || {});
+        setDisplayCondition(config?.displayCondition || "all");
+        setProductHandles(config?.productHandles || []);
+        setCollectionHandles(config?.collectionHandles || []);
+        setDisplayTags(config?.displayTags || []);
+        setHandleInput("");
+        setCollectionInput("");
+        setTagInput("");
+    };
+
+    // --- Display Condition Handlers ---
+    const handleAddProductHandle = () => {
+        const val = handleInput.trim();
+        if (val && !productHandles.includes(val)) {
+            setProductHandles([...productHandles, val]);
+        }
+        setHandleInput("");
+    };
+
+    const handleRemoveProductHandle = (handle) => {
+        setProductHandles(productHandles.filter(h => h !== handle));
+    };
+
+    const handlePickProducts = async () => {
+        try {
+            const selected = await shopify.resourcePicker({
+                type: "product",
+                multiple: true,
+                selectionIds: productHandles.map(h => ({ handle: h })),
+            });
+            if (selected) {
+                const handles = selected.map(item => item.handle).filter(Boolean);
+                setProductHandles(handles);
+            }
+        } catch (e) {
+            console.error("Resource picker error:", e);
+        }
+    };
+
+    const handleAddCollectionHandle = () => {
+        const val = collectionInput.trim();
+        if (val && !collectionHandles.includes(val)) {
+            setCollectionHandles([...collectionHandles, val]);
+        }
+        setCollectionInput("");
+    };
+
+    const handleRemoveCollectionHandle = (handle) => {
+        setCollectionHandles(collectionHandles.filter(h => h !== handle));
+    };
+
+    const handlePickCollections = async () => {
+        try {
+            const selected = await shopify.resourcePicker({
+                type: "collection",
+                multiple: true,
+                selectionIds: collectionHandles.map(h => ({ handle: h })),
+            });
+            if (selected) {
+                const handles = selected.map(item => item.handle).filter(Boolean);
+                setCollectionHandles(handles);
+            }
+        } catch (e) {
+            console.error("Resource picker error:", e);
+        }
+    };
+
+    const handleAddTag = () => {
+        const val = tagInput.trim();
+        if (val && !displayTags.includes(val)) {
+            setDisplayTags([...displayTags, val]);
+        }
+        setTagInput("");
+    };
+
+    const handleRemoveTag = (tag) => {
+        setDisplayTags(displayTags.filter(t => t !== tag));
     };
 
     // Determine preview content based on selected coupon (or active preview one)
@@ -1043,6 +1137,108 @@ function CouponsSection({ config, onSave, saving }) {
                                             ) : null;
                                         })}
                                     </InlineStack>
+                                )}
+                            </BlockStack>
+
+                            <Divider />
+
+                            {/* Display Condition */}
+                            <BlockStack gap="300">
+                                <Text as="h4" variant="headingSm">Display Condition</Text>
+
+                                <Select
+                                    label="Show coupon slider on"
+                                    options={[
+                                        { label: "All pages", value: "all" },
+                                        { label: "Specific product pages", value: "product_handle" },
+                                        { label: "Specific collection pages", value: "collection_handle" },
+                                        { label: "Products with specific tags", value: "tag" },
+                                    ]}
+                                    value={displayCondition}
+                                    onChange={(v) => setDisplayCondition(v)}
+                                />
+
+                                {/* Product Handle Input */}
+                                {displayCondition === "product_handle" && (
+                                    <BlockStack gap="200">
+                                        <InlineStack gap="200" blockAlign="end">
+                                            <div style={{ flex: 1 }}>
+                                                <TextField
+                                                    label="Product Handle"
+                                                    value={handleInput}
+                                                    onChange={setHandleInput}
+                                                    placeholder="e.g. classic-leather-bag"
+                                                    onKeyPress={(e) => e.key === "Enter" && handleAddProductHandle()}
+                                                />
+                                            </div>
+                                            <Button onClick={handleAddProductHandle} disabled={!handleInput.trim()}>Add</Button>
+                                            <Button onClick={handlePickProducts} variant="secondary">Browse Products</Button>
+                                        </InlineStack>
+                                        {productHandles.length > 0 && (
+                                            <InlineStack gap="200" wrap>
+                                                {productHandles.map(handle => (
+                                                    <Tag key={handle} onRemove={() => handleRemoveProductHandle(handle)}>
+                                                        {handle}
+                                                    </Tag>
+                                                ))}
+                                            </InlineStack>
+                                        )}
+                                    </BlockStack>
+                                )}
+
+                                {/* Collection Handle Input */}
+                                {displayCondition === "collection_handle" && (
+                                    <BlockStack gap="200">
+                                        <InlineStack gap="200" blockAlign="end">
+                                            <div style={{ flex: 1 }}>
+                                                <TextField
+                                                    label="Collection Handle"
+                                                    value={collectionInput}
+                                                    onChange={setCollectionInput}
+                                                    placeholder="e.g. summer-sale"
+                                                    onKeyPress={(e) => e.key === "Enter" && handleAddCollectionHandle()}
+                                                />
+                                            </div>
+                                            <Button onClick={handleAddCollectionHandle} disabled={!collectionInput.trim()}>Add</Button>
+                                            <Button onClick={handlePickCollections} variant="secondary">Browse Collections</Button>
+                                        </InlineStack>
+                                        {collectionHandles.length > 0 && (
+                                            <InlineStack gap="200" wrap>
+                                                {collectionHandles.map(handle => (
+                                                    <Tag key={handle} onRemove={() => handleRemoveCollectionHandle(handle)}>
+                                                        {handle}
+                                                    </Tag>
+                                                ))}
+                                            </InlineStack>
+                                        )}
+                                    </BlockStack>
+                                )}
+
+                                {/* Tag Input */}
+                                {displayCondition === "tag" && (
+                                    <BlockStack gap="200">
+                                        <InlineStack gap="200" blockAlign="end">
+                                            <div style={{ flex: 1 }}>
+                                                <TextField
+                                                    label="Product Tag"
+                                                    value={tagInput}
+                                                    onChange={setTagInput}
+                                                    placeholder="e.g. sale, new-arrival"
+                                                    onKeyPress={(e) => e.key === "Enter" && handleAddTag()}
+                                                />
+                                            </div>
+                                            <Button onClick={handleAddTag} disabled={!tagInput.trim()}>Add</Button>
+                                        </InlineStack>
+                                        {displayTags.length > 0 && (
+                                            <InlineStack gap="200" wrap>
+                                                {displayTags.map(tag => (
+                                                    <Tag key={tag} onRemove={() => handleRemoveTag(tag)}>
+                                                        {tag}
+                                                    </Tag>
+                                                ))}
+                                            </InlineStack>
+                                        )}
+                                    </BlockStack>
                                 )}
                             </BlockStack>
 
@@ -1358,13 +1554,55 @@ function FBTSection({ config, products, onSave, saving }) {
         setManualRules(manualRules.filter((r) => r.id !== ruleId));
     };
 
+    const getRulesToSave = () => {
+        let rulesToSave = mode === "manual" ? [...manualRules] : [];
+
+        // Auto-save pending selection if valid
+        const hasPendingFbt = ruleFbtProducts.length > 0;
+        const hasPendingTrigger = scopeTriggerProducts.length > 0;
+        const isAllScope = displayScope === "all";
+
+        let pendingRule = null;
+
+        if (hasPendingFbt) {
+            if (isAllScope) {
+                pendingRule = {
+                    id: `rule-auto-${Date.now()}`,
+                    displayScope: "all",
+                    triggerProducts: [],
+                    fbtProducts: ruleFbtProducts,
+                };
+            } else if (hasPendingTrigger) {
+                pendingRule = {
+                    id: `rule-auto-${Date.now()}`,
+                    displayScope,
+                    triggerProducts: scopeTriggerProducts,
+                    fbtProducts: ruleFbtProducts,
+                };
+            }
+        }
+
+        if (pendingRule) {
+            if (displayScope === "single") {
+                // Remove existing single rule and add new one
+                rulesToSave = rulesToSave.filter(r => r.displayScope !== "single");
+                rulesToSave.push(pendingRule);
+            } else {
+                // Deduplicate simple append: Only append if not already exact same ID (unlikely) 
+                // or maybe checks if similar rule exists? For now, just append.
+                rulesToSave.push(pendingRule);
+            }
+        }
+        return rulesToSave;
+    };
+
     const handleSave = () => {
         onSave({
             activeTemplate,
             templateData: templates,
             mode,
             openaiKey: mode === "ai" ? openaiKey : "",
-            configData: mode === "manual" ? manualRules : [],
+            configData: getRulesToSave(),
         });
     };
 
@@ -1374,7 +1612,7 @@ function FBTSection({ config, products, onSave, saving }) {
             templateData: templates,
             mode,
             openaiKey: mode === "ai" ? openaiKey : "",
-            configData: mode === "manual" ? manualRules : [],
+            configData: getRulesToSave(),
             _toastMessage: "Template is saved!",
         });
     };
@@ -2063,6 +2301,10 @@ export default function ProductWidgetPage() {
                 templateData: data.templateData,
                 selectedActiveCoupons: data.selectedActiveCoupons,
                 couponOverrides: data.couponOverrides, // Send overrides
+                displayCondition: data.displayCondition,
+                productHandles: data.productHandles,
+                collectionHandles: data.collectionHandles,
+                displayTags: data.displayTags,
                 shop,
             },
             { method: "POST", encType: "application/json", action: "/api/coupon-slider" }
@@ -2073,6 +2315,39 @@ export default function ProductWidgetPage() {
         if (data._toastMessage) {
             setCustomToastMessage(data._toastMessage);
         }
+
+        // Enrich/Normalize rules before saving to ensure API has product names
+        const enrichedRules = (data.configData || []).map(rule => {
+            let triggers = rule.triggerProducts || [];
+            let fbts = rule.fbtProducts || [];
+            let scope = rule.displayScope;
+
+            // Handle legacy trigger (single product ID)
+            if (triggers.length === 0 && rule.triggerProductId) {
+                const p = products.find(prod => prod.id === rule.triggerProductId);
+                if (p) triggers = [{ id: p.id, title: p.title, image: p.image }];
+                else triggers = [{ id: rule.triggerProductId, title: "Unknown Product" }];
+
+                if (!scope) scope = "legacy";
+            }
+
+            // Handle legacy FBTs (array of IDs)
+            if (fbts.length === 0 && rule.upsellProductIds && rule.upsellProductIds.length > 0) {
+                fbts = rule.upsellProductIds.map(id => {
+                    const p = products.find(prod => prod.id === id);
+                    if (p) return { id: p.id, title: p.title, image: p.image, price: p.price };
+                    return { id, title: "Unknown Product" };
+                });
+            }
+
+            return {
+                ...rule,
+                displayScope: scope,
+                triggerProducts: triggers,
+                fbtProducts: fbts
+            };
+        });
+
         fetcher.submit(
             {
                 actionType: "saveFBTConfig",
@@ -2080,7 +2355,7 @@ export default function ProductWidgetPage() {
                 templateData: data.templateData,
                 mode: data.mode,
                 openaiKey: data.openaiKey || "",
-                configData: data.configData || [],
+                configData: enrichedRules, // Send enriched rules with product details
                 shop,
             },
             { method: "POST", encType: "application/json", action: "/api/product-sample" }

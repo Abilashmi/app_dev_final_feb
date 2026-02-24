@@ -159,22 +159,77 @@ export async function action({ request }) {
 
             const {
                 activeTemplate,
-                templateData,
+                templateData: rawTemplateData,
                 mode,
                 openaiKey,
-                configData
+                configData: rawConfigData
             } = data;
+
+            const templates = typeof rawTemplateData === "string"
+                ? JSON.parse(rawTemplateData)
+                : rawTemplateData;
+
+            const manualRules = typeof rawConfigData === "string"
+                ? JSON.parse(rawConfigData)
+                : (rawConfigData || []);
+
+            const activeTpl = templates[activeTemplate] || {};
+
+            // Structured Data for Output
+            const selectedTemplate = activeTemplate;
+            const interactionStyle = activeTpl.interactionType;
+            const layoutAlignment = activeTpl.layout;
+
+            const color = {
+                bgColor: activeTpl.bgColor,
+                textColor: activeTpl.textColor,
+                priceColor: activeTpl.priceColor,
+                buttonColor: activeTpl.buttonColor,
+                buttonText: activeTpl.buttonTextColor,
+                borderColor: activeTpl.borderColor
+            };
+
+            const styling = {
+                borderRadius: activeTpl.borderRadius,
+                showPrices: activeTpl.showPrices,
+                showAddAllButton: activeTpl.showAddAllButton
+            };
+
+            const configurationMode = mode === "manual" ? "Manual Configuration" : "AI Configuration";
+
+            // Process manual rules to include product names instead of just IDs
+            const manualConfiguration = manualRules.map(rule => {
+                // Determine trigger product names
+                const triggerNames = (rule.triggerProducts || []).map(p => p.title || p.id).join(", ");
+
+                // Determine upsell/fbt product names
+                const upsellNames = (rule.fbtProducts || []).map(p => p.title || p.id).join(", ");
+
+                return {
+                    ruleId: rule.id,
+                    displayScope: rule.displayScope,
+                    triggeredProduct: triggerNames || (rule.displayScope === "all" ? "All Products" : "None"),
+                    upsellProduct: upsellNames || "None",
+                    // Keep original data for functionality
+                    triggerProducts: rule.triggerProducts,
+                    fbtProducts: rule.fbtProducts
+                };
+            });
 
             storedData.fbt = {
                 activeTemplate,
-                templates: typeof templateData === "string"
-                    ? JSON.parse(templateData)
-                    : templateData,
+                templates,
                 mode,
                 openaiKey: openaiKey || "",
-                manualRules: typeof configData === "string"
-                    ? JSON.parse(configData)
-                    : (configData || [])
+                manualRules,
+                // New structured fields
+                selectedTemplate,
+                interactionStyle,
+                layoutAlignment,
+                color,
+                styling,
+                configurationMode,
+                manualConfiguration
             };
 
             await writeStoredData(storedData);
@@ -182,7 +237,7 @@ export async function action({ request }) {
             /* -------- SEND DATA TO PHP ENDPOINT -------- */
 
             try {
-                const response = await fetch(
+                await fetch(
                     "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/fbt.php",
                     {
                         method: "POST",
@@ -195,13 +250,33 @@ export async function action({ request }) {
                         })
                     }
                 );
-
-                const result = await response.text();
-                console.log("[FBT PUSH RESPONSE]", result);
+                // console.log("[FBT PUSH RESPONSE]", await response.text()); // Optional logging
 
             } catch (pushError) {
                 console.error("[FBT PUSH FAILED]", pushError);
             }
+
+            console.log("==========================================");
+            console.log("[SAVED] FBT CONFIGURATION");
+            console.log("Shop:", shop);
+
+            console.log("Selected Template:", selectedTemplate);
+            console.log("Interaction Style:", interactionStyle);
+            console.log("Layout:", layoutAlignment);
+            console.log("Color:", color);
+            console.log("Styling:", styling);
+            console.log("Mode:", configurationMode);
+            if (mode === "manual") {
+                console.log("Manual Rules:", manualConfiguration);
+            }
+            console.log("==========================================");
+
+            return Response.json({
+                success: true,
+                message: "FBT configuration saved successfully!",
+                shop,
+                config: storedData.fbt
+            });
 
         } else {
             return Response.json(
@@ -209,19 +284,6 @@ export async function action({ request }) {
                 { status: 400 }
             );
         }
-
-        console.log("==========================================");
-        console.log("[SAVED] FBT CONFIGURATION");
-        console.log("Shop:", shop);
-        console.log("FBT Config:", storedData.fbt);
-        console.log("==========================================");
-
-        return Response.json({
-            success: true,
-            message: "FBT configuration saved successfully!",
-            shop,
-            config: storedData.fbt
-        });
 
     } catch (error) {
         console.error("Product Sample API Error:", error);

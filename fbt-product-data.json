@@ -1,6 +1,6 @@
 {
   "fbt": {
-    "activeTemplate": "fbt2",
+    "activeTemplate": "fbt3",
     "templates": {
       "fbt1": {
         "name": "Classic Grid",
@@ -33,21 +33,39 @@
       "fbt3": {
         "name": "Vertical List",
         "layout": "vertical",
-        "interactionType": "classic",
+        "interactionType": "quickAdd",
         "bgColor": "#000000",
         "textColor": "#86bf9e",
         "priceColor": "#427a55",
         "buttonColor": "#2e9472",
         "buttonTextColor": "#65ad95",
         "borderColor": "#f3f4f6",
-        "borderRadius": 4,
+        "borderRadius": 16,
         "showPrices": true,
         "showAddAllButton": true
       }
     },
     "mode": "manual",
     "openaiKey": "",
-    "manualRules": []
+    "manualRules": [],
+    "selectedTemplate": "fbt3",
+    "interactionStyle": "quickAdd",
+    "layoutAlignment": "vertical",
+    "color": {
+      "bgColor": "#000000",
+      "textColor": "#86bf9e",
+      "priceColor": "#427a55",
+      "buttonColor": "#2e9472",
+      "buttonText": "#65ad95",
+      "borderColor": "#f3f4f6"
+    },
+    "styling": {
+      "borderRadius": 16,
+      "showPrices": true,
+      "showAddAllButton": true
+    },
+    "configurationMode": "Manual Configuration",
+    "manualConfiguration": []
   },
   "couponSlider": {
     "activeTemplate": "template1",

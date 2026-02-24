@@ -35,7 +35,7 @@ import { useNavigate, useActionData, useNavigation, useSubmit, useLoaderData } f
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
-import { getStoredCoupons, storeCoupon } from "./api.create_coupon-sample";
+import { getStoredCoupons } from "./api.create_coupon-sample";
 
 const COUNTRIES = [
     { label: "India", value: "IN", flag: "🇮🇳" },
@@ -261,8 +261,7 @@ export const action = async ({ request }) => {
 
         const createdDiscountId = result.codeDiscountNode?.id;
 
-        // Send to sample API
-        // Save to local storage directly
+        // Send to the API route (stores locally + forwards to PHP)
         try {
             const samplePayload = {
                 title, code, type, valueType, value, startDate, endDate,
@@ -285,12 +284,22 @@ export const action = async ({ request }) => {
                 shopifyId: createdDiscountId
             };
 
-            await storeCoupon(samplePayload);
+            const apiUrl = new URL("/api/create_coupon-sample", request.url).href;
+            const apiResponse = await fetch(apiUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(samplePayload),
+            });
+
+            if (!apiResponse.ok) {
+                console.error("API responded with status:", apiResponse.status);
+            } else {
+                const apiResult = await apiResponse.json();
+                console.log("Coupon saved via API:", apiResult);
+            }
         } catch (sampleErr) {
-            console.error("Error saving to local storage:", sampleErr);
+            console.error("Error sending to coupon API:", sampleErr);
         }
-
-
 
         return { success: true, discountId: createdDiscountId };
     } catch (error) {
