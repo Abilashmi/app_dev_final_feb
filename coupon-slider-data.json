@@ -1,13 +1,13 @@
 {
-  "activeTemplate": "template2",
+  "activeTemplate": "template1",
   "templates": {
     "template1": {
       "name": "Classic Banner",
       "headingText": "",
       "subtextText": "ndvc sdm ",
       "bgColor": "#ffffff",
-      "textColor": "#111827",
-      "accentColor": "#3b82f6",
+      "textColor": "#ffffff",
+      "accentColor": "#ffffff",
       "buttonColor": "#4a5d7c",
       "buttonTextColor": "#ffffff",
       "borderRadius": 12,
@@ -41,37 +41,56 @@
       "padding": 20
     }
   },
-  "selectedActiveCoupons": [],
-  "selectedTemplate": "template2",
-  "selectedCouponNames": [],
-  "textContent": {
-    "headingText": "SPECIAL OFFER",
-    "subtext": "Free shipping on orders over ₹500"
-  },
-  "color": {
-    "bgColor": "#f9fafb",
-    "textColor": "#374151",
-    "accent": "#10b981",
-    "buttonColor": "#10b981",
-    "buttonText": "#ffffff"
-  },
-  "styling": {
-    "borderRadius": 8,
-    "fontSize": 14,
-    "padding": 14
-  },
+  "selectedActiveCoupons": [
+    "gid://shopify/DiscountAutomaticNode/1275746189379",
+    "gid://shopify/DiscountCodeNode/1288827011139"
+  ],
   "couponOverrides": {
     "gid://shopify/DiscountAutomaticNode/1275746189379": {
-      "subtextText": "Hell oooho"
+      "subtextText": "Hell oooho",
+      "accentColor": "#131816",
+      "buttonColor": "#8a0b9d",
+      "bgColor": "#53c3f4",
+      "padding": 10,
+      "fontSize": 13
     },
     "gid://shopify/DiscountCodeNode/1288830812227": {
       "headingText": "hi"
+    },
+    "gid://shopify/DiscountCodeNode/1288830976067": {
+      "headingText": "vanalkam",
+      "displayCondition": "collection_handle",
+      "collectionHandles": []
+    },
+    "gid://shopify/DiscountCodeNode/1288829206595": {
+      "headingText": "namaste",
+      "displayCondition": "all",
+      "collectionHandles": [
+        "automated-collection"
+      ]
+    },
+    "gid://shopify/DiscountCodeNode/1288827011139": {
+      "displayCondition": "product_handle",
+      "productHandles": [
+        "green-snowboard"
+      ],
+      "headingText": "mmmm",
+      "subtextText": "ok ",
+      "bgColor": "#767496",
+      "textColor": "#000000",
+      "accentColor": "#000000",
+      "buttonColor": "#000000",
+      "buttonTextColor": "#ffffff"
+    },
+    "gid://shopify/DiscountCodeNode/1287247921219": {
+      "displayCondition": "product_handle",
+      "productHandles": [
+        "green-snowboard"
+      ],
+      "accentColor": "#338c6e",
+      "buttonColor": "#334740",
+      "bgColor": "#75a2cf",
+      "fontSize": 13
     }
-  },
-  "displayCondition": "collection_handle",
-  "productHandles": [],
-  "collectionHandles": [
-    "hydrogen"
-  ],
-  "displayTags": []
+  }
 }

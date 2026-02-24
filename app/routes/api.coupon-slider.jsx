@@ -1,26 +1,22 @@
 import { promises as fs } from "fs";
 import path from "path";
 
-// JSON file path for persisting Coupon data
+const EXTERNAL_API = "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/test2.php";
+
 const DATA_FILE = path.resolve("coupon-slider-data.json");
 
-// Default Coupon Data
-const DEFAULT_COUPON_DATA = {
+/* ---------------- DEFAULTS ---------------- */
+const DEFAULT_DATA = {
     activeTemplate: "template1",
-    selectedActiveCoupons: [],
-    displayCondition: "all",
-    productHandles: [],
-    collectionHandles: [],
-    displayTags: [],
     templates: {
         template1: {
             name: "Classic Banner",
             headingText: "GET 10% OFF!",
-            subtextText: "Apply at checkout for savings",
+            subtextText: "Use code: SAVE10 at checkout",
             bgColor: "#ffffff",
-            textColor: "#111827",
-            accentColor: "#3b82f6",
-            buttonColor: "#3b82f6",
+            textColor: "#1a1a1a",
+            accentColor: "#2563eb",
+            buttonColor: "#2563eb",
             buttonTextColor: "#ffffff",
             borderRadius: 12,
             fontSize: 16,
@@ -53,221 +49,165 @@ const DEFAULT_COUPON_DATA = {
             padding: 20,
         },
     },
+    selectedActiveCoupons: [],
+    couponOverrides: {},
 };
 
-// ---------- Helpers ----------
+/* ---------------- FILE HELPERS ---------------- */
 
-// Read stored data
-async function readStoredData() {
+async function readData() {
     try {
         const raw = await fs.readFile(DATA_FILE, "utf-8");
         return JSON.parse(raw);
-    } catch (err) {
-        return DEFAULT_COUPON_DATA;
+    } catch {
+        return { ...DEFAULT_DATA };
     }
 }
 
-// Write stored data
-async function writeStoredData(data) {
-    await fs.writeFile(
-        DATA_FILE,
-        JSON.stringify(data, null, 2),
-        "utf-8"
-    );
+async function writeData(data) {
+    await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
-// ---------- LOADER ----------
+/* ---------------- LOADER (GET) ---------------- */
 
 export async function loader() {
-    const storedData = await readStoredData();
-
-    return Response.json(
-        {
-            success: true,
-            config: storedData,
-        },
-        { status: 200 }
-    );
+    const data = await readData();
+    return new Response(JSON.stringify({ success: true, config: data }), {
+        headers: { "Content-Type": "application/json" },
+    });
 }
 
-// ---------- ACTION ----------
+/* ---------- TRANSFORM TO DB SCHEMA ---------- */
 
-export async function action({ request }) {
+const STYLE_KEYS = ["bgColor", "textColor", "accentColor", "buttonColor", "buttonTextColor", "borderRadius", "fontSize", "padding"];
+const CONDITION_KEYS = ["displayCondition", "productHandles", "collectionHandles", "displayTags"];
 
-    if (request.method !== "POST") {
-        return Response.json(
-            { error: "Method not allowed" },
-            { status: 405 }
-        );
+function transformForDB(data, shopDomain) {
+    const templates = data.templates || {};
+    const overrides = data.couponOverrides || {};
+    const selectedCoupons = data.selectedActiveCoupons || [];
+
+    // Build per-template DB object
+    function buildTemplate(tplKey) {
+        const tpl = templates[tplKey] || {};
+
+        // Separate styles
+        const styles = {};
+        for (const k of STYLE_KEYS) {
+            styles[k] = tpl[k] !== undefined ? tpl[k] : "";
+        }
+
+        // Only include coupons & overrides if this is the active template
+        const isActive = data.activeTemplate === tplKey;
+        const tplCoupons = isActive ? selectedCoupons : [];
+
+        // Build couponConditions and couponStyles from overrides for selected coupons
+        const couponConditions = [];
+        const couponStyles = {};
+
+        for (const couponId of tplCoupons) {
+            const ov = overrides[couponId] || {};
+
+            // Conditions
+            const condition = {
+                couponId,
+                displayCondition: ov.displayCondition || "all",
+            };
+            if (ov.productHandles?.length) condition.productHandles = ov.productHandles;
+            if (ov.collectionHandles?.length) condition.collectionHandles = ov.collectionHandles;
+            if (ov.displayTags?.length) condition.displayTags = ov.displayTags;
+            couponConditions.push(condition);
+
+            // Style overrides (only non-condition, non-style-key overrides = text overrides + color overrides)
+            const styleOv = {};
+            for (const [k, v] of Object.entries(ov)) {
+                if (!CONDITION_KEYS.includes(k)) {
+                    styleOv[k] = v;
+                }
+            }
+            if (Object.keys(styleOv).length > 0) {
+                couponStyles[couponId] = styleOv;
+            }
+        }
+
+        return {
+            name: tpl.name || "",
+            headingText: tpl.headingText || "",
+            subtextText: tpl.subtextText || "",
+            styles,
+            couponConditions,
+            selectedCoupons: tplCoupons,
+            couponStyles,
+        };
     }
 
+    return {
+        id: "",
+        shopDomain: shopDomain || "",
+        template1: buildTemplate("template1"),
+        template2: buildTemplate("template2"),
+        template3: buildTemplate("template3"),
+        selectedTemplate: data.activeTemplate || "",
+        selectedCouponsGlobal: selectedCoupons,
+    };
+}
+
+/* ---------------- ACTION (POST) ---------------- */
+
+export async function action({ request }) {
     try {
-        const data = await request.json();
-        const { actionType, shop } = data;
+        const body = await request.json();
 
-        if (actionType !== "saveCouponConfig") {
-            return Response.json(
-                { success: false, error: "Invalid actionType" },
-                { status: 400 }
-            );
-        }
+        // Read existing data
+        const existing = await readData();
 
-        const {
-            activeTemplate,
-            templateData,
-            selectedActiveCoupons,
-            couponOverrides, // Received from frontend
-            displayCondition,
-            productHandles,
-            collectionHandles,
-            displayTags,
-        } = data;
-
-        // Parse templates
-        const templates = typeof templateData === "string"
-            ? JSON.parse(templateData)
-            : templateData;
-
-        // Parse overrides
-        const overrides = typeof couponOverrides === "string"
-            ? JSON.parse(couponOverrides)
-            : (couponOverrides || {});
-
-        // Get active template config
-        const activeTpl = templates[activeTemplate] || {};
-
-        // Parse coupons to ensure we save names
-        const rawCoupons = selectedActiveCoupons || [];
-        const selectedCouponNames = rawCoupons.map(coupon => {
-            if (typeof coupon === 'object' && coupon !== null) {
-                return coupon.title || coupon.code || coupon.name || JSON.stringify(coupon);
-            }
-            return coupon;
-        });
-
-        // Determine EFFECTIVE configuration for "textContent", "color", "styling"
-        // If there's an override for the FIRST selected coupon, we use that as the "saved" visual state.
-        // This aligns with user expectation: "See it is not showing what i saved" (when they edited an override).
-        let effectiveTpl = { ...activeTpl };
-
-        // Use the first active coupon to check for overrides
-        const firstCouponId = rawCoupons.length > 0
-            ? (typeof rawCoupons[0] === 'object' ? rawCoupons[0].id : rawCoupons[0])
-            : null;
-
-        if (firstCouponId && overrides[firstCouponId]) {
-            effectiveTpl = { ...effectiveTpl, ...overrides[firstCouponId] };
-        }
-
-        // Extract structured data from the EFFECTIVE template
-        const textContent = {
-            headingText: effectiveTpl.headingText,
-            subtext: effectiveTpl.subtextText // Note: subtextText vs subtext
+        // Merge incoming fields onto existing data
+        const updated = {
+            ...existing,
+            ...(body.activeTemplate !== undefined && { activeTemplate: body.activeTemplate }),
+            ...(body.templateData !== undefined && { templates: { ...existing.templates, ...body.templateData } }),
+            ...(body.selectedActiveCoupons !== undefined && { selectedActiveCoupons: body.selectedActiveCoupons }),
+            ...(body.couponOverrides !== undefined && { couponOverrides: body.couponOverrides }),
         };
 
-        const color = {
-            bgColor: effectiveTpl.bgColor,
-            textColor: effectiveTpl.textColor,
-            accent: effectiveTpl.accentColor,
-            buttonColor: effectiveTpl.buttonColor,
-            buttonText: effectiveTpl.buttonTextColor
-        };
+        // Remove stale legacy top-level fields
+        delete updated.displayCondition;
+        delete updated.productHandles;
+        delete updated.collectionHandles;
+        delete updated.displayTags;
+        delete updated.selectedTemplate;
+        delete updated.selectedCouponNames;
+        delete updated.textContent;
+        delete updated.color;
+        delete updated.styling;
 
-        const styling = {
-            borderRadius: effectiveTpl.borderRadius,
-            fontSize: effectiveTpl.fontSize,
-            padding: effectiveTpl.padding
-        };
+        await writeData(updated);
 
-        // Parse display condition data
-        const parsedDisplayCondition = displayCondition || "all";
-        const parsedProductHandles = Array.isArray(productHandles) ? productHandles : [];
-        const parsedCollectionHandles = Array.isArray(collectionHandles) ? collectionHandles : [];
-        const parsedDisplayTags = Array.isArray(displayTags) ? displayTags : [];
+        // Transform to DB schema and send to external PHP endpoint
+        const shopDomain = body.shop || "";
+        const dbPayload = transformForDB(updated, shopDomain);
 
-        const newConfig = {
-            activeTemplate,
-            templates,
-            // Save IDs for frontend compatibility
-            selectedActiveCoupons: rawCoupons.map(c => (typeof c === 'object' && c !== null) ? c.id : c),
-            // New saved fields
-            selectedTemplate: activeTemplate,
-            selectedCouponNames,
-            textContent,
-            color,
-            styling,
-            couponOverrides: overrides, // Save overrides to config
-            // Display condition fields
-            displayCondition: parsedDisplayCondition,
-            productHandles: parsedProductHandles,
-            collectionHandles: parsedCollectionHandles,
-            displayTags: parsedDisplayTags,
-        };
-
-        // Save locally
-        await writeStoredData(newConfig);
-
-        // ---------- SEND TO PHP ENDPOINT ----------
         try {
-            const phpResponse = await fetch(
-                "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/test2.php",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        shop,
-                        // Send the full enhanced config
-                        ...newConfig
-                    }),
-                }
-            );
-
-            const phpResult = await phpResponse.text();
-            console.log("PHP Response:", phpResult);
-
-        } catch (err) {
-            console.error("Error sending data to PHP:", err);
+            const extRes = await fetch(EXTERNAL_API, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(dbPayload),
+            });
+            const extBody = await extRes.text();
+            console.log(`External API response [${extRes.status}]:`, extBody);
+        } catch (extErr) {
+            console.error("Failed to send to external API:", extErr.message);
         }
 
-        // ---------- LOGGING ----------
-        console.log("==========================================");
-        console.log("[SAVED] COUPON CONFIGURATION");
-        console.log("Shop:", shop);
-
-        console.log("Selected Template ID:", activeTemplate);
-        console.log("Active Coupons (IDs/Objs):", rawCoupons);
-        console.log("Active Coupon Names:", selectedCouponNames);
-
-        console.log("Text Content:", textContent);
-        console.log("Color:", color);
-        console.log("Styling:", styling);
-        console.log("Display Condition:", parsedDisplayCondition);
-        if (parsedDisplayCondition === "product_handle") console.log("Product Handles:", parsedProductHandles);
-        if (parsedDisplayCondition === "collection_handle") console.log("Collection Handles:", parsedCollectionHandles);
-        if (parsedDisplayCondition === "tag") console.log("Display Tags:", parsedDisplayTags);
-        console.log("==========================================");
-
-        return Response.json(
-            {
-                success: true,
-                message: "Coupon configuration saved successfully!",
-                shop,
-                config: newConfig,
-            },
-            { status: 200 }
+        return new Response(
+            JSON.stringify({ success: true, config: updated }),
+            { headers: { "Content-Type": "application/json" } }
         );
-
     } catch (error) {
-        console.error("Coupon API Error:", error);
-
-        return Response.json(
-            {
-                success: false,
-                error: "Invalid JSON or internal error",
-            },
-            { status: 400 }
+        console.error("Coupon slider action error:", error);
+        return new Response(
+            JSON.stringify({ success: false, error: error.message }),
+            { status: 500, headers: { "Content-Type": "application/json" } }
         );
     }
 }
