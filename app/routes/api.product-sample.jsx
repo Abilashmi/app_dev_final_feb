@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { validateRequestBody, validateFBTConfig, validateManualUpsellRules } from "../validators/product-sample.validator.js";
 
 const DATA_FILE = path.resolve("fbt-product-data.json");
 
@@ -146,9 +147,11 @@ export async function action({ request }) {
         const data = await request.json();
         const { actionType, shop } = data;
 
-        if (!actionType) {
+        // Validate top-level request body
+        const bodyCheck = validateRequestBody(data);
+        if (bodyCheck.status === "error") {
             return Response.json(
-                { success: false, error: "Missing actionType" },
+                { success: false, errors: bodyCheck.errors },
                 { status: 400 }
             );
         }
@@ -156,6 +159,15 @@ export async function action({ request }) {
         const storedData = await readStoredData();
 
         if (actionType === "saveFBTConfig") {
+
+            // Validate FBT config data
+            const configCheck = validateFBTConfig(data);
+            if (configCheck.status === "error") {
+                return Response.json(
+                    { success: false, errors: configCheck.errors },
+                    { status: 400 }
+                );
+            }
 
             const {
                 activeTemplate,
