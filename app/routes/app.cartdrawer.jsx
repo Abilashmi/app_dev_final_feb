@@ -3699,54 +3699,29 @@ export default function CartDrawerAdmin() {
                 {/* Coupon Feature - Product Widget Style */}
                 {featureStates.couponSliderEnabled && (
                   (() => {
-                    // Determine which coupons to show
-                    let couponsToShow = [];
+                    // Determine which coupons to show - ONLY show if explicitly selected
+                    if (selectedActiveCoupons.length === 0) return null;
 
-                    if (selectedActiveCoupons.length > 0) {
-                      couponsToShow = selectedActiveCoupons.map(id => {
-                        const apiCoupon = activeCouponsFromAPI.find(c => c.id === id);
-                        const override = couponOverrides[id] || {};
-                        if (apiCoupon) {
-                          return { ...apiCoupon, ...override, enabled: true };
-                        }
-                        return {
-                          id,
-                          code: override.code || 'LOADING...',
-                          label: override.label || 'Coupon',
-                          description: override.description || '...',
-                          discountType: 'percentage',
-                          discountValue: 0,
-                          backgroundColor: override.backgroundColor || '#000',
-                          textColor: override.textColor || '#fff',
-                          iconUrl: override.iconUrl || '🎟️',
-                          enabled: true,
-                          ...override
-                        };
-                      });
-                    } else if (allCoupons.length > 0) {
-                      couponsToShow = allCoupons.map(c => ({
-                        ...c,
-                        enabled: c.enabled !== undefined ? c.enabled : (c.is_enabled !== undefined ? c.is_enabled : true),
-                        code: c.code || c.coupon_code_text || 'CODE',
-                        label: c.label || 'Coupon Label',
-                        description: c.description || c.description_text || 'Description',
-                      })).filter(c => c.enabled);
-                    }
-
-                    if (couponsToShow.length === 0) {
-                      couponsToShow = [{
-                        id: 'sample-welcome',
-                        code: 'WELCOME10',
-                        label: 'Welcome Offer',
-                        description: 'Get 10% off your first order',
+                    const couponsToShow = selectedActiveCoupons.map(id => {
+                      const apiCoupon = activeCouponsFromAPI.find(c => c.id === id);
+                      const override = couponOverrides[id] || {};
+                      if (apiCoupon) {
+                        return { ...apiCoupon, ...override, enabled: true };
+                      }
+                      return {
+                        id,
+                        code: override.code || 'LOADING...',
+                        label: override.label || 'Coupon',
+                        description: override.description || '...',
                         discountType: 'percentage',
-                        discountValue: 10,
-                        backgroundColor: '#1a1a1a',
-                        textColor: '#ffffff',
-                        iconUrl: '🎉',
-                        enabled: true
-                      }];
-                    }
+                        discountValue: 0,
+                        backgroundColor: override.backgroundColor || '#000',
+                        textColor: override.textColor || '#fff',
+                        iconUrl: override.iconUrl || '🎟️',
+                        enabled: true,
+                        ...override
+                      };
+                    });
 
                     return (
                       <div style={{
