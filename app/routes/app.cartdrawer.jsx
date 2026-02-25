@@ -31,6 +31,7 @@ import {
   Banner,
   Spinner,
   RadioButton,
+  ContextualSaveBar,
 } from '@shopify/polaris';
 import {
   sampleCoupons,
@@ -72,8 +73,8 @@ const mockCartData = {
   cartValue: 100,
   totalQuantity: 3,
   items: [
-    { id: 1, title: 'Premium Hoodie', price: 50, quantity: 1 },
-    { id: 2, title: 'Classic T-Shirt', price: 25, quantity: 2 },
+    { id: 'sp-6', title: 'Premium Hoodie', price: 50, quantity: 1, productId: 'sp-6' },
+    { id: 'sp-2', title: 'Classic T-Shirt', price: 25, quantity: 2, productId: 'sp-2' },
   ],
 };
 
@@ -754,28 +755,22 @@ export default function CartDrawerAdmin() {
   // UPSELL EDITOR STATE (RULE 1/2/3 CONFIG)
   // ==========================================
   const [upsellConfig, setUpsellConfig] = useState({
-    enabled: true,
-    showOnEmptyCart: false,
-    activeTemplate: UPSELL_STYLES.GRID,
+    enabled: false,
+    useAI: true,
+    showIfInCart: false,
+    limit: 3,
+    showReviews: false,
+    activeTemplate: UPSELL_STYLES?.GRID || 'grid',
     upsellTitle: {
       text: 'Recommended for you',
       color: '#111827',
       formatting: { bold: false, italic: false, underline: false },
     },
-    rule1: {
-      enabled: true,
-      upsellProducts: ['sp-1', 'sp-2'],
-    },
-    rule2: {
-      enabled: false,
-      triggerProducts: [],
-      upsellProducts: [],
-    },
-    rule3: {
-      enabled: false,
-      cartValueThreshold: 1000,
-      upsellProducts: [],
-    },
+    buttonText: 'Add to cart',
+    position: 'bottom',
+    direction: 'block',
+    showOnEmptyCart: true,
+    manualRules: [],
   });
   const [initialUpsellConfig, setInitialUpsellConfig] = useState(null);
   const [upsellSaving, setUpsellSaving] = useState(false);
@@ -862,7 +857,7 @@ export default function CartDrawerAdmin() {
           setFeatureStates({
             progressBarEnabled: settings.progressBar?.enabled ?? false,
             couponSliderEnabled: settings.coupons?.enabled ?? false,
-            upsellEnabled: settings.upsell?.enabled ?? false,
+            upsellEnabled: settings.upsell?.enabled ?? false, // Default to false if missing
           });
 
           // 3. Update Progress Bar
@@ -871,13 +866,21 @@ export default function CartDrawerAdmin() {
             setProgressMode(settings.progressBar.mode || 'amount');
           }
 
-          // 4. Update Upsell
+          // 4. Update Upsell - Merge with defaults
           if (settings.upsell) {
-            setUpsellConfig(settings.upsell);
-            setUpsellRulesConfig(settings.upsell);
-            setInitialUpsellConfig(settings.upsell);
-            setManualUpsellRules(settings.upsell.manualRules || []);
-            setInitialManualUpsellRules(JSON.parse(JSON.stringify(settings.upsell.manualRules || [])));
+            const mergedUpsell = {
+              enabled: false,
+              useAI: true,
+              showOnEmptyCart: true,
+              limit: 3,
+              position: 'bottom',
+              ...settings.upsell
+            };
+            setUpsellConfig(mergedUpsell);
+            setUpsellRulesConfig(mergedUpsell);
+            setInitialUpsellConfig(mergedUpsell);
+            setManualUpsellRules(mergedUpsell.manualRules || []);
+            setInitialManualUpsellRules(JSON.parse(JSON.stringify(mergedUpsell.manualRules || [])));
           }
 
           // 5. Update Style Settings
@@ -941,7 +944,6 @@ export default function CartDrawerAdmin() {
     }
 
     // Trigger immediate sync to sample API
-    // We pass null to use the current cartStatus, but we update the features in the payload
     handleSaveAll(null, { [feature]: newValue });
   };
 
@@ -1080,19 +1082,65 @@ export default function CartDrawerAdmin() {
 
 
   const handleAddToCart = async (product) => {
-    // Update mock cart data
-    const priceNum = typeof product.price === 'string' ? parseFloat(product.price) : (product.price || 0);
-
     setCartData(prev => {
-      const newItems = [...prev.items, { ...product, id: `added-${Date.now()}`, quantity: 1 }];
+      const productId = product.id || product.productId;
+      const existingItem = prev.items.find(item => (item.id === productId || item.productId === productId));
+
+      let newItems;
+      if (existingItem) {
+        newItems = prev.items.map(item =>
+          (item.id === productId || item.productId === productId)
+            ? { ...item, quantity: (item.quantity || 1) + 1 }
+            : item
+        );
+      } else {
+        newItems = [...prev.items, {
+          ...product,
+          id: productId,
+          productId: productId,
+          quantity: 1,
+          image: product.image,
+          price: product.price,
+          title: product.title || product.name
+        }];
+      }
+
       return {
         ...prev,
+        items: newItems,
         cartValue: newItems.reduce((sum, item) => sum + (Number(item.price) || 0) * (item.quantity || 1), 0),
         totalQuantity: newItems.reduce((sum, item) => sum + (item.quantity || 1), 0),
-        items: newItems,
       };
     });
     setShowProductModal(false);
+  };
+
+  const handleUpdateQuantity = (idx, delta) => {
+    setCartData(prev => {
+      const updatedItems = [...prev.items];
+      if (updatedItems[idx]) {
+        const newQty = Math.max(1, (updatedItems[idx].quantity || 1) + delta);
+        updatedItems[idx] = { ...updatedItems[idx], quantity: newQty };
+      }
+      return {
+        ...prev,
+        items: updatedItems,
+        cartValue: updatedItems.reduce((sum, item) => sum + (Number(item.price) || 0) * (item.quantity || 1), 0),
+        totalQuantity: updatedItems.reduce((sum, item) => sum + (item.quantity || 1), 0),
+      };
+    });
+  };
+
+  const handleRemoveProduct = (idx) => {
+    setCartData(prev => {
+      const newItems = prev.items.filter((_, i) => i !== idx);
+      return {
+        ...prev,
+        items: newItems,
+        cartValue: newItems.reduce((sum, item) => sum + (Number(item.price) || 0) * (item.quantity || 1), 0),
+        totalQuantity: newItems.reduce((sum, item) => sum + (item.quantity || 1), 0),
+      };
+    });
   };
 
   const handleMilestoneProductClick = (productIds, rewardText) => {
@@ -1117,9 +1165,9 @@ export default function CartDrawerAdmin() {
     } else if (currentUpsellRule !== null) {
       // Saving for manual upsell rules
       if (upsellPickerMode === 'trigger') {
-        handleUpdateUpsellRule(currentUpsellRule, { triggerProductIds: selectedProductIds });
+        updateManualUpsellRule(currentUpsellRule, { triggerProductIds: selectedProductIds });
       } else if (upsellPickerMode === 'upsell') {
-        handleUpdateUpsellRule(currentUpsellRule, { upsellProductIds: selectedProductIds });
+        updateManualUpsellRule(currentUpsellRule, { upsellProductIds: selectedProductIds });
       }
     }
     setShowProductPicker(false);
@@ -1132,7 +1180,7 @@ export default function CartDrawerAdmin() {
 
   const handleSaveSelectedCollections = () => {
     if (currentUpsellRule !== null) {
-      handleUpdateUpsellRule(currentUpsellRule, { triggerCollectionIds: selectedCollectionIds });
+      updateManualUpsellRule(currentUpsellRule, { triggerCollectionIds: selectedCollectionIds });
     }
     setShowCollectionPicker(false);
     setCurrentUpsellRule(null);
@@ -1398,28 +1446,19 @@ export default function CartDrawerAdmin() {
   const getUpsellValidationError = () => {
     if (!upsellConfig) return '';
 
-    // Validation relaxed: no rules required to save
-
-
-    if (upsellConfig.rule1?.enabled && (!upsellConfig.rule1?.upsellProducts || upsellConfig.rule1.upsellProducts.length === 0)) {
-      return 'Rule #1: Select at least one upsell product';
-    }
-
-    if (upsellConfig.rule2?.enabled) {
-      if (!upsellConfig.rule2?.triggerProducts || upsellConfig.rule2.triggerProducts.length === 0) {
-        return 'Rule #2: Select at least one trigger product';
+    if (upsellConfig.enabled && !upsellConfig.useAI) {
+      if (!upsellConfig.manualRules || upsellConfig.manualRules.length === 0) {
+        return 'Please add at least one manual upsell rule or enable AI.';
       }
-      if (!upsellConfig.rule2?.upsellProducts || upsellConfig.rule2.upsellProducts.length === 0) {
-        return 'Rule #2: Select at least one upsell product';
-      }
-    }
 
-    if (upsellConfig.rule3?.enabled) {
-      if (!upsellConfig.rule3?.cartValueThreshold || upsellConfig.rule3.cartValueThreshold <= 0) {
-        return 'Rule #3: Set a valid cart value threshold';
-      }
-      if (!upsellConfig.rule3?.upsellProducts || upsellConfig.rule3.upsellProducts.length === 0) {
-        return 'Rule #3: Select at least one upsell product';
+      for (let i = 0; i < upsellConfig.manualRules.length; i++) {
+        const rule = upsellConfig.manualRules[i];
+        if (!rule.triggerProductIds || rule.triggerProductIds.length === 0) {
+          return `Rule #${i + 1}: Select at least one trigger product.`;
+        }
+        if (!rule.upsellProductIds || rule.upsellProductIds.length === 0) {
+          return `Rule #${i + 1}: Select at least one upsell product.`;
+        }
       }
     }
 
@@ -1456,7 +1495,10 @@ export default function CartDrawerAdmin() {
         selectedActiveCoupons,
         couponOverrides
       }),
-      upsell_data: JSON.stringify(upsellConfig),
+      upsell_data: JSON.stringify({
+        ...upsellConfig,
+        manualRules: manualUpsellRules
+      }),
       progress_status: isProgressOn ? 1 : 0,
       coupon_status: isCouponOn ? 1 : 0,
       upsell_status: isUpsellOn ? 1 : 0
@@ -1491,7 +1533,7 @@ export default function CartDrawerAdmin() {
     }
   };
 
-  const isUpsellConfigDirty = JSON.stringify(upsellConfig) !== JSON.stringify(initialUpsellConfig);
+  const isUpsellConfigDirty = initialUpsellConfig && JSON.stringify(upsellConfig) !== JSON.stringify(initialUpsellConfig);
 
   const handleSaveUpsellRules = async () => {
     const error = getUpsellValidationError();
@@ -1560,6 +1602,47 @@ export default function CartDrawerAdmin() {
   };
 
   const saveProductPickerSelection = () => {
+    if (editingRuleId?.startsWith('manual-')) {
+      const parts = editingRuleId.split('-');
+      const index = parseInt(parts[1]);
+      const field = parts[2]; // 'trigger' or 'upsell'
+
+      const newRules = [...(upsellConfig.manualRules || [])];
+      if (newRules[index]) {
+        if (field === 'trigger') {
+          newRules[index].triggerProductIds = tempSelectedProductIds;
+        } else {
+          newRules[index].upsellProductIds = tempSelectedProductIds;
+        }
+
+        setUpsellConfig({
+          ...upsellConfig,
+          manualRules: newRules
+        });
+      }
+
+      setShowProductPickerModal(false);
+      setEditingRuleId(null);
+      setProductPickerMode(null);
+      setTempSelectedProductIds([]);
+      return;
+    }
+
+    if (editingRuleId === 'rule2-trigger') {
+      setUpsellConfig({
+        ...upsellConfig,
+        rule2: {
+          ...upsellConfig.rule2,
+          triggerProducts: tempSelectedProductIds
+        }
+      });
+      setShowProductPickerModal(false);
+      setEditingRuleId(null);
+      setProductPickerMode(null);
+      setTempSelectedProductIds([]);
+      return;
+    }
+
     const rule = manualUpsellRules.find(r => r.id === editingRuleId);
     if (!rule) return;
 
@@ -1689,7 +1772,7 @@ export default function CartDrawerAdmin() {
                     { label: 'Show items in cart', value: 'items' },
                     { label: 'Show empty cart', value: 'empty' },
                   ]}
-                  selected={previewCartState}
+                  selected={previewCartState.length > 0 ? previewCartState : ['items']}
                   onChange={setPreviewCartState}
                 />
               </BlockStack>
@@ -1924,7 +2007,7 @@ export default function CartDrawerAdmin() {
                       helpText: 'Progress tracked by total number of items',
                     },
                   ]}
-                  selected={[progressMode]}
+                  selected={[progressMode || 'amount']}
                   onChange={(value) => setProgressMode(value[0])}
                 />
               </BlockStack>
@@ -2702,306 +2785,204 @@ export default function CartDrawerAdmin() {
               </InlineStack>
             </BlockStack>
 
-            {/* Show on Empty Cart - NOW AT TOP */}
+            {/* Header with Status */}
             <Card>
-              <BlockStack gap="200">
+              <BlockStack gap="400">
                 <InlineStack align="space-between" blockAlign="center">
-                  <BlockStack gap="050">
-                    <Text variant="headingSm">Show on Empty Cart</Text>
-                    <Text variant="bodySm" tone="subdued">Display recommendations even if cart is empty</Text>
+                  <BlockStack gap="100">
+                    <Text variant="headingLg" as="h1">Upsells</Text>
                   </BlockStack>
-                  <Checkbox
-                    checked={upsellConfig.showOnEmptyCart}
-                    onChange={(checked) =>
-                      setUpsellConfig({ ...upsellConfig, showOnEmptyCart: checked })
-                    }
-                  />
+                  {isUpsellConfigDirty ? (
+                    <Badge tone="attention">Unsaved Changes</Badge>
+                  ) : (
+                    <Badge tone={upsellConfig.enabled ? 'success' : 'subdued'}>
+                      {upsellConfig.enabled ? 'Active' : 'Draft'}
+                    </Badge>
+                  )}
                 </InlineStack>
+                <Divider />
+                <Checkbox
+                  label="Use AI recommended upsells"
+                  checked={upsellConfig.useAI}
+                  onChange={(checked) => setUpsellConfig({ ...upsellConfig, useAI: checked })}
+                />
               </BlockStack>
             </Card>
 
-            {/* Settings (only show if enabled) */}
-            {upsellConfig.enabled && (
-              <>
-                {/* Templates Section */}
-                <Card>
-                  <BlockStack gap="300">
-                    <Text variant="headingSm" as="h2">Select Upsell Template</Text>
-                    <InlineStack gap="300">
-                      {Object.entries(UPSELL_STYLE_METADATA).map(([styleKey, metadata]) => (
-                        <Button
-                          key={styleKey}
-                          pressed={upsellConfig.activeTemplate === styleKey}
-                          onClick={() => setUpsellConfig({ ...upsellConfig, activeTemplate: styleKey })}
-                        >
-                          {metadata.name}
-                        </Button>
-                      ))}
-                    </InlineStack>
+            {/* Manual Product Selection (only if AI is off) */}
+            {!upsellConfig.useAI && (
+              <Card>
+                <BlockStack gap="400">
+                  <BlockStack gap="100">
+                    <Text variant="headingMd" as="h2">Manual Upsell Rules</Text>
+                    <Text variant="bodySm" tone="subdued">Configure product-specific recommendation rules</Text>
                   </BlockStack>
-                </Card>
+                  <Divider />
 
-                {/* Title & Formatting */}
-                <Card>
                   <BlockStack gap="300">
-                    <Text variant="headingSm">Upsell Title & Style</Text>
+                    {upsellConfig.manualRules?.length > 0 ? (
+                      upsellConfig.manualRules.map((rule, idx) => (
+                        <div key={idx} style={{ padding: '12px', border: '1px solid #e1e3e5', borderRadius: '8px', backgroundColor: '#f9fafb' }}>
+                          <BlockStack gap="200">
+                            <InlineStack align="space-between">
+                              <Text variant="bodyMd" fontWeight="bold">Rule #{idx + 1}</Text>
+                              <Button variant="plain" tone="critical" onClick={() => {
+                                const newRules = [...upsellConfig.manualRules];
+                                newRules.splice(idx, 1);
+                                setUpsellConfig({ ...upsellConfig, manualRules: newRules });
+                              }}>Remove</Button>
+                            </InlineStack>
+                            <Divider />
+                            <BlockStack gap="100">
+                              <Text variant="bodySm" fontWeight="bold">If this product is in cart:</Text>
+                              <Button onClick={() => {
+                                setEditingRuleId(`manual-${idx}-trigger`);
+                                setProductPickerMode('trigger');
+                                setTempSelectedProductIds(rule.triggerProductIds || []);
+                                setShowProductPickerModal(true);
+                              }}>
+                                {rule.triggerProductIds?.length ? `${rule.triggerProductIds.length} Trigger Products` : 'Select trigger product'}
+                              </Button>
+                            </BlockStack>
+                            <BlockStack gap="100">
+                              <Text variant="bodySm" fontWeight="bold">Then recommend these products:</Text>
+                              <Button onClick={() => {
+                                setEditingRuleId(`manual-${idx}-upsell`);
+                                setProductPickerMode('upsell');
+                                setTempSelectedProductIds(rule.upsellProductIds || []);
+                                setShowProductPickerModal(true);
+                              }}>
+                                {rule.upsellProductIds?.length ? `${rule.upsellProductIds.length} Upsell Products` : 'Select upsell products'}
+                              </Button>
+                            </BlockStack>
+                          </BlockStack>
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ padding: '20px', textAlign: 'center', border: '1px dashed #c9cccf', borderRadius: '8px' }}>
+                        <Text tone="subdued">No manual rules yet. Add your first rule below.</Text>
+                      </div>
+                    )}
+                    <Button variant="primary" onClick={() => {
+                      const newRules = [...(upsellConfig.manualRules || []), { triggerProductIds: [], upsellProductIds: [] }];
+                      setUpsellConfig({ ...upsellConfig, manualRules: newRules });
+                    }}>Add new rule</Button>
+                  </BlockStack>
+                </BlockStack>
+              </Card>
+            )}
 
-                    <InlineStack gap="400" blockAlign="end">
+            {/* Upsell Settings Card */}
+            <Card>
+              <BlockStack gap="400">
+                <Text variant="headingMd" as="h2">Upsell settings</Text>
+                <Divider />
+
+                <BlockStack gap="300">
+                  <Checkbox
+                    label="Show upsell offer if item already in cart"
+                    checked={upsellConfig.showIfInCart}
+                    onChange={(val) => setUpsellConfig({ ...upsellConfig, showIfInCart: val })}
+                  />
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ flex: 1 }}>
+                      <Text variant="bodyMd">Limit the number of upsells in the cart</Text>
+                    </div>
+                    <div style={{ width: '80px' }}>
+                      <TextField
+                        type="number"
+                        value={String(upsellConfig.limit)}
+                        onChange={(val) => setUpsellConfig({ ...upsellConfig, limit: Number(val) })}
+                        autoComplete="off"
+                        labelHidden
+                        label="Limit"
+                      />
+                    </div>
+                  </div>
+
+                  <BlockStack gap="100">
+                    <Checkbox
+                      label="Show product reviews on upsells"
+                      checked={upsellConfig.showReviews}
+                      onChange={(val) => setUpsellConfig({ ...upsellConfig, showReviews: val })}
+                    />
+                    <Text variant="bodySm" tone="subdued">
+                      Product reviews will also be shown on recommendations. This integration will only work with product review apps that allow the Shopify Storefront API to read product review data stored in metafields.
+                    </Text>
+                  </BlockStack>
+
+                  <Divider />
+
+                  <BlockStack gap="200">
+                    <Text variant="bodyMd" fontWeight="bold">Upsell title</Text>
+                    <InlineStack gap="300" blockAlign="end">
                       <div style={{ flex: 1 }}>
                         <TextField
                           label="Title text"
-                          value={upsellConfig.upsellTitle?.text || 'Recommended for you'}
-                          onChange={(value) =>
-                            setUpsellConfig({
-                              ...upsellConfig,
-                              upsellTitle: { ...upsellConfig.upsellTitle, text: value },
-                            })
-                          }
-                          placeholder="e.g., Recommended for you"
+                          labelHidden
+                          value={upsellConfig.upsellTitle?.text}
+                          onChange={(val) => setUpsellConfig({ ...upsellConfig, upsellTitle: { ...upsellConfig.upsellTitle, text: val } })}
                           autoComplete="off"
                         />
                       </div>
                       <ColorPickerField
-                        label="Title Color"
-                        value={upsellConfig.upsellTitle?.color || '#111827'}
-                        onChange={(value) =>
-                          setUpsellConfig({
-                            ...upsellConfig,
-                            upsellTitle: { ...upsellConfig.upsellTitle, color: value },
-                          })
-                        }
+                        label="Title color"
+                        labelHidden
+                        value={upsellConfig.upsellTitle?.color}
+                        onChange={(val) => setUpsellConfig({ ...upsellConfig, upsellTitle: { ...upsellConfig.upsellTitle, color: val } })}
                       />
                     </InlineStack>
-
-                    {/* Text Formatting Buttons */}
-                    <BlockStack gap="100">
-                      <Text variant="bodySm" fontWeight="semibold">Formatting</Text>
-                      <InlineStack gap="100">
-                        <Button
-                          onClick={() =>
-                            setUpsellConfig({
-                              ...upsellConfig,
-                              upsellTitle: {
-                                ...upsellConfig.upsellTitle,
-                                formatting: {
-                                  ...upsellConfig.upsellTitle?.formatting,
-                                  bold: !upsellConfig.upsellTitle?.formatting?.bold,
-                                },
-                              },
-                            })
-                          }
-                          variant={upsellConfig.upsellTitle?.formatting?.bold ? 'primary' : 'secondary'}
-                          size="slim"
-                        >
-                          <strong>B</strong>
-                        </Button>
-                        <Button
-                          onClick={() =>
-                            setUpsellConfig({
-                              ...upsellConfig,
-                              upsellTitle: {
-                                ...upsellConfig.upsellTitle,
-                                formatting: {
-                                  ...upsellConfig.upsellTitle?.formatting,
-                                  italic: !upsellConfig.upsellTitle?.formatting?.italic,
-                                },
-                              },
-                            })
-                          }
-                          variant={upsellConfig.upsellTitle?.formatting?.italic ? 'primary' : 'secondary'}
-                          size="slim"
-                        >
-                          <em>I</em>
-                        </Button>
-                        <Button
-                          onClick={() =>
-                            setUpsellConfig({
-                              ...upsellConfig,
-                              upsellTitle: {
-                                ...upsellConfig.upsellTitle,
-                                formatting: {
-                                  ...upsellConfig.upsellTitle?.formatting,
-                                  underline: !upsellConfig.upsellTitle?.formatting?.underline,
-                                },
-                              },
-                            })
-                          }
-                          variant={upsellConfig.upsellTitle?.formatting?.underline ? 'primary' : 'secondary'}
-                          size="slim"
-                        >
-                          <u>U</u>
-                        </Button>
-                      </InlineStack>
-                    </BlockStack>
                   </BlockStack>
-                </Card>
 
-                {/* Position & Alignment */}
-                <Card>
                   <BlockStack gap="200">
-                    <Text variant="headingSm">Display Settings</Text>
-
-                    <BlockStack gap="150">
-                      <BlockStack gap="050">
-                        <Text variant="bodySm" fontWeight="semibold">Position in Cart</Text>
-                        <InlineStack gap="200">
-                          <Checkbox
-                            label="Top of cart"
-                            checked={upsellConfig.position === 'top'}
-                            onChange={() => setUpsellConfig({ ...upsellConfig, position: 'top' })}
-                          />
-                          <Checkbox
-                            label="Bottom of cart"
-                            checked={upsellConfig.position === 'bottom'}
-                            onChange={() => setUpsellConfig({ ...upsellConfig, position: 'bottom' })}
-                          />
-                        </InlineStack>
-                      </BlockStack>
-
-                      <BlockStack gap="050">
-                        <Text variant="bodySm" fontWeight="semibold">Layout</Text>
-                        <InlineStack gap="200">
-                          <Checkbox
-                            label="Grid (2 columns)"
-                            checked={upsellConfig.layout === 'grid'}
-                            onChange={() => setUpsellConfig({ ...upsellConfig, layout: 'grid' })}
-                          />
-                          <Checkbox
-                            label="Carousel"
-                            checked={upsellConfig.layout === 'carousel'}
-                            onChange={() => setUpsellConfig({ ...upsellConfig, layout: 'carousel' })}
-                          />
-                        </InlineStack>
-                      </BlockStack>
-
-                      <BlockStack gap="050">
-                        <Text variant="bodySm" fontWeight="semibold">Alignment</Text>
-                        <InlineStack gap="200">
-                          <Checkbox
-                            label="Horizontal"
-                            checked={upsellConfig.alignment === 'horizontal'}
-                            onChange={() => setUpsellConfig({ ...upsellConfig, alignment: 'horizontal' })}
-                          />
-                          <Checkbox
-                            label="Vertical"
-                            checked={upsellConfig.alignment === 'vertical'}
-                            onChange={() => setUpsellConfig({ ...upsellConfig, alignment: 'vertical' })}
-                          />
-                        </InlineStack>
-                      </BlockStack>
-                    </BlockStack>
+                    <Text variant="bodyMd" fontWeight="bold">Button text</Text>
+                    <TextField
+                      label="Button text"
+                      labelHidden
+                      value={upsellConfig.buttonText}
+                      onChange={(val) => setUpsellConfig({ ...upsellConfig, buttonText: val })}
+                      autoComplete="off"
+                    />
                   </BlockStack>
-                </Card>
 
-                {/* Upsell Rules Section */}
-                <Card>
                   <BlockStack gap="200">
-                    <BlockStack gap="050">
-                      <Text variant="headingSm">Upsell Rules</Text>
-                      <Text variant="bodySm" tone="subdued">Configure which products to recommend</Text>
-                    </BlockStack>
-
-                    {/* Manual Rules */}
-                    <BlockStack gap="150">
-                      <BlockStack gap="100">
-                        <Checkbox
-                          label="Use manual rules"
-                          checked={upsellConfig.upsellMode === 'manual'}
-                          onChange={() =>
-                            setUpsellConfig({
-                              ...upsellConfig,
-                              upsellMode: upsellConfig.upsellMode === 'manual' ? 'ai' : 'manual',
-                            })
-                          }
-                        />
-                        {upsellConfig.upsellMode === 'manual' && (
-                          <Button
-                            onClick={() => {
-                              setInitialManualUpsellRules(JSON.parse(JSON.stringify(manualUpsellRules)));
-                              setShowManualUpsellBuilder(true);
-                            }}
-                            variant="secondary"
-                            fullWidth
-                          >
-                            {manualUpsellRules.length === 0
-                              ? '+ Add Rule'
-                              : `Edit Rules (${manualUpsellRules.length})`}
-                          </Button>
-                        )}
-                      </BlockStack>
-
-                      <BlockStack gap="100">
-                        <Checkbox
-                          label="Use AI recommendations"
-                          checked={upsellConfig.upsellMode === 'ai'}
-                          onChange={() =>
-                            setUpsellConfig({
-                              ...upsellConfig,
-                              upsellMode: upsellConfig.upsellMode === 'ai' ? 'manual' : 'ai',
-                            })
-                          }
-                        />
-                        {upsellConfig.upsellMode === 'ai' && (
-                          <Text variant="bodySm" tone="subdued">AI will analyze cart and suggest relevant products</Text>
-                        )}
-                      </BlockStack>
-                    </BlockStack>
+                    <Text variant="bodyMd" fontWeight="bold">Upsell position</Text>
+                    <div style={{ padding: '4px' }}>
+                      <ChoiceList
+                        title=""
+                        choices={[
+                          { label: 'Top of cart items', value: 'top' },
+                          { label: 'Bottom of cart items', value: 'bottom' },
+                        ]}
+                        selected={[upsellConfig.position || 'bottom']}
+                        onChange={(val) => setUpsellConfig({ ...upsellConfig, position: val[0] })}
+                      />
+                    </div>
                   </BlockStack>
-                </Card>
 
-                {/* Active Rules Summary */}
-                {manualUpsellRules.length > 0 && upsellConfig.upsellMode === 'manual' && (
-                  <Card tone="info">
-                    <BlockStack gap="200">
-                      <Text variant="headingSm">Active Rules ({manualUpsellRules.length})</Text>
-                      {manualUpsellRules.map((rule, idx) => (
-                        <BlockStack key={rule.id} gap="100">
-                          <InlineStack align="space-between" blockAlign="center">
-                            <BlockStack gap="050">
-                              <Text variant="bodySm" fontWeight="semibold">Rule #{idx + 1}</Text>
-                              <Text variant="bodySm" tone="subdued">
-                                {getTriggerSummary(rule)} → {getUpsellSummary(rule)}
-                              </Text>
-                            </BlockStack>
-                            <Button
-                              variant="plain"
-                              tone="critical"
-                              size="slim"
-                              onClick={() => removeManualUpsellRule(rule.id)}
-                            >
-                              ✕
-                            </Button>
-                          </InlineStack>
-                        </BlockStack>
-                      ))}
-                    </BlockStack>
-                  </Card>
-                )}
+                  <BlockStack gap="200">
+                    <Text variant="bodyMd" fontWeight="bold">Upsell direction</Text>
+                    <div style={{ padding: '4px' }}>
+                      <ChoiceList
+                        title=""
+                        choices={[
+                          { label: 'Block', value: 'block' },
+                          { label: 'Row', value: 'row' },
+                        ]}
+                        selected={[upsellConfig.direction || 'block']}
+                        onChange={(val) => setUpsellConfig({ ...upsellConfig, direction: val[0] })}
+                      />
+                    </div>
+                  </BlockStack>
+                </BlockStack>
+              </BlockStack>
+            </Card>
 
-                {/* Validation Error */}
-                {validationError && (
-                  <Card tone="critical">
-                    <BlockStack gap="100">
-                      <Text variant="bodyMd" fontWeight="semibold">⚠️ Configuration Error</Text>
-                      <Text variant="bodySm">{validationError}</Text>
-                    </BlockStack>
-                  </Card>
-                )}
-
-                {/* Save Buttons - NOW SMALL AND DEFAULT */}
-                <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '12px', marginTop: '10px' }}>
-                  <Button
-                    variant="primary"
-                    onClick={handleSaveUpsellRules}
-                    loading={upsellSaving}
-                  >
-                    Save Settings
-                  </Button>
-                  <Button onClick={handleCancelUpsellRules}>
-                    Cancel
-                  </Button>
-                </div>
-              </>
+            {validationError && (
+              <Banner tone="critical">
+                <p>{validationError}</p>
+              </Banner>
             )}
           </BlockStack>
         </div>
@@ -3020,17 +3001,19 @@ export default function CartDrawerAdmin() {
   const renderCartPreview = () => {
     const showEmpty = previewCartState[0] === 'empty';
     const currentItems = cartData.items || [];
-    const cartProductIds = currentItems.map(item => item.productId).filter(Boolean);
+    const cartProductIds = currentItems.map(item => item.productId || item.id || item.variantId).filter(Boolean);
     const cartCollectionIds = cartProductIds.flatMap((productId) => {
       const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
       return product?.collections || [];
     });
 
+    const currentProgressMode = progressMode || 'amount';
+
     // Derive milestones from current settings for LIVE preview
     const previewMilestones = progressBarSettings.tiers.map(tier => ({
       id: tier.id,
       target: tier.minValue,
-      label: progressMode === 'amount' ? `₹${tier.minValue}` : `${tier.minValue} items`,
+      label: currentProgressMode === 'amount' ? `₹${tier.minValue}` : `${tier.minValue} items`,
       rewardText: tier.description,
       associatedProducts: tier.products || []
     })).sort((a, b) => a.target - b.target);
@@ -3038,7 +3021,7 @@ export default function CartDrawerAdmin() {
     const maxTargetSetting = progressBarSettings.maxTarget || 1000;
 
     // Derive unlocked rewards for the items list
-    const currentProgressVal = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
+    const currentProgressVal = currentProgressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
     const reachedWithProducts = previewMilestones.filter(ms => currentProgressVal >= ms.target && ms.associatedProducts.length > 0);
     const allReachedProductIds = [...new Set(reachedWithProducts.flatMap(ms => ms.associatedProducts))];
 
@@ -3084,6 +3067,179 @@ export default function CartDrawerAdmin() {
     }, 0);
 
     const previewFinalTotal = Math.max(0, totalWithRewards - previewTotalDiscount);
+
+    // Calculate Upsell Recommendations Once for use in Footer or Body
+    let upsellProductsToShow = [];
+    const internalEnabled = featureStates.upsellEnabled;
+    const internalUseAI = upsellConfig.useAI !== undefined ? upsellConfig.useAI : true;
+
+    if (internalEnabled) {
+      if (internalUseAI) {
+        // Mock AI recommendations
+        upsellProductsToShow = ['sp-2', 'sp-6', 'sp-8'];
+      } else if (upsellConfig.manualRules?.length > 0) {
+        // Manual Rules Evaluation
+        const cartProductIds = itemsToRender.map(item => item.productId || item.id);
+        const matchingRule = upsellConfig.manualRules.find(rule =>
+          rule.triggerProductIds?.some(id => cartProductIds.includes(id))
+        );
+        if (matchingRule) {
+          upsellProductsToShow = matchingRule.upsellProductIds || [];
+        }
+      }
+
+      // Filter out products already in cart if setting is enabled
+      if (!upsellConfig.showIfInCart) {
+        const currentInCartIds = itemsToRender.map(item => item.productId || item.id);
+        upsellProductsToShow = upsellProductsToShow.filter(id => !currentInCartIds.includes(id));
+      }
+
+      // Apply limit
+      if (upsellConfig.limit) {
+        upsellProductsToShow = upsellProductsToShow.slice(0, upsellConfig.limit);
+      }
+    }
+
+    const currentEnabled = featureStates.upsellEnabled;
+    const currentUseAI = upsellConfig.useAI !== undefined ? upsellConfig.useAI : true;
+    const currentPos = upsellConfig.position || 'bottom';
+    const currentDir = upsellConfig.direction || 'block';
+
+    const upsellSectionJSX = currentEnabled && (upsellConfig.showOnEmptyCart || !showEmpty) && (
+      <div style={{
+        padding: '12px 16px',
+        backgroundColor: '#f8fafc',
+        borderBottom: '1px solid #e5e7eb',
+        borderTop: currentPos === 'top' ? '1px solid #e5e7eb' : 'none',
+        marginTop: currentPos === 'top' ? '12px' : '0',
+        flexShrink: 0
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <p style={{
+            margin: 0,
+            fontSize: '12px',
+            fontWeight: upsellConfig.upsellTitle?.formatting?.bold ? '900' : '800',
+            fontStyle: upsellConfig.upsellTitle?.formatting?.italic ? 'italic' : 'normal',
+            textDecoration: upsellConfig.upsellTitle?.formatting?.underline ? 'underline' : 'none',
+            color: upsellConfig.upsellTitle?.color || '#1e293b',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em'
+          }}>
+            {upsellConfig.upsellTitle?.text || 'Recommended for you'}
+          </p>
+        </div>
+        <div style={{
+          display: 'flex',
+          flexDirection: currentDir === 'row' ? 'row' : 'column',
+          gap: '12px',
+          overflowX: currentDir === 'row' ? 'auto' : 'hidden',
+          paddingBottom: '4px',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none'
+        }}>
+          {upsellProductsToShow.length > 0 ? upsellProductsToShow.map(productId => {
+            const product = SAMPLE_UPSELL_PRODUCTS.find(p => p.id === productId)
+              || (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
+            if (!product) return null;
+            const hasImage = product.image && (typeof product.image === 'string') && (product.image.startsWith('http') || product.image.startsWith('//'));
+
+            return (
+              <div key={product.id} style={{
+                minWidth: currentDir === 'row' ? '140px' : '100%',
+                maxWidth: currentDir === 'row' ? '140px' : '100%',
+                backgroundColor: '#fff',
+                borderRadius: '12px',
+                border: '1px solid #f1f5f9',
+                padding: '8px',
+                display: 'flex',
+                flexDirection: currentDir === 'row' ? 'column' : 'row',
+                alignItems: 'center',
+                gap: '10px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                transition: 'transform 0.2s ease'
+              }}>
+                <div style={{
+                  width: currentDir === 'row' ? '100%' : '60px',
+                  height: currentDir === 'row' ? '80px' : '60px',
+                  backgroundColor: '#f8fafc',
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  {hasImage ? (
+                    <img src={product.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <span style={{ fontSize: '24px' }}>{product.image || '📦'}</span>
+                  )}
+                </div>
+
+                <div style={{ flex: 1, minWidth: 0, textAlign: currentDir === 'row' ? 'center' : 'left' }}>
+                  <p style={{ margin: '0 0 2px 0', fontSize: '11px', fontWeight: '700', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {product.title}
+                  </p>
+
+                  {upsellConfig.showReviews && (
+                    <div style={{ display: 'flex', justifyContent: currentDir === 'row' ? 'center' : 'flex-start', gap: '2px', marginBottom: '4px' }}>
+                      <span style={{ fontSize: '10px', color: '#f59e0b' }}>★★★★★</span>
+                      <span style={{ fontSize: '9px', color: '#94a3b8' }}>(12)</span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', flexDirection: currentDir === 'row' ? 'column' : 'row', alignItems: 'center', justifyContent: currentDir === 'row' ? 'center' : 'space-between', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '800', color: '#10b981' }}>₹{product.price}</span>
+                    <button
+                      onClick={() => handleAddToCart(product)}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '10px',
+                        fontWeight: '700',
+                        backgroundColor: '#111',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        width: currentDir === 'row' ? '100%' : 'auto'
+                      }}
+                    >
+                      {upsellConfig.buttonText || 'Add'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }) : (
+            <div style={{
+              width: '100%',
+              padding: '24px 16px',
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              border: '1px dashed #cbd5e1',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              textAlign: 'center',
+              gap: '8px'
+            }}>
+              <p style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#334155' }}>
+                UPSell Preview
+              </p>
+              <p style={{ margin: 0, fontSize: '11px', color: '#64748b', maxWidth: '80%' }}>
+                {currentUseAI
+                  ? "AI will automatically show recommendations here based on cart contents."
+                  : upsellConfig.manualRules?.length > 0
+                    ? "Add a trigger product to your cart to see its specific upsell recommendation."
+                    : "Create a manual rule in the editor to see previews here."
+                }
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
 
     return (
       <div style={{ position: 'relative', height: '100%', backgroundColor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
@@ -3420,15 +3576,20 @@ export default function CartDrawerAdmin() {
               </div>
             )}
 
-            {showEmpty ? (
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: '8px' }}>
+            {/* Empty State Message */}
+            {showEmpty && (
+              <div style={{ padding: '40px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: '8px' }}>
                 <div style={{ fontSize: '40px' }}>🛒</div>
                 <p style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#111' }}>Your cart is empty</p>
                 <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>Add items to unlock rewards</p>
               </div>
-            ) : (
+            )}
+
+            {/* Upsell Position: TOP */}
+            {currentPos === 'top' && upsellSectionJSX}
+
+            {!showEmpty && (
               <>
-                {/* Cart Items */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', padding: '0 4px' }}>
                   <p style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.01em' }}>Items included</p>
                   <div style={{ backgroundColor: '#f1f5f9', padding: '2px 8px', borderRadius: '6px' }}>
@@ -3436,629 +3597,309 @@ export default function CartDrawerAdmin() {
                   </div>
                 </div>
 
-                {itemsToRender.map((item, idx) => (
-                  <div key={idx} style={{
-                    display: 'flex',
-                    gap: '12px',
-                    padding: '12px',
-                    backgroundColor: item.isAddedByCondition ? '#f8fafc' : '#f9fafb',
-                    borderRadius: '16px',
-                    border: '1px solid #f1f5f9',
-                    transition: 'all 0.3s ease',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.02)',
-                    position: 'relative'
-                  }}>
-                    {/* Item Image */}
-                    <div style={{
-                      width: '64px',
-                      height: '64px',
-                      backgroundColor: '#fff',
-                      borderRadius: '12px',
-                      flexShrink: 0,
-                      border: '1px solid #f1f5f9',
-                      overflow: 'hidden',
+                {itemsToRender.map((item, idx) => {
+                  const isReward = item.isAddedByCondition;
+                  return (
+                    <div key={idx} style={{
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+                      gap: '12px',
+                      padding: '12px',
+                      backgroundColor: isReward ? '#f0fdf4' : '#ffffff',
+                      borderRadius: '16px',
+                      border: isReward ? '1px solid #dcfce7' : '1px solid #f1f5f9',
+                      transition: 'all 0.3s ease',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
+                      position: 'relative'
                     }}>
-                      {item.displayImage ? (
-                        <img src={item.displayImage} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <span style={{ fontSize: '28px' }}>{item.placeholderImage}</span>
-                      )}
-                    </div>
-
-                    {/* Item Info */}
-                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                      <p style={{ margin: '0 0 2px 0', fontSize: '14px', fontWeight: '700', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {item.name}
-                      </p>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>₹{(Number(item.price) || 0).toFixed(0)}</span>
-                          <span style={{ fontSize: '12px', color: '#94a3b8' }}>× {item.quantity}</span>
-                        </div>
-                        {item.isAddedByCondition && (
-                          <span style={{ fontSize: '9px', fontWeight: '800', backgroundColor: '#e2e8f0', color: '#64748b', padding: '1px 4px', borderRadius: '3px', textTransform: 'uppercase' }}>Auto-Added</span>
+                      {/* Item Image */}
+                      <div style={{
+                        width: '70px',
+                        height: '70px',
+                        backgroundColor: '#fff',
+                        borderRadius: '12px',
+                        flexShrink: 0,
+                        border: '1px solid #f1f5f9',
+                        overflow: 'hidden',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        {item.displayImage ? (
+                          <img src={item.displayImage} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <span style={{ fontSize: '32px' }}>{item.placeholderImage}</span>
                         )}
                       </div>
-                    </div>
 
-                    {/* Subtotal */}
-                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: '60px' }}>
-                      <span style={{ fontWeight: '800', fontSize: '15px', color: '#0f172a' }}>
-                        ₹{((Number(item.price) || 0) * item.quantity).toFixed(0)}
-                      </span>
+                      {/* Item Info */}
+                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                            {item.name}
+                          </p>
+                          {!isReward && (
+                            <button
+                              onClick={() => handleRemoveProduct(idx)}
+                              style={{ background: 'none', border: 'none', padding: '4px', cursor: 'pointer', color: '#94a3b8', fontSize: '16px', transition: 'color 0.2s' }}
+                              title="Remove item"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>₹{(Number(item.price) || 0).toFixed(0)}</span>
+                              <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>({item.quantity} × ₹{(Number(item.price) || 0).toFixed(0)})</span>
+                            </div>
+                            {isReward && <span style={{ fontSize: '10px', fontWeight: '700', color: '#10b981' }}>FREE REWARD</span>}
+                          </div>
+
+                          {!isReward ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                backgroundColor: '#f8fafc',
+                                borderRadius: '8px',
+                                border: '1px solid #e2e8f0',
+                                padding: '2px'
+                              }}>
+                                <button
+                                  onClick={() => handleUpdateQuantity(idx, -1)}
+                                  style={{ width: '28px', height: '28px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', color: '#64748b' }}
+                                >−</button>
+                                <span style={{ width: '24px', textAlign: 'center', fontSize: '13px', fontWeight: '700', color: '#1e293b' }}>{item.quantity}</span>
+                                <button
+                                  onClick={() => handleUpdateQuantity(idx, 1)}
+                                  style={{ width: '28px', height: '28px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', color: '#64748b' }}
+                                >+</button>
+                              </div>
+                              <div style={{ textAlign: 'right', minWidth: '60px' }}>
+                                <span style={{ fontWeight: '800', fontSize: '15px', color: '#0f172a' }}>
+                                  ₹{((Number(item.price) || 0) * item.quantity).toFixed(0)}
+                                </span>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <span style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>Qty: {item.quantity}</span>
+                              <div style={{ textAlign: 'right', minWidth: '60px' }}>
+                                <span style={{ fontWeight: '800', fontSize: '15px', color: '#10b981' }}>FREE</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
+                {/* Coupon Feature - Product Widget Style */}
+                {featureStates.couponSliderEnabled && (
+                  (() => {
+                    // Determine which coupons to show
+                    let couponsToShow = [];
+
+                    if (selectedActiveCoupons.length > 0) {
+                      couponsToShow = selectedActiveCoupons.map(id => {
+                        const apiCoupon = activeCouponsFromAPI.find(c => c.id === id);
+                        const override = couponOverrides[id] || {};
+                        if (apiCoupon) {
+                          return { ...apiCoupon, ...override, enabled: true };
+                        }
+                        return {
+                          id,
+                          code: override.code || 'LOADING...',
+                          label: override.label || 'Coupon',
+                          description: override.description || '...',
+                          discountType: 'percentage',
+                          discountValue: 0,
+                          backgroundColor: override.backgroundColor || '#000',
+                          textColor: override.textColor || '#fff',
+                          iconUrl: override.iconUrl || '🎟️',
+                          enabled: true,
+                          ...override
+                        };
+                      });
+                    } else if (allCoupons.length > 0) {
+                      couponsToShow = allCoupons.map(c => ({
+                        ...c,
+                        enabled: c.enabled !== undefined ? c.enabled : (c.is_enabled !== undefined ? c.is_enabled : true),
+                        code: c.code || c.coupon_code_text || 'CODE',
+                        label: c.label || 'Coupon Label',
+                        description: c.description || c.description_text || 'Description',
+                      })).filter(c => c.enabled);
+                    }
+
+                    if (couponsToShow.length === 0) {
+                      couponsToShow = [{
+                        id: 'sample-welcome',
+                        code: 'WELCOME10',
+                        label: 'Welcome Offer',
+                        description: 'Get 10% off your first order',
+                        discountType: 'percentage',
+                        discountValue: 10,
+                        backgroundColor: '#1a1a1a',
+                        textColor: '#ffffff',
+                        iconUrl: '🎉',
+                        enabled: true
+                      }];
+                    }
+
+                    return (
+                      <div style={{
+                        padding: '16px',
+                        order: couponPosition === 'top' ? -1 : 999,
+                        backgroundColor: '#fff',
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                          <Text as="h3" variant="headingSm" fontWeight="bold">
+                            Available Offers
+                          </Text>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button
+                              onClick={() => handleScrollCoupons('left')}
+                              style={{ width: '32px', height: '32px', borderRadius: '50%', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                            >
+                              ←
+                            </button>
+                            <button
+                              onClick={() => handleScrollCoupons('right')}
+                              style={{ width: '32px', height: '32px', borderRadius: '50%', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                            >
+                              →
+                            </button>
+                          </div>
+                        </div>
+
+                        <div ref={couponSliderRef} style={{
+                          display: couponLayout === 'grid' ? 'grid' : 'flex',
+                          gridTemplateColumns: couponLayout === 'grid' ? (couponAlignment === 'horizontal' ? 'repeat(2, 1fr)' : '1fr') : undefined,
+                          flexDirection: couponLayout === 'carousel' ? (couponAlignment === 'horizontal' ? 'row' : 'column') : undefined,
+                          gap: '12px',
+                          paddingBottom: '4px',
+                          scrollBehavior: 'smooth',
+                          overflowX: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? 'auto' : 'hidden',
+                          overflowY: couponLayout === 'carousel' && couponAlignment === 'vertical' ? 'auto' : 'hidden',
+                        }}>
+                          {couponsToShow.map((coupon, idx) => {
+                            const displayCoupon = editingCoupon && editingCoupon.id === coupon.id ? editingCoupon : coupon;
+                            const isApplied = appliedCouponIds.includes(coupon.id);
+
+                            if (selectedCouponStyle === COUPON_STYLES.STYLE_1) {
+                              return (
+                                <div key={coupon.id} style={{ minWidth: '260px', padding: '12px', backgroundColor: '#fff', borderRadius: '12px', border: isApplied ? `1px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '12px', position: 'relative', overflow: 'hidden' }}>
+                                  {isApplied && <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: displayCoupon.backgroundColor }}></div>}
+                                  <div style={{ width: '48px', height: '48px', borderRadius: '10px', backgroundColor: displayCoupon.backgroundColor + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', color: displayCoupon.backgroundColor, flexShrink: 0 }}>{displayCoupon.iconUrl || '🎟️'}</div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#1e293b' }}>{displayCoupon.code}</p>
+                                    <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{displayCoupon.label}</p>
+                                  </div>
+                                  <button onClick={() => handleCopyCouponCode(coupon.code, coupon.id)} style={{ padding: '6px 12px', backgroundColor: isApplied ? '#ecfdf5' : '#f8fafc', color: isApplied ? '#059669' : '#475569', border: 'none', borderRadius: '8px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>{isApplied ? 'Applied' : 'Apply'}</button>
+                                </div>
+                              );
+                            }
+
+                            if (selectedCouponStyle === COUPON_STYLES.STYLE_2) {
+                              return (
+                                <div key={coupon.id} style={{ minWidth: '180px', padding: '16px', backgroundColor: '#fff', borderRadius: '16px', border: isApplied ? `2px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', position: 'relative' }}>
+                                  <div style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: displayCoupon.backgroundColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', color: '#fff', boxShadow: `0 4px 10px ${displayCoupon.backgroundColor}60` }}>{displayCoupon.iconUrl || '🎁'}</div>
+                                  <div>
+                                    <p style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>{displayCoupon.code}</p>
+                                    <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>{displayCoupon.description}</p>
+                                  </div>
+                                  <button onClick={() => handleCopyCouponCode(coupon.code, coupon.id)} style={{ width: '100%', padding: '8px', marginTop: '4px', backgroundColor: isApplied ? '#10b981' : '#1e293b', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>{isApplied ? '✓ Applied' : 'Apply Coupon'}</button>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div key={coupon.id} style={{ minWidth: '280px', padding: '0', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                                <div style={{ backgroundColor: displayCoupon.backgroundColor, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: displayCoupon.textColor }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <span style={{ fontSize: '18px' }}>{displayCoupon.iconUrl || '⚡'}</span>
+                                    <span style={{ fontSize: '14px', fontWeight: '700' }}>{displayCoupon.label}</span>
+                                  </div>
+                                  <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '600' }}>{displayCoupon.discountValue}% OFF</div>
+                                </div>
+                                <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                                  <div style={{ flex: 1, border: '1px dashed #cbd5e1', borderRadius: '6px', padding: '6px 10px', backgroundColor: '#f8fafc' }}>
+                                    <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#334155', fontFamily: 'monospace' }}>{displayCoupon.code}</p>
+                                  </div>
+                                  <button onClick={() => handleCopyCouponCode(coupon.code, coupon.id)} style={{ border: 'none', background: 'none', color: isApplied ? '#10b981' : '#2563eb', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: '4px' }}>{isApplied ? 'REMOVE' : 'APPLY'}</button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()
+                )}
               </>
             )}
 
+            {/* Upsell Position: BOTTOM */}
+            {currentPos === 'bottom' && upsellSectionJSX}
+          </div>
 
+          {/* Sticky Footer */}
+          <div style={{
+            padding: '20px',
+            backgroundColor: '#ffffff',
+            borderTop: '1px solid #f1f5f9',
+            boxShadow: '0 -4px 6px -1px rgba(0, 0, 0, 0.05)',
+            flexShrink: 0,
+            borderBottomLeftRadius: '12px',
+            borderBottomRightRadius: '12px',
+          }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '14px', color: '#64748b', fontWeight: '500' }}>Subtotal</span>
+                <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '700' }}>₹{totalWithRewards.toFixed(0)}</span>
+              </div>
 
-            {/* Upsell Recommendations */}
-            {upsellConfig.enabled && (!showEmpty || upsellConfig.showOnEmptyCart) && (() => {
-              // Get upsell products based on mode with priority system
-              let productsToShow = [];
-
-              if (upsellConfig.upsellMode === 'manual') {
-                // Try old rule1/2/3 system first
-                const rulesForEvaluation = [
-                  {
-                    id: 'rule2',
-                    enabled: upsellRulesConfig.rule2?.enabled,
-                    ruleType: 'TRIGGERED',
-                    triggerProducts: upsellRulesConfig.rule2?.triggerProducts || [],
-                    upsellProducts: upsellRulesConfig.rule2?.upsellProducts || [],
-                  },
-                  {
-                    id: 'rule3',
-                    enabled: upsellRulesConfig.rule3?.enabled,
-                    ruleType: 'CART_CONDITIONS',
-                    cartValueThreshold: upsellRulesConfig.rule3?.cartValueThreshold || 0,
-                    upsellProducts: upsellRulesConfig.rule3?.upsellProducts || [],
-                  },
-                  {
-                    id: 'rule1',
-                    enabled: upsellRulesConfig.rule1?.enabled,
-                    ruleType: 'GLOBAL',
-                    upsellProducts: upsellRulesConfig.rule1?.upsellProducts || [],
-                  },
-                ];
-
-                const matchedRule = evaluateUpsellRules(rulesForEvaluation, cartProductIds, cartTotal);
-                productsToShow = matchedRule?.upsellProducts || [];
-
-                // Fallback: use manualUpsellRules if old rules yield nothing
-                if (productsToShow.length === 0 && manualUpsellRules.length > 0) {
-                  // Find the first matching manual rule
-                  const matchingManualRule = manualUpsellRules.find(rule => {
-                    if (rule.triggerType === 'all') return true;
-                    // Check if any trigger product is in the cart
-                    if (rule.triggerProductIds?.length > 0) {
-                      return rule.triggerProductIds.some(id => cartProductIds.includes(id));
-                    }
-                    return false;
-                  });
-                  if (matchingManualRule) {
-                    productsToShow = matchingManualRule.upsellProductIds || [];
-                  }
-                }
-              } else if (upsellConfig.upsellMode === 'ai') {
-                // For AI mode, show some default products
-                productsToShow = ['sp-2', 'sp-6', 'sp-8'];
-              }
-
-              // Use standard enabled flag
-              if (!upsellConfig.enabled) return null;
-              if (productsToShow.length === 0) return null;
-
-              return (
-                <div style={{
-                  padding: '12px',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  backgroundColor: '#f9fafb',
-                  order: upsellConfig.position === 'top' ? -1 : 999,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                    <p style={{
-                      margin: 0,
-                      fontSize: '12px',
-                      fontWeight: '700',
-                      color: upsellConfig.upsellTitle?.color || '#111827',
-                      textAlign: (upsellConfig.activeTemplate === UPSELL_STYLES.CAROUSEL && upsellConfig.alignment === 'horizontal') ? 'left' : 'center',
-                      fontSize: '14px',
-                      ...(() => {
-                        const styles = {};
-                        if (upsellConfig.upsellTitle?.formatting?.bold) styles.fontWeight = '700';
-                        if (upsellConfig.upsellTitle?.formatting?.italic) styles.fontStyle = 'italic';
-                        if (upsellConfig.upsellTitle?.formatting?.underline) styles.textDecoration = 'underline';
-                        return styles;
-                      })(),
-                    }}>
-                      {upsellConfig.upsellTitle?.text || 'Recommended for you'}
-                    </p>
-                    {upsellConfig.activeTemplate === UPSELL_STYLES.CAROUSEL && (
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button
-                          onClick={() => handleCarouselScroll('left')}
-                          style={{
-                            width: '24px',
-                            height: '24px',
-                            borderRadius: '4px',
-                            border: '1px solid #d1d5db',
-                            backgroundColor: '#fff',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                          }}>←</button>
-                        <button
-                          onClick={() => handleCarouselScroll('right')}
-                          style={{
-                            width: '24px',
-                            height: '24px',
-                            borderRadius: '4px',
-                            border: '1px solid #d1d5db',
-                            backgroundColor: '#fff',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                          }}>→</button>
-                      </div>
-                    )}
-                  </div>
-                  <div
-                    ref={carouselRef}
-                    style={{
-                      display: upsellConfig.activeTemplate === UPSELL_STYLES.GRID ? 'grid' : 'flex',
-                      gridTemplateColumns: upsellConfig.activeTemplate === UPSELL_STYLES.GRID ? 'repeat(2, 1fr)' : undefined,
-                      flexDirection: upsellConfig.activeTemplate === UPSELL_STYLES.LIST ? 'column' : 'row',
-                      gap: '8px',
-                      overflowX: upsellConfig.activeTemplate === UPSELL_STYLES.CAROUSEL ? 'auto' : 'visible',
-                      scrollBehavior: 'smooth',
-                    }}>
-                    {productsToShow.slice(0, 6).map(productId => {
-                      const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
-                      if (!product) return null;
-                      return (
-                        <div key={product.id} style={{
-                          display: 'flex',
-                          flexDirection: upsellConfig.alignment === 'horizontal' ? 'row' : 'column',
-                          alignItems: upsellConfig.alignment === 'horizontal' ? 'center' : 'flex-start',
-                          gap: '8px',
-                          padding: '10px',
-                          backgroundColor: '#fff',
-                          borderRadius: '8px',
-                          border: '1px solid #e5e7eb',
-                          minWidth: upsellConfig.layout === 'carousel' && upsellConfig.alignment === 'horizontal' ? '200px' : 'auto',
-                        }}>
-                          {product.image && product.image.startsWith('http') ? (
-                            <img
-                              src={product.image}
-                              alt={product.title}
-                              style={{
-                                width: '56px',
-                                height: '56px',
-                                objectFit: 'cover',
-                                borderRadius: '6px',
-                                flexShrink: 0,
-                                backgroundColor: '#f3f4f6',
-                              }}
-                            />
-                          ) : (
-                            <div style={{
-                              width: '56px',
-                              height: '56px',
-                              borderRadius: '6px',
-                              backgroundColor: '#f3f4f6',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '24px',
-                              flexShrink: 0,
-                            }}>
-                              {product.image || '📦'}
-                            </div>
-                          )}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ margin: '0 0 4px 0', fontSize: '12px', fontWeight: '600', color: '#111' }}>
-                              {product.title}
-                            </p>
-                            <p style={{ margin: 0, fontSize: '11px', color: '#6b7280' }}>₹{product.price}</p>
-                            {upsellConfig.showProductReviews && (
-                              <div style={{ display: 'flex', gap: '2px', marginTop: '4px', fontSize: '10px' }}>
-                                <span style={{ color: '#fbbf24' }}>★★★★☆</span>
-                                <span style={{ color: '#6b7280', fontSize: '10px' }}>(4.0)</span>
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => handleAddToCart(product)}
-                            style={{
-                              padding: upsellConfig.buttonStyle === 'circle' ? '8px' : '6px 10px',
-                              fontSize: '11px',
-                              borderRadius: upsellConfig.buttonStyle === 'circle' ? '50%' : '6px',
-                              border: 'none',
-                              backgroundColor: '#111',
-                              color: '#fff',
-                              cursor: 'pointer',
-                              whiteSpace: 'nowrap',
-                              flexShrink: 0,
-                            }}>
-                            {upsellConfig.buttonStyle === 'circle' ? '+' : 'Add'}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
+              {appliedCouponIds.length > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#10b981' }}>
+                  <span style={{ fontSize: '14px', fontWeight: '500' }}>Discounts</span>
+                  <span style={{ fontSize: '14px', fontWeight: '700' }}>-₹{previewTotalDiscount.toFixed(0)}</span>
                 </div>
-              );
-            })()}
+              )}
 
-            {/* Coupon Feature - Product Widget Style */}
-            {featureStates.couponSliderEnabled && (
-              (() => {
-                // Determine which coupons to show
-                let couponsToShow = [];
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                <span style={{ fontSize: '16px', color: '#0f172a', fontWeight: '800' }}>Total</span>
+                <span style={{ fontSize: '18px', color: '#0f172a', fontWeight: '900' }}>₹{previewFinalTotal.toFixed(0)}</span>
+              </div>
+            </div>
 
-                if (selectedActiveCoupons.length > 0) {
-                  // If user has selected specific active coupons, prioritize those
-                  // We map the IDs to the actual coupon data (from API or overrides)
-                  couponsToShow = selectedActiveCoupons.map(id => {
-                    const apiCoupon = activeCouponsFromAPI.find(c => c.id === id);
-                    const override = couponOverrides[id] || {};
-
-                    // Merge API data with overrides (overrides take precedence for visual props)
-                    if (apiCoupon) {
-                      return { ...apiCoupon, ...override, enabled: true };
-                    }
-
-                    // Fallback if API data isn't loaded yet but we have an ID +/ Overrides
-                    // We try to reconstruct a usable object from overrides or placeholders
-                    return {
-                      id,
-                      code: override.code || 'LOADING...',
-                      label: override.label || 'Coupon',
-                      description: override.description || '...',
-                      discountType: 'percentage',
-                      discountValue: 0,
-                      backgroundColor: override.backgroundColor || '#000',
-                      textColor: override.textColor || '#fff',
-                      iconUrl: override.iconUrl || '🎟️',
-                      enabled: true,
-                      ...override
-                    };
-                  });
-                } else if (allCoupons.length > 0) {
-                  // Fallback to "allCoupons" (which might be samples or saved legacy coupons)
-                  // ENSURE we handle the property mismatch (is_enabled vs enabled) if present
-                  couponsToShow = allCoupons.map(c => ({
-                    ...c,
-                    enabled: c.enabled !== undefined ? c.enabled : (c.is_enabled !== undefined ? c.is_enabled : true),
-                    code: c.code || c.coupon_code_text || 'CODE',
-                    label: c.label || 'Coupon Label', // Add defaults if missing
-                    description: c.description || c.description_text || 'Description', // Add defaults if missing
-                  })).filter(c => c.enabled);
-                }
-
-                // If still empty (e.g. no saved coupons yet), show a generic sample so the user sees something
-                if (couponsToShow.length === 0) {
-                  couponsToShow = [{
-                    id: 'sample-welcome',
-                    code: 'WELCOME10',
-                    label: 'Welcome Offer',
-                    description: 'Get 10% off your first order',
-                    discountType: 'percentage',
-                    discountValue: 10,
-                    backgroundColor: '#1a1a1a', // Dark theme default
-                    textColor: '#ffffff',
-                    iconUrl: '🎉',
-                    enabled: true
-                  }];
-                }
-
-                return (
-                  <div style={{
-                    padding: '16px',
-                    order: couponPosition === 'top' ? -1 : 999,
-                    backgroundColor: '#fff',
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                      <Text as="h3" variant="headingSm" fontWeight="bold">
-                        Available Offers
-                      </Text>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button
-                          onClick={() => handleScrollCoupons('left')}
-                          style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '50%',
-                            border: '1px solid #e2e8f0',
-                            backgroundColor: '#fff',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: '#64748b',
-                            transition: 'all 0.2s',
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                          }}
-                        >
-                          ←
-                        </button>
-                        <button
-                          onClick={() => handleScrollCoupons('right')}
-                          style={{
-                            width: '32px',
-                            height: '32px',
-                            borderRadius: '50%',
-                            border: '1px solid #e2e8f0',
-                            backgroundColor: '#fff',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: '#64748b',
-                            transition: 'all 0.2s',
-                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                          }}
-                        >
-                          →
-                        </button>
-                      </div>
-                    </div>
-
-                    <div ref={couponSliderRef} style={{
-                      display: couponLayout === 'grid' ? 'grid' : 'flex',
-                      gridTemplateColumns: couponLayout === 'grid' ? (couponAlignment === 'horizontal' ? 'repeat(2, 1fr)' : '1fr') : undefined,
-                      flexDirection: couponLayout === 'carousel' ? (couponAlignment === 'horizontal' ? 'row' : 'column') : undefined,
-                      gap: '12px',
-                      paddingBottom: '4px',
-                      scrollBehavior: 'smooth',
-                      overflowX: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? 'auto' : 'hidden',
-                      overflowY: couponLayout === 'carousel' && couponAlignment === 'vertical' ? 'auto' : 'hidden',
-                    }}>
-                      {couponsToShow.map((coupon, idx) => {
-                        // Use editing state if this is the one being edited
-                        const displayCoupon = editingCoupon && editingCoupon.id === coupon.id ? editingCoupon : coupon;
-                        const isApplied = appliedCouponIds.includes(coupon.id);
-
-
-                        // STYLE 1: Classic Banner
-                        if (selectedCouponStyle === COUPON_STYLES.STYLE_1) {
-                          return (
-                            <div
-                              key={coupon.id}
-                              style={{
-                                minWidth: '260px',
-                                padding: '12px',
-                                backgroundColor: '#fff',
-                                borderRadius: '12px',
-                                border: isApplied ? `1px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0',
-                                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px',
-                                position: 'relative',
-                                overflow: 'hidden'
-                              }}
-                            >
-                              {isApplied && (
-                                <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: displayCoupon.backgroundColor }}></div>
-                              )}
-                              <div style={{
-                                width: '48px',
-                                height: '48px',
-                                borderRadius: '10px',
-                                backgroundColor: displayCoupon.backgroundColor + '20',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '24px',
-                                color: displayCoupon.backgroundColor,
-                                flexShrink: 0
-                              }}>
-                                {displayCoupon.iconUrl || '🎟️'}
-                              </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#1e293b' }}>{displayCoupon.code}</p>
-                                <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{displayCoupon.label}</p>
-                              </div>
-                              <button
-                                onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
-                                style={{
-                                  padding: '6px 12px',
-                                  backgroundColor: isApplied ? '#ecfdf5' : '#f8fafc',
-                                  color: isApplied ? '#059669' : '#475569',
-                                  border: 'none',
-                                  borderRadius: '8px',
-                                  fontSize: '11px',
-                                  fontWeight: '600',
-                                  cursor: 'pointer',
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
-                                {isApplied ? 'Applied' : 'Apply'}
-                              </button>
-                            </div>
-                          );
-                        }
-
-                        // STYLE 2: Minimal Card
-                        if (selectedCouponStyle === COUPON_STYLES.STYLE_2) {
-                          return (
-                            <div
-                              key={coupon.id}
-                              style={{
-                                minWidth: '180px',
-                                padding: '16px',
-                                backgroundColor: '#fff',
-                                borderRadius: '16px',
-                                border: isApplied ? `2px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                textAlign: 'center',
-                                gap: '10px',
-                                position: 'relative'
-                              }}
-                            >
-                              <div style={{
-                                width: '56px',
-                                height: '56px',
-                                borderRadius: '16px',
-                                backgroundColor: displayCoupon.backgroundColor,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '28px',
-                                color: '#fff',
-                                boxShadow: `0 4px 10px ${displayCoupon.backgroundColor}60`
-                              }}>
-                                {displayCoupon.iconUrl || '🎁'}
-                              </div>
-                              <div>
-                                <p style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>{displayCoupon.code}</p>
-                                <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>{displayCoupon.description}</p>
-                              </div>
-                              <button
-                                onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px',
-                                  marginTop: '4px',
-                                  backgroundColor: isApplied ? '#10b981' : '#1e293b',
-                                  color: '#fff',
-                                  border: 'none',
-                                  borderRadius: '10px',
-                                  fontSize: '12px',
-                                  fontWeight: '600',
-                                  cursor: 'pointer',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  gap: '6px'
-                                }}
-                              >
-                                {isApplied ? '✓ Applied' : 'Apply Coupon'}
-                              </button>
-                            </div>
-                          );
-                        }
-
-                        // STYLE 3: Bold & Vibrant
-                        return (
-                          <div
-                            key={coupon.id}
-                            style={{
-                              minWidth: '280px',
-                              padding: '0',
-                              backgroundColor: '#fff',
-                              borderRadius: '12px',
-                              border: '1px solid #e2e8f0',
-                              boxShadow: '0 2px 6px rgba(0,0,0,0.04)',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              overflow: 'hidden'
-                            }}
-                          >
-                            <div style={{
-                              backgroundColor: displayCoupon.backgroundColor,
-                              padding: '12px 16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              color: displayCoupon.textColor
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '18px' }}>{displayCoupon.iconUrl || '⚡'}</span>
-                                <span style={{ fontSize: '14px', fontWeight: '700' }}>{displayCoupon.label}</span>
-                              </div>
-                              <div style={{
-                                backgroundColor: 'rgba(255,255,255,0.2)',
-                                padding: '4px 8px',
-                                borderRadius: '6px',
-                                fontSize: '11px',
-                                fontWeight: '600'
-                              }}>
-                                {displayCoupon.discountValue}% OFF
-                              </div>
-                            </div>
-                            <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                              <div style={{ flex: 1, border: '1px dashed #cbd5e1', borderRadius: '6px', padding: '6px 10px', backgroundColor: '#f8fafc' }}>
-                                <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#334155', fontFamily: 'monospace' }}>{displayCoupon.code}</p>
-                              </div>
-                              <button
-                                onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
-                                style={{
-                                  border: 'none',
-                                  background: 'none',
-                                  color: isApplied ? '#10b981' : '#2563eb',
-                                  fontSize: '12px',
-                                  fontWeight: '700',
-                                  cursor: 'pointer',
-                                  padding: '4px'
-                                }}
-                              >
-                                {isApplied ? 'REMOVE' : 'APPLY'}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })()
-            )}
-
-            {/* Footer */}
-            {
-              !showEmpty && (
-                <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb', backgroundColor: '#f9fafb', flexShrink: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '14px' }}>
-                    <span style={{ color: '#6b7280', fontWeight: '500' }}>Subtotal</span>
-                    <span style={{ fontWeight: '600', color: '#111' }}>₹{totalWithRewards.toFixed(0)}</span>
-                  </div>
-
-                  {/* Show applied discounts */}
-                  {appliedCouponIds.length > 0 && appliedCouponIds.map(couponId => {
-                    const coupon = allCoupons.find(c => c.id === couponId);
-                    if (!coupon) return null;
-                    const discount = calculateCouponDiscount(coupon, totalWithRewards);
-                    return (
-                      <div key={couponId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '13px' }}>
-                        <span style={{ color: '#10b981', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span>✓</span>
-                          <span>{coupon.code} ({coupon.discountType === 'percentage' ? `${coupon.discountValue}%` : `₹${coupon.discountValue}`})</span>
-                        </span>
-                        <span style={{ fontWeight: '600', color: '#10b981' }}>-₹{discount.toFixed(0)}</span>
-                      </div>
-                    );
-                  })}
-
-                  {totalDiscount > 0 && (
-                    <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '8px', marginBottom: '8px' }} />
-                  )}
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', fontSize: '15px' }}>
-                    <span style={{ color: '#111', fontWeight: '700' }}>Total</span>
-                    <span style={{ fontWeight: '700', color: '#111', fontSize: '18px' }}>₹{previewFinalTotal.toFixed(0)}</span>
-                  </div>
-
-                  <button style={{ width: '100%', padding: '12px', backgroundColor: '#000', color: '#fff', border: 'none', borderRadius: '6px', fontWeight: '600', fontSize: '14px', cursor: 'pointer' }}>
-                    Checkout • ₹{previewFinalTotal.toFixed(0)}
-                  </button>
-                </div>
-              )
-            }
+            <button style={{
+              width: '100%',
+              padding: '16px',
+              backgroundColor: '#111827',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '12px',
+              fontSize: '15px',
+              fontWeight: '700',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+              transition: 'all 0.2s ease'
+            }}>
+              Checkout Now
+              <span style={{ fontSize: '18px' }}>→</span>
+            </button>
+            <p style={{ margin: '12px 0 0 0', textAlign: 'center', fontSize: '11px', color: '#94a3b8', fontWeight: '500' }}>
+              Shipping and taxes calculated at checkout
+            </p>
           </div>
         </div>
-      </div >
+      </div>
     );
   };
 
@@ -4070,8 +3911,24 @@ export default function CartDrawerAdmin() {
     <Toast content={saveToastMessage} onDismiss={() => setShowSaveToast(false)} />
   ) : null;
 
+  const contextualSaveBarMarkup = isUpsellConfigDirty ? (
+    <ContextualSaveBar
+      message="Unsaved changes in Upsell flow"
+      saveAction={{
+        label: 'Save',
+        onAction: handleSaveUpsellRules,
+        loading: upsellSaving,
+      }}
+      discardAction={{
+        label: 'Discard',
+        onAction: handleCancelUpsellRules,
+      }}
+    />
+  ) : null;
+
   return (
     <Frame>
+      {contextualSaveBarMarkup}
       {saveToastMarkup}
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
         {/* Deactivate Confirmation Modal */}

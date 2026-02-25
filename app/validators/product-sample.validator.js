@@ -53,8 +53,8 @@ export function validateFBTConfig(data) {
         }
     }
 
-    // --- configData (manual rules) ---
-    if (data.configData !== undefined) {
+    // --- configData (manual rules) — skip for AI mode ---
+    if (data.mode === "manual" && data.configData !== undefined) {
         const result = validateManualUpsellRules(data.configData);
         if (result.status === "error") errors.push(...result.errors);
     }

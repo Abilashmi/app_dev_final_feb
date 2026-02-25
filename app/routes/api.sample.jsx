@@ -32,6 +32,7 @@ const SAMPLE_DATA = {
         },
         upsell: {
             enabled: false,
+            upsellMode: 'manual',
             upsellTitle: { text: "Frequently Bought Together", color: "#111827" },
             manualRules: [],
             activeTemplate: 'grid'
@@ -82,7 +83,7 @@ export async function action({ request }) {
 
         // SEND DATA TO PHP ENDPOINT
         const externalResponse = await fetch(
-            "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/test.php",
+            "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/save_cart_drawer.php",
             {
                 method: "POST",
                 headers: {
@@ -110,4 +111,3 @@ export async function action({ request }) {
         );
     }
 }
-

@@ -1,5 +1,5 @@
 {
-  "activeTemplate": "template1",
+  "activeTemplate": "template2",
   "templates": {
     "template1": {
       "name": "Classic Banner",
@@ -42,8 +42,7 @@
     }
   },
   "selectedActiveCoupons": [
-    "gid://shopify/DiscountAutomaticNode/1275746189379",
-    "gid://shopify/DiscountCodeNode/1288827011139"
+    "gid://shopify/DiscountCodeNode/1287232979011"
   ],
   "couponOverrides": {
     "gid://shopify/DiscountAutomaticNode/1275746189379": {
@@ -51,7 +50,7 @@
       "accentColor": "#131816",
       "buttonColor": "#8a0b9d",
       "bgColor": "#53c3f4",
-      "padding": 10,
+      "padding": 31,
       "fontSize": 13
     },
     "gid://shopify/DiscountCodeNode/1288830812227": {
@@ -75,7 +74,7 @@
         "green-snowboard"
       ],
       "headingText": "mmmm",
-      "subtextText": "ok ",
+      "subtextText": "heloow",
       "bgColor": "#767496",
       "textColor": "#000000",
       "accentColor": "#000000",
@@ -91,6 +90,21 @@
       "buttonColor": "#334740",
       "bgColor": "#75a2cf",
       "fontSize": 13
+    },
+    "gid://shopify/DiscountCodeNode/1287232979011": {
+      "displayCondition": "product_handle",
+      "productHandles": [
+        "the-3p-fulfilled-snowboard"
+      ],
+      "buttonColor": "#27583b",
+      "bgColor": "#b4b137",
+      "textColor": "#f3f8ff",
+      "accentColor": "#2b423a",
+      "padding": 23,
+      "fontSize": 13,
+      "borderRadius": 5,
+      "headingText": "WELCOME BACK",
+      "subtextText": "Maaran"
     }
   }
 }

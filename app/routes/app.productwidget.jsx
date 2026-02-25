@@ -1962,39 +1962,36 @@ function FBTSection({ config, products, onSave, saving }) {
     };
 
     const handleSave = () => {
-        const hasPendingTrigger = scopeTriggerProducts.length > 0;
-        const hasPendingFbt = ruleFbtProducts.length > 0;
-        const isAllScope = displayScope === "all";
-        const hasExistingRules = manualRules.length > 0;
+        // Only validate rules when mode is "manual" — AI auto-recommends
+        if (mode === "manual") {
+            const hasPendingTrigger = scopeTriggerProducts.length > 0;
+            const hasPendingFbt = ruleFbtProducts.length > 0;
+            const isAllScope = displayScope === "all";
+            const hasExistingRules = manualRules.length > 0;
 
-        // For "single" or "per_product" scope: must have trigger + upsell products
-        if (!isAllScope) {
-            // No existing rules and nothing selected at all
-            if (!hasExistingRules && !hasPendingTrigger && !hasPendingFbt) {
-                shopify.toast.show("Please select trigger and upsell products before saving.", { isError: true });
-                return;
+            if (!isAllScope) {
+                if (!hasExistingRules && !hasPendingTrigger && !hasPendingFbt) {
+                    shopify.toast.show("Please select trigger and upsell products before saving.", { isError: true });
+                    return;
+                }
+                if (hasPendingTrigger && !hasPendingFbt) {
+                    shopify.toast.show("Please select upsell products for your rule before saving.", { isError: true });
+                    return;
+                }
+                if (hasPendingFbt && !hasPendingTrigger) {
+                    shopify.toast.show("Please select trigger products for your rule before saving.", { isError: true });
+                    return;
+                }
+                if (!hasExistingRules && (!hasPendingTrigger || !hasPendingFbt)) {
+                    shopify.toast.show("Please add at least one complete rule with trigger and upsell products.", { isError: true });
+                    return;
+                }
             }
-            // Trigger selected but no upsell
-            if (hasPendingTrigger && !hasPendingFbt) {
-                shopify.toast.show("Please select upsell products for your rule before saving.", { isError: true });
-                return;
-            }
-            // Upsell selected but no trigger
-            if (hasPendingFbt && !hasPendingTrigger) {
-                shopify.toast.show("Please select trigger products for your rule before saving.", { isError: true });
-                return;
-            }
-            // No existing rules and no complete pending selection
-            if (!hasExistingRules && (!hasPendingTrigger || !hasPendingFbt)) {
-                shopify.toast.show("Please add at least one complete rule with trigger and upsell products.", { isError: true });
-                return;
-            }
-        }
 
-        // For "all" scope: must have upsell products (no trigger needed)
-        if (isAllScope && !hasExistingRules && !hasPendingFbt) {
-            shopify.toast.show("Please select upsell products before saving.", { isError: true });
-            return;
+            if (isAllScope && !hasExistingRules && !hasPendingFbt) {
+                shopify.toast.show("Please select upsell products before saving.", { isError: true });
+                return;
+            }
         }
 
         onSave({

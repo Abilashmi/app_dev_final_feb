@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 
-const EXTERNAL_API = "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/test2.php";
+const EXTERNAL_API = "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/save_coupon_slider_widget.php";
 
 const DATA_FILE = path.resolve("coupon-slider-data.json");
 
@@ -81,7 +81,6 @@ export async function loader() {
 
 const STYLE_KEYS = ["bgColor", "textColor", "accentColor", "buttonColor", "buttonTextColor", "borderRadius", "fontSize", "padding"];
 const CONDITION_KEYS = ["displayCondition", "productHandles", "collectionHandles", "displayTags"];
-
 function transformForDB(data, shopDomain) {
     const templates = data.templates || {};
     const overrides = data.couponOverrides || {};
@@ -134,10 +133,10 @@ function transformForDB(data, shopDomain) {
             name: tpl.name || "",
             headingText: tpl.headingText || "",
             subtextText: tpl.subtextText || "",
-            styles,
-            couponConditions,
-            selectedCoupons: tplCoupons,
-            couponStyles,
+            styles: JSON.stringify(styles),
+            couponConditions: JSON.stringify(couponConditions),
+            selectedCoupons: JSON.stringify(tplCoupons),
+            couponStyles: JSON.stringify(couponStyles),
         };
     }
 
@@ -148,7 +147,7 @@ function transformForDB(data, shopDomain) {
         template2: buildTemplate("template2"),
         template3: buildTemplate("template3"),
         selectedTemplate: data.activeTemplate || "",
-        selectedCouponsGlobal: selectedCoupons,
+        selectedCouponsGlobal: JSON.stringify(selectedCoupons),
     };
 }
 
@@ -186,6 +185,7 @@ export async function action({ request }) {
         // Transform to DB schema and send to external PHP endpoint
         const shopDomain = body.shop || "";
         const dbPayload = transformForDB(updated, shopDomain);
+        console.log("Outgoing DB payload:", JSON.stringify(dbPayload, null, 2));
 
         try {
             const extRes = await fetch(EXTERNAL_API, {

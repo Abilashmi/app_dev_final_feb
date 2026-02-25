@@ -53,7 +53,7 @@ const COUNTRIES = [
 /* ---------------- SERVER-SIDE ACTION ---------------- */
 
 export const action = async ({ request }) => {
-    const { admin } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
     const formData = await request.formData();
 
     const title = formData.get("title");
@@ -264,6 +264,7 @@ export const action = async ({ request }) => {
         // Send to the API route (stores locally + forwards to PHP)
         try {
             const samplePayload = {
+                shopDomain: session.shop,
                 title, code, type, valueType, value, startDate, endDate,
                 selectionType, selectedResources,
                 minimumRequirementValue, minimumPurchaseAmount, minimumQuantity,

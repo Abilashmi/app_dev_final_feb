@@ -8,7 +8,7 @@ import path from "path";
 const SAMPLE_DATA_PATH = path.resolve("create_coupon-sample.json");
 
 const PHP_ENDPOINT =
-    "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/createdcoupon.php";
+    "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/save_coupon.php";
 
 
 // ===============================
