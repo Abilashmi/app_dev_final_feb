@@ -68,13 +68,142 @@ async function writeData(data) {
     await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
 }
 
+/* ---------- TRANSFORM FROM DB RESPONSE ---------- */
+
+function transformFromDB(dbData) {
+    // Parse style JSON strings back into objects
+    const parseJSON = (val) => {
+        if (!val) return {};
+        if (typeof val === "object") return val;
+        try { return JSON.parse(val); } catch { return {}; }
+    };
+    const parseJSONArray = (val) => {
+        if (!val) return [];
+        if (Array.isArray(val)) return val;
+        try { return JSON.parse(val); } catch { return []; }
+    };
+
+    const temp1Style = parseJSON(dbData.temp1DefaultStyle);
+    const temp2Style = parseJSON(dbData.temp2DefaultStyle);
+    const temp3Style = parseJSON(dbData.temp3DefaultStyle);
+
+    const temp1CouponStyle = parseJSON(dbData.temp1CouponStyle);
+    const temp2CouponStyle = parseJSON(dbData.temp2CouponStyle);
+    const temp3CouponStyle = parseJSON(dbData.temp3CouponStyle);
+
+    const temp1CouponCondition = parseJSONArray(dbData.temp1CouponCondition);
+    const temp2CouponCondition = parseJSONArray(dbData.temp2CouponCondition);
+    const temp3CouponCondition = parseJSONArray(dbData.temp3CouponCondition);
+
+    const selectedCoupons = parseJSONArray(dbData.selectedTemplateCoupon);
+
+    const activeTemplate = dbData.selectedTemplate || "template1";
+
+    // Build templates object
+    const templates = {
+        template1: {
+            name: "Classic Banner",
+            headingText: DEFAULT_DATA.templates.template1.headingText,
+            subtextText: DEFAULT_DATA.templates.template1.subtextText,
+            ...temp1Style,
+        },
+        template2: {
+            name: "Minimal Card",
+            headingText: DEFAULT_DATA.templates.template2.headingText,
+            subtextText: DEFAULT_DATA.templates.template2.subtextText,
+            ...temp2Style,
+        },
+        template3: {
+            name: "Bold & Vibrant",
+            headingText: DEFAULT_DATA.templates.template3.headingText,
+            subtextText: DEFAULT_DATA.templates.template3.subtextText,
+            ...temp3Style,
+        },
+    };
+
+    // Build couponOverrides by merging style overrides and conditions
+    // Pick the coupon styles & conditions for the active template
+    const couponStyleMap = {
+        template1: temp1CouponStyle,
+        template2: temp2CouponStyle,
+        template3: temp3CouponStyle,
+    };
+    const couponConditionMap = {
+        template1: temp1CouponCondition,
+        template2: temp2CouponCondition,
+        template3: temp3CouponCondition,
+    };
+
+    const activeCouponStyles = couponStyleMap[activeTemplate] || {};
+    const activeCouponConditions = couponConditionMap[activeTemplate] || [];
+
+    const couponOverrides = {};
+    for (const couponId of selectedCoupons) {
+        const styleOv = activeCouponStyles[couponId] || {};
+        const conditionEntry = activeCouponConditions.find(c => c.couponId === couponId) || {};
+
+        const override = { ...styleOv };
+        if (conditionEntry.displayCondition) override.displayCondition = conditionEntry.displayCondition;
+        if (conditionEntry.productHandles?.length) override.productHandles = conditionEntry.productHandles;
+        if (conditionEntry.collectionHandles?.length) override.collectionHandles = conditionEntry.collectionHandles;
+        if (conditionEntry.displayTags?.length) override.displayTags = conditionEntry.displayTags;
+
+        if (Object.keys(override).length > 0) {
+            couponOverrides[couponId] = override;
+        }
+    }
+
+    return {
+        activeTemplate,
+        templates,
+        selectedActiveCoupons: selectedCoupons,
+        couponOverrides,
+    };
+}
+
 /* ---------------- LOADER (GET) ---------------- */
 
-export async function loader() {
-    const data = await readData();
-    return new Response(JSON.stringify({ success: true, config: data }), {
-        headers: { "Content-Type": "application/json" },
-    });
+export async function loader({ request }) {
+    const url = new URL(request.url);
+    const shopDomain = url.searchParams.get("shop") || "";
+
+    // If no shopDomain provided, fall back to local defaults
+    if (!shopDomain) {
+        console.warn("No shop domain provided to coupon-slider loader, returning defaults");
+        return new Response(JSON.stringify({ success: true, config: { ...DEFAULT_DATA } }), {
+            headers: { "Content-Type": "application/json" },
+        });
+    }
+
+    try {
+        const apiUrl = `${EXTERNAL_API}?shopdomain=${encodeURIComponent(shopDomain)}`;
+        console.log("Fetching coupon slider config from:", apiUrl);
+
+        const extRes = await fetch(apiUrl, {
+            method: "GET",
+            headers: { "ngrok-skip-browser-warning": "true" },
+        });
+
+        const extBody = await extRes.json();
+        console.log(`External API GET response [${extRes.status}]:`, JSON.stringify(extBody));
+
+        if (extBody.status === "success" && extBody.data) {
+            const config = transformFromDB(extBody.data);
+            return new Response(JSON.stringify({ success: true, config }), {
+                headers: { "Content-Type": "application/json" },
+            });
+        } else {
+            console.warn("External API returned non-success, using defaults");
+            return new Response(JSON.stringify({ success: true, config: { ...DEFAULT_DATA } }), {
+                headers: { "Content-Type": "application/json" },
+            });
+        }
+    } catch (error) {
+        console.error("Failed to fetch from external API:", error.message);
+        return new Response(JSON.stringify({ success: true, config: { ...DEFAULT_DATA } }), {
+            headers: { "Content-Type": "application/json" },
+        });
+    }
 }
 
 /* ---------- TRANSFORM TO DB SCHEMA ---------- */

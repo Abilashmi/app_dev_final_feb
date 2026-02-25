@@ -1,61 +1,17 @@
-import fs from "fs/promises";
-import path from "path";
 
 // ===============================
 // Configuration
 // ===============================
 
-const SAMPLE_DATA_PATH = path.resolve("create_coupon-sample.json");
-
-const PHP_ENDPOINT =
-    "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/save_coupon.php";
+const PHP_ENDPOINT = "http://localhost/cartdrawer/save_coupon.php";
 
 
 // ===============================
-// File Helpers
+// PHP Forwarding & Fetching
 // ===============================
 
 /**
- * Read stored coupons from file
- */
-async function getSampleData() {
-    try {
-        const data = await fs.readFile(SAMPLE_DATA_PATH, "utf-8");
-        return JSON.parse(data);
-    } catch (error) {
-        if (error.code === "ENOENT") {
-            return [];
-        }
-
-        console.error("Error reading coupon file:", error);
-        return [];
-    }
-}
-
-/**
- * Write coupons to file
- */
-async function writeSampleData(data) {
-    try {
-        await fs.writeFile(
-            SAMPLE_DATA_PATH,
-            JSON.stringify(data, null, 2),
-            "utf-8"
-        );
-        return true;
-    } catch (error) {
-        console.error("Error writing coupon file:", error);
-        return false;
-    }
-}
-
-
-// ===============================
-// PHP Forwarding
-// ===============================
-
-/**
- * Send coupon to PHP endpoint
+ * Send coupon to PHP endpoint (POST)
  */
 async function sendCouponToPHP(coupon) {
     try {
@@ -69,12 +25,12 @@ async function sendCouponToPHP(coupon) {
 
         const text = await response.text();
 
-        console.log("---------- PHP RESPONSE ----------");
+        console.log("---------- PHP POST RESPONSE ----------");
         console.log(text);
-        console.log("----------------------------------");
+        console.log("---------------------------------------");
 
         if (!response.ok) {
-            throw new Error(`PHP returned status ${response.status}`);
+            throw new Error(`PHP POST returned status ${response.status}`);
         }
 
         return true;
@@ -85,37 +41,66 @@ async function sendCouponToPHP(coupon) {
     }
 }
 
+/**
+ * Fetch coupons from PHP endpoint (GET)
+ */
+export async function getStoredCoupons(shopDomain = "") {
+    if (!shopDomain) {
+        console.warn("getStoredCoupons: No shopDomain provided");
+        return [];
+    }
 
-// ===============================
-// Coupon Storage Logic
-// ===============================
+    try {
+        const url = `${PHP_ENDPOINT}?shopdomain=${encodeURIComponent(shopDomain)}`;
+        console.log("Fetching coupons from PHP:", url);
 
-export async function getStoredCoupons() {
-    return await getSampleData();
+        const response = await fetch(url, {
+            method: "GET",
+            headers: {
+                "Accept": "application/json",
+                "ngrok-skip-browser-warning": "true"
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`PHP GET returned status ${response.status}`);
+        }
+
+        const result = await response.json();
+
+        if (result.status === "success" && Array.isArray(result.data)) {
+            // Map PHP response fields (internal_id) to id field used by Remix
+            return result.data.map(item => ({
+                ...item,
+                id: item.internal_id || item.id || `php_${item.shopify_id?.split('/').pop() || Date.now()}`,
+            }));
+        }
+
+        console.warn("PHP GET returned success but no data array:", result);
+        return [];
+    } catch (error) {
+        console.error("Error fetching coupons from PHP:", error);
+        return [];
+    }
 }
 
+
+// ===============================
+// Coupon Preparation Logic
+// ===============================
+
 /**
- * Store coupon locally
+ * Prepare coupon for storage (now just returns processed object)
  */
 export async function storeCoupon(couponData) {
-    const coupons = await getSampleData();
-
     const newCoupon = {
         ...couponData,
         id: couponData.id || `sample_${Date.now()}`,
         createdAt: new Date().toISOString()
     };
 
-    coupons.push(newCoupon);
-
-    const written = await writeSampleData(coupons);
-
-    if (!written) {
-        throw new Error("Failed to write coupon data");
-    }
-
     console.log("------------------------------------------");
-    console.log("[COUPON STORED]");
+    console.log("[COUPON PREPARED FOR SYNC]");
     console.log(JSON.stringify(newCoupon, null, 2));
     console.log("------------------------------------------");
 
@@ -126,9 +111,12 @@ export async function storeCoupon(couponData) {
 // API Loader (GET) Handler
 // ===============================
 
-export async function loader() {
+export async function loader({ request }) {
+    const url = new URL(request.url);
+    const shopdomain = url.searchParams.get("shopdomain") || url.searchParams.get("shop") || "";
+
     try {
-        const coupons = await getSampleData();
+        const coupons = await getStoredCoupons(shopdomain);
         return Response.json({ coupons }, { status: 200 });
     } catch (error) {
         console.error("Error loading coupons:", error);

@@ -903,6 +903,10 @@ export default function CartDrawerAdmin() {
             setCouponOverrides(data.couponSelections.couponOverrides || {});
           }
 
+          if (data.cartStatus !== undefined) {
+            setCartStatus(data.cartStatus);
+          }
+
           // 7. Update Product & Cart Data
           if (data.shopifyProducts) {
             setLoadedShopifyProducts(data.shopifyProducts);
@@ -1046,7 +1050,7 @@ export default function CartDrawerAdmin() {
         setActiveCouponWarning(null);
         try {
           console.log('[Coupon] Fetching coupons from /api/sample');
-          const response = await fetch('/api/sample');
+          const response = await fetch(`/api/sample?shop=${SHOP_ID}`);
           if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
           const data = await response.json();
           console.log('[Coupon] Shopify coupons response:', data);
@@ -1485,7 +1489,7 @@ export default function CartDrawerAdmin() {
     const sampleData = {
       Id: SHOP_ID,
       shop: SHOP_ID,
-      cartstatus: targetStatus,
+      cartstatus: targetStatus === 'active' ? 'active' : 'inactive',
       progress_data: JSON.stringify(progressBarSettings),
       coupon_data: JSON.stringify({
         style: selectedCouponStyle,

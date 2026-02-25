@@ -34,7 +34,7 @@
         "name": "Vertical List",
         "layout": "vertical",
         "interactionType": "quickAdd",
-        "bgColor": "#000000",
+        "bgColor": "#992d2d",
         "textColor": "#86bf9e",
         "priceColor": "#427a55",
         "buttonColor": "#2e9472",
@@ -73,7 +73,7 @@
     "interactionStyle": "quickAdd",
     "layoutAlignment": "vertical",
     "color": {
-      "bgColor": "#000000",
+      "bgColor": "#992d2d",
       "textColor": "#86bf9e",
       "priceColor": "#427a55",
       "buttonColor": "#2e9472",

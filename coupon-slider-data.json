@@ -1,10 +1,10 @@
 {
-  "activeTemplate": "template2",
+  "activeTemplate": "template3",
   "templates": {
     "template1": {
       "name": "Classic Banner",
-      "headingText": "",
-      "subtextText": "ndvc sdm ",
+      "headingText": "GET 10% OFF!",
+      "subtextText": "Use code: SAVE10 at checkout",
       "bgColor": "#ffffff",
       "textColor": "#ffffff",
       "accentColor": "#ffffff",
@@ -41,70 +41,6 @@
       "padding": 20
     }
   },
-  "selectedActiveCoupons": [
-    "gid://shopify/DiscountCodeNode/1287232979011"
-  ],
-  "couponOverrides": {
-    "gid://shopify/DiscountAutomaticNode/1275746189379": {
-      "subtextText": "Hell oooho",
-      "accentColor": "#131816",
-      "buttonColor": "#8a0b9d",
-      "bgColor": "#53c3f4",
-      "padding": 31,
-      "fontSize": 13
-    },
-    "gid://shopify/DiscountCodeNode/1288830812227": {
-      "headingText": "hi"
-    },
-    "gid://shopify/DiscountCodeNode/1288830976067": {
-      "headingText": "vanalkam",
-      "displayCondition": "collection_handle",
-      "collectionHandles": []
-    },
-    "gid://shopify/DiscountCodeNode/1288829206595": {
-      "headingText": "namaste",
-      "displayCondition": "all",
-      "collectionHandles": [
-        "automated-collection"
-      ]
-    },
-    "gid://shopify/DiscountCodeNode/1288827011139": {
-      "displayCondition": "product_handle",
-      "productHandles": [
-        "green-snowboard"
-      ],
-      "headingText": "mmmm",
-      "subtextText": "heloow",
-      "bgColor": "#767496",
-      "textColor": "#000000",
-      "accentColor": "#000000",
-      "buttonColor": "#000000",
-      "buttonTextColor": "#ffffff"
-    },
-    "gid://shopify/DiscountCodeNode/1287247921219": {
-      "displayCondition": "product_handle",
-      "productHandles": [
-        "green-snowboard"
-      ],
-      "accentColor": "#338c6e",
-      "buttonColor": "#334740",
-      "bgColor": "#75a2cf",
-      "fontSize": 13
-    },
-    "gid://shopify/DiscountCodeNode/1287232979011": {
-      "displayCondition": "product_handle",
-      "productHandles": [
-        "the-3p-fulfilled-snowboard"
-      ],
-      "buttonColor": "#27583b",
-      "bgColor": "#b4b137",
-      "textColor": "#f3f8ff",
-      "accentColor": "#2b423a",
-      "padding": 23,
-      "fontSize": 13,
-      "borderRadius": 5,
-      "headingText": "WELCOME BACK",
-      "subtextText": "Maaran"
-    }
-  }
+  "selectedActiveCoupons": [],
+  "couponOverrides": {}
 }

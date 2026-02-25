@@ -311,8 +311,9 @@ export const action = async ({ request }) => {
 
 /* ---------------- SERVER-SIDE LOADER ---------------- */
 
-export const loader = async () => {
-    const coupons = await getStoredCoupons();
+export const loader = async ({ request }) => {
+    const { session } = await authenticate.admin(request);
+    const coupons = await getStoredCoupons(session.shop);
     return { coupons };
 };
 

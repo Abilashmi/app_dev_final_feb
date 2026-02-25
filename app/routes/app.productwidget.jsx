@@ -264,7 +264,7 @@ export async function loader({ request }) {
 
     try {
         // 1. Fetch Coupon Config
-        const couponRes = await fetch(`${url.origin}/api/coupon-slider`);
+        const couponRes = await fetch(`${url.origin}/api/coupon-slider?shop=${encodeURIComponent(shop)}`);
         const couponData = await couponRes.json();
         if (couponData.success && couponData.config) {
             console.log("Fetched coupon data successfully");
