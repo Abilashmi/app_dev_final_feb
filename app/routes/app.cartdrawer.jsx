@@ -1042,44 +1042,47 @@ export default function CartDrawerAdmin() {
     }
   }, [featureStates.couponSliderEnabled, appliedCouponIds.length]);
 
-  // Fetch active coupons from Shopify Admin API when Manage Coupons tab is opened
+  // Fetch active coupons from Shopify Admin API
+  const fetchActiveCoupons = async () => {
+    setIsLoadingActiveCoupons(true);
+    setActiveCouponWarning(null);
+    try {
+      console.log('[Coupon] Fetching coupons from /api/sample');
+      const response = await fetch(`/api/sample?shop=${SHOP_ID}`);
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+      const data = await response.json();
+      console.log('[Coupon] Shopify coupons response:', data);
+
+      if (data.coupons && data.coupons.length > 0) {
+        // Filter only ACTIVE coupons (case-insensitive) and normalize the format
+        const activeCoupons = data.coupons
+          .filter(c => c.status && c.status.toUpperCase() === 'ACTIVE')
+          .map(c => ({
+            id: c.id,
+            code: c.code || c.heading,
+            label: c.heading || c.code,
+            description: c.subtext || '',
+            discountType: c.discountType || 'percentage',
+            discountValue: c.discountValue || 0,
+            expiryDate: c.ends_at ? c.ends_at.split('T')[0] : '',
+            status: 'active',
+          }));
+        console.log('[Coupon] Filtered active coupons:', activeCoupons.length);
+        setActiveCouponsFromAPI(activeCoupons);
+      } else {
+        setActiveCouponsFromAPI([]);
+      }
+    } catch (error) {
+      console.error('[Coupon] Error fetching active coupons:', error);
+      setActiveCouponsFromAPI([]);
+    } finally {
+      setIsLoadingActiveCoupons(false);
+    }
+  };
+
+  // Trigger fetch when Manage Coupons tab is opened
   React.useEffect(() => {
     if (couponSubTab === 'manage-coupons' && activeCouponsFromAPI.length === 0 && !isLoadingActiveCoupons) {
-      const fetchActiveCoupons = async () => {
-        setIsLoadingActiveCoupons(true);
-        setActiveCouponWarning(null);
-        try {
-          console.log('[Coupon] Fetching coupons from /api/sample');
-          const response = await fetch(`/api/sample?shop=${SHOP_ID}`);
-          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-          const data = await response.json();
-          console.log('[Coupon] Shopify coupons response:', data);
-          if (data.coupons && data.coupons.length > 0) {
-            // Filter only ACTIVE coupons and normalize the format
-            const activeCoupons = data.coupons
-              .filter(c => c.status === 'ACTIVE')
-              .map(c => ({
-                id: c.id,
-                code: c.code || c.heading,
-                label: c.heading || c.code,
-                description: c.subtext || '',
-                discountType: c.discountType || 'percentage',
-                discountValue: c.discountValue || 0,
-                expiryDate: c.ends_at ? c.ends_at.split('T')[0] : '',
-                status: 'active',
-              }));
-            console.log('[Coupon] Filtered active coupons:', activeCoupons.length);
-            setActiveCouponsFromAPI(activeCoupons);
-          } else {
-            setActiveCouponsFromAPI([]);
-          }
-        } catch (error) {
-          console.error('[Coupon] Error fetching active coupons:', error);
-          setActiveCouponsFromAPI([]);
-        } finally {
-          setIsLoadingActiveCoupons(false);
-        }
-      };
       fetchActiveCoupons();
     }
   }, [couponSubTab]);
@@ -1268,6 +1271,7 @@ export default function CartDrawerAdmin() {
   const handleOpenCouponModal = () => {
     setTempSelectedCouponIds([...selectedActiveCoupons]);
     setIsCouponSelectionModalOpen(true);
+    fetchActiveCoupons(); // Fetch latest coupons from dashboard
   };
 
   const handleCloseCouponModal = () => {
@@ -2546,8 +2550,9 @@ export default function CartDrawerAdmin() {
                     onClose={handleCloseCouponModal}
                     title="Select Active Coupons"
                     primaryAction={{
-                      content: 'Add',
+                      content: 'Apply Selection',
                       onAction: handleConfirmCouponSelection,
+                      loading: isLoadingActiveCoupons
                     }}
                     secondaryActions={[
                       {

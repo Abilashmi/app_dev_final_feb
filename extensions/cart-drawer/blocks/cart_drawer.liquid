@@ -1,0 +1,779 @@
+{% schema %}
+{
+  "name": "Cart Drawer Modal",
+  "target": "body",
+  "settings": [
+    {
+      "type": "color",
+      "id": "drawer_bg",
+      "label": "Drawer Background",
+      "default": "#ffffff"
+    }
+  ]
+}
+{% endschema %}
+
+<div id="app-cart-drawer" class="app-cart-drawer">
+  <div class="app-cart-overlay"></div>
+
+  <div 
+    class="app-cart-sidebar" 
+    style="background: {{ block.settings.drawer_bg }};"
+  >
+    <div class="app-cart-header">
+      <h3>Your Cart</h3>
+      <button id="app-close-drawer" class="app-close-btn">&times;</button>
+    </div>
+
+    <div class="app-cart-body">
+      <!-- 1. Progress Bar Section -->
+      <div class="app-progress-section">
+        <div class="app-progress-header">
+          <p>Loading rewards...</p>
+        </div>
+        <div class="app-progress-track-wrapper">
+          <div class="app-progress-track">
+            <div class="app-progress-fill" style="width: 0%;"></div>
+            
+            <!-- Milestones (Dynamic positioning will be handled in JS) -->
+            <div class="app-milestone reached" style="left: 30%;">
+              <div class="app-milestone-node">🚚</div>
+              <div class="app-milestone-label">Reached</div>
+            </div>
+            <div class="app-milestone next" style="left: 75%;">
+              <div class="app-milestone-node">🎁</div>
+              <div class="app-milestone-label">₹750</div>
+            </div>
+            <div class="app-milestone" style="left: 100%;">
+              <div class="app-milestone-node">🏷️</div>
+              <div class="app-milestone-label">₹1000</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Upsell Section -->
+      <div class="app-upsell-section">
+        <p class="app-section-title">Frequently Bought Together</p>
+        <div class="app-upsell-list">
+          <div class="app-upsell-card">
+            <div class="app-upsell-img">
+              <img src="https://cdn.shopify.com/s/files/1/0704/6378/2946/products/Main_0449557a-a66f-449e-b8d2-5a413d8d3f18.jpg?v=1674037592" alt="">
+            </div>
+            <div class="app-upsell-info">
+              <p class="app-upsell-name">Premium Leather Wallet</p>
+              <div class="app-upsell-meta">
+                <span class="app-upsell-price">₹499</span>
+                <!-- Variant ID 42718131343523 used as demo -->
+                <button class="app-upsell-add" data-variant-id="42718131343523">Add</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Cart Items Section (DYNAMICALY FILLED) -->
+      <div id="app-cart-items-container">
+        <p style="text-align: center; padding: 20px;">Fetching your cart...</p>
+      </div>
+
+      <!-- 4. Coupons Section -->
+      <div class="app-coupon-section">
+        <p class="app-section-title">Available Offers</p>
+        <div class="app-coupon-slider">
+          <div class="app-coupon-card">
+            <div class="app-coupon-icon">🎟️</div>
+            <div class="app-coupon-details">
+              <p class="app-coupon-code">SAVE10</p>
+              <p class="app-coupon-desc">10% off on all orders</p>
+            </div>
+            <button class="app-coupon-apply">Apply</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="app-cart-footer">
+      <div class="app-cart-totals">
+        <div class="app-total-row">
+          <span>Subtotal</span>
+          <span id="app-cart-total-price">₹0</span>
+        </div>
+        <div class="app-total-row discount">
+          <span>Discount (Applied)</span>
+          <span id="app-cart-discount-price">-₹0</span>
+        </div>
+        <div class="app-total-row final">
+          <span>Total</span>
+          <span id="app-cart-final-total">₹0</span>
+        </div>
+      </div>
+      <div class="app-cart-actions">
+        <a href="/checkout" class="app-checkout-btn">Checkout Now</a>
+        <button id="app-continue-btn">Continue Shopping</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap');
+
+:root {
+  --app-drawer-width: 420px;
+  --app-accent: #2563eb;
+  --app-bg: #fff;
+  --app-text: #1e293b;
+  --app-muted: #64748b;
+  --app-border: #f1f5f9;
+  --app-success: #10b981;
+}
+
+.app-cart-drawer {
+  position: fixed;
+  inset: 0;
+  display: none;
+  z-index: 999999999999;
+  font-family: 'Outfit', sans-serif;
+}
+
+.app-cart-drawer.active {
+  display: block;
+}
+
+.app-cart-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.app-cart-drawer.active .app-cart-overlay {
+  opacity: 1;
+}
+
+.app-cart-sidebar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: var(--app-drawer-width);
+  max-width: 90%;
+  height: 100vh;
+  box-shadow: -20px 0 60px rgba(0,0,0,0.1);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 2;
+  background: var(--app-bg);
+}
+
+.app-cart-drawer.active .app-cart-sidebar {
+  transform: translateX(0);
+}
+
+.app-cart-header {
+  padding: 24px;
+  border-bottom: 1px solid var(--app-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-cart-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--app-text);
+}
+
+.app-close-btn {
+  background: #f8fafc;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: 0.2s;
+}
+
+.app-close-btn:hover {
+  background: #f1f5f9;
+}
+
+.app-cart-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Progress Bar */
+.app-progress-section {
+  background: #fff;
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--app-border);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+
+.app-progress-header {
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 14px;
+  color: var(--app-muted);
+}
+
+.app-bold { font-weight: 700; color: var(--app-text); }
+.app-reward-accent { color: var(--app-accent); font-weight: 700; }
+
+.app-progress-track {
+  position: relative;
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 99px;
+  margin: 20px 10px;
+}
+
+.app-progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--app-accent), #60a5fa);
+  border-radius: 99px;
+  transition: width 1s ease;
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.4);
+}
+
+.app-milestone {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-milestone-node {
+  width: 32px;
+  height: 32px;
+  background: #fff;
+  border: 2px solid var(--app-border);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: 0.3s;
+}
+
+.app-milestone.reached .app-milestone-node {
+  background: var(--app-accent);
+  border-color: var(--app-accent);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.app-milestone.next .app-milestone-node {
+  border-color: var(--app-accent);
+  animation: app-pulse 2s infinite;
+}
+
+.app-milestone-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--app-muted);
+  position: absolute;
+  bottom: -24px;
+  white-space: nowrap;
+}
+
+/* Sections */
+.app-section-title {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--app-muted);
+}
+
+/* Upsell */
+.app-upsell-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+}
+
+.app-upsell-img {
+  width: 60px;
+  height: 60px;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.app-upsell-img img { width: 100%; height: 100%; object-fit: cover; }
+
+.app-upsell-info { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+
+.app-upsell-name { margin: 0; font-size: 13px; font-weight: 600; color: var(--app-text); }
+
+.app-upsell-meta { display: flex; align-items: center; justify-content: space-between; }
+
+.app-upsell-price { font-weight: 700; color: var(--app-success); font-size: 14px; }
+
+.app-upsell-add {
+  background: var(--app-text);
+  color: #fff;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Cart Product */
+.app-cart-product {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid var(--app-border);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.02);
+}
+
+.app-cart-img-wrapper { width: 70px; height: 70px; background: #f8fafc; border-radius: 12px; overflow: hidden; }
+.app-cart-img-wrapper img { width: 100%; height: 100%; object-fit: cover; }
+
+.app-cart-product-title { margin: 0 0 8px 0; font-weight: 600; font-size: 14px; }
+
+.app-cart-qty-price { display: flex; justify-content: space-between; align-items: center; }
+
+.app-cart-qty { font-size: 12px; color: var(--app-muted); }
+
+.app-cart-item-total { font-weight: 700; color: var(--app-text); }
+
+/* Coupons */
+.app-coupon-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+}
+
+.app-coupon-icon { font-size: 24px; }
+
+.app-coupon-code { margin: 0; font-weight: 700; font-size: 14px; }
+
+.app-coupon-desc { margin: 0; font-size: 11px; color: var(--app-muted); }
+
+.app-coupon-apply {
+  margin-left: auto;
+  background: #f1f5f9;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Footer */
+.app-cart-footer { padding: 24px; border-top: 1px solid var(--app-border); background: #f8fafc; }
+
+.app-total-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; color: var(--app-muted); }
+
+.app-total-row.discount { color: var(--app-success); font-weight: 600; }
+
+.app-total-row.final { margin-top: 12px; font-size: 20px; font-weight: 700; color: var(--app-text); border-top: 1px solid #e2e8f0; paddingTop: 12px; }
+
+.app-cart-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
+
+.app-cart-actions a, .app-cart-actions button {
+  width: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  text-align: center;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  border: none;
+  transition: 0.2s;
+}
+
+.app-checkout-btn { background: var(--app-text); color: #fff; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+
+#app-continue-btn { background: #fff; border: 1px solid #e2e8f0; color: var(--app-text); }
+
+@keyframes app-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+}
+</style>
+
+<script>
+(function() {
+  console.log('[CartApp] Initializing advanced dynamic sidebar...');
+
+  const SHOP_DOMAIN = '{{ shop.permanent_domain }}';
+  const API_BASE = '/apps/cart-app'; 
+
+  let DRAWER_CONFIG = {
+    progressBar: {
+      enabled: true,
+      mode: 'amount',
+      completionText: '🎉 All rewards unlocked!',
+      tiers: [
+        { minValue: 1000, description: 'Free Shipping', titleBeforeAchieving: "You're {COUNT} away from {REWARD}" }
+      ],
+      color: '#2563eb'
+    },
+    coupons: { enabled: true, style: 'style-1', list: [] },
+    upsell: { enabled: true, title: 'Frequently Bought Together', rules: [] }
+  };
+
+  function formatMoney(cents) {
+    return `₹${Math.floor(cents / 100)}`;
+  }
+
+  async function fetchConfig() {
+    const fetchUrl = `${API_BASE}/api/sample?shop=${SHOP_DOMAIN}`;
+    console.log('[CartApp] Fetching config from:', fetchUrl);
+    try {
+      const res = await fetch(fetchUrl, {
+        headers: { 'ngrok-skip-browser-warning': 'true' }
+      });
+      
+      console.log('[CartApp] Fetch response status:', res.status);
+
+      if (!res.ok) {
+        console.warn(`[CartApp] API responded with status ${res.status}. Using defaults.`);
+        return;
+      }
+
+      const data = await res.json();
+      console.log('[CartApp] Data received from API:', data);
+
+      if (data.success && data.settings) {
+        console.log('[CartApp] Remote config loaded successfully:', data);
+        const s = data.settings;
+        
+        DRAWER_CONFIG.progressBar = {
+          enabled: s.progressBar?.enabled ?? true,
+          mode: s.progressBar?.mode || 'amount',
+          completionText: s.progressBar?.completionText || '',
+          tiers: (s.progressBar?.tiers || []).sort((a,b) => a.minValue - b.minValue),
+          color: s.progressBar?.barForegroundColor || '#2563eb'
+        };
+
+        DRAWER_CONFIG.cartStatus = data.cartStatus ?? true;
+        
+        console.log('[CartApp] Applied configurations:', {
+            progressBar: DRAWER_CONFIG.progressBar.enabled,
+            coupons: s.coupons?.enabled,
+            upsell: s.upsell?.enabled,
+            cartStatus: DRAWER_CONFIG.cartStatus
+        });
+
+        if (DRAWER_CONFIG.progressBar.tiers.length === 0) {
+          DRAWER_CONFIG.progressBar.tiers = [{ 
+            minValue: s.progressBar?.maxTarget || 1000, 
+            description: 'Free Shipping',
+            titleBeforeAchieving: "You're {COUNT} away from {REWARD}"
+          }];
+        }
+        
+        if (!DRAWER_CONFIG.progressBar.completionText) {
+           const finalReward = DRAWER_CONFIG.progressBar.tiers[DRAWER_CONFIG.progressBar.tiers.length - 1]?.description || 'Rewards';
+           DRAWER_CONFIG.progressBar.completionText = `🎉 You've unlocked everything! Enjoy your ${finalReward}!`;
+        }
+        
+        DRAWER_CONFIG.coupons = {
+          enabled: s.coupons?.enabled ?? true,
+          style: s.coupons?.selectedStyle || 'style-1',
+          list: data.coupons || []
+        };
+        
+        DRAWER_CONFIG.upsell = {
+          enabled: s.upsell?.enabled ?? true,
+          title: s.upsell?.upsellTitle?.text || 'Frequently Bought Together',
+          rules: s.upsell?.manualRules || []
+        };
+        
+        document.documentElement.style.setProperty('--app-accent', DRAWER_CONFIG.progressBar.color);
+      } else {
+          console.warn('[CartApp] API response successful but missing settings/success flag:', data);
+      }
+    } catch (e) {
+      console.error('[CartApp] Network error while fetching config:', e);
+    }
+  }
+
+  async function addItem(variantId) {
+    try {
+      const res = await fetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [{ id: variantId, quantity: 1 }] })
+      });
+      if (res.ok) refreshCart(true);
+    } catch (e) { console.error('[CartApp] Add item error:', e); }
+  }
+
+  async function refreshCart(open = false) {
+    if (DRAWER_CONFIG.cartStatus === false) return; // Don't show if inactive
+
+    try {
+      const res = await fetch('/cart.js');
+      const cart = await res.json();
+      renderCart(cart);
+      if (open) {
+        const drawer = document.getElementById('app-cart-drawer');
+        if (drawer) {
+          drawer.classList.add('active');
+          document.body.style.overflow = 'hidden';
+        }
+      }
+    } catch (e) { console.error('[CartApp] Refresh cart error:', e); }
+  }
+
+  function renderCart(cart) {
+    console.log('[CartApp] Updating UI with cart data...');
+    
+    // 1. Process Progress Bar
+    const isAmountMode = DRAWER_CONFIG.progressBar.mode === 'amount';
+    const currentValue = isAmountMode ? cart.total_price : cart.item_count;
+    const tiers = DRAWER_CONFIG.progressBar.tiers;
+    const maxTierValue = tiers.length > 0 ? tiers[tiers.length - 1].minValue * (isAmountMode ? 100 : 1) : 1000;
+    
+    const nextTier = tiers.find(t => {
+      const target = t.minValue * (isAmountMode ? 100 : 1);
+      return currentValue < target;
+    });
+
+    const progressFill = document.querySelector('.app-progress-fill');
+    const progressText = document.querySelector('.app-progress-header p');
+    const track = document.querySelector('.app-progress-track');
+    const progressSection = document.querySelector('.app-progress-section');
+
+    if (progressSection) progressSection.style.display = DRAWER_CONFIG.progressBar.enabled ? 'block' : 'none';
+
+    if (progressFill) {
+      const percent = Math.min(100, (currentValue / maxTierValue) * 100);
+      progressFill.style.width = `${percent}%`;
+    }
+
+    if (progressText) {
+      if (nextTier) {
+        const target = nextTier.minValue * (isAmountMode ? 100 : 1);
+        const diff = target - currentValue;
+        const valStr = isAmountMode ? formatMoney(diff) : `${diff} items`;
+        
+        let msg = nextTier.titleBeforeAchieving || "You're {COUNT} away from {REWARD}";
+        if (msg.includes('Free Shipping') && nextTier.description !== 'Free Shipping') {
+           msg = msg.replace('Free Shipping', '{REWARD}');
+        }
+
+        msg = msg.replace('{COUNT}', valStr).replace('{REWARD}', nextTier.description);
+        
+        progressText.innerHTML = msg.includes('<span') ? msg : `<span>${msg}</span>`;
+        if (!progressText.querySelector('.app-bold')) {
+           progressText.innerHTML = msg.replace(valStr, `<span class="app-bold">${valStr}</span>`)
+                                       .replace(nextTier.description, `<span class="app-reward-accent">${nextTier.description}</span>`);
+        }
+      } else {
+        progressText.innerHTML = `<span class="app-success" style="color: var(--app-success); font-weight:700;">${DRAWER_CONFIG.progressBar.completionText}</span>`;
+      }
+    }
+
+    if (track) {
+      const oldMilestones = track.querySelectorAll('.app-milestone');
+      oldMilestones.forEach(m => m.remove());
+
+      tiers.forEach(tier => {
+        const target = tier.minValue * (isAmountMode ? 100 : 1);
+        const pos = (target / maxTierValue) * 100;
+        const reached = currentValue >= target;
+        
+        const milestone = document.createElement('div');
+        milestone.className = `app-milestone ${reached ? 'reached' : ''}`;
+        milestone.style.left = `${pos}%`;
+        milestone.innerHTML = `
+          <div class="app-milestone-node">${reached ? '✅' : '🎁'}</div>
+          <div class="app-milestone-label">${isAmountMode ? formatMoney(target) : tier.minValue}</div>
+          <div class="app-milestone-desc">${tier.description}</div>
+        `;
+        track.appendChild(milestone);
+      });
+    }
+
+    // 2. Update Items List...
+    const container = document.getElementById('app-cart-items-container');
+    if (container) {
+      if (cart.items.length === 0) {
+        container.innerHTML = '<p style="text-align:center; padding: 40px; color: #64748b;">Your cart is empty.<br><br>Add something to see the magic! ✨</p>';
+      } else {
+        container.innerHTML = cart.items.map(item => `
+          <div class="app-cart-product">
+            <div class="app-cart-img-wrapper">
+              <img src="${item.image}" alt="${item.title}" width="80">
+            </div>
+            <div class="app-cart-details">
+              <p class="app-cart-product-title">${item.product_title}</p>
+              <div class="app-cart-qty-price">
+                <span class="app-cart-qty">${item.quantity} × ${formatMoney(item.price)}</span>
+                <span class="app-cart-item-total">${formatMoney(item.line_price)}</span>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    // 3. Upsells...
+    const upsellSection = document.querySelector('.app-upsell-section');
+    const upsellList = document.querySelector('.app-upsell-list');
+    if (upsellSection) {
+      if (!DRAWER_CONFIG.upsell.enabled || DRAWER_CONFIG.upsell.rules.length === 0) {
+        upsellSection.style.display = 'none';
+      } else {
+        upsellSection.style.display = 'block';
+        const titleEl = upsellSection.querySelector('.app-section-title');
+        if (titleEl) titleEl.textContent = DRAWER_CONFIG.upsell.title;
+        
+        const cartProductIds = cart.items.map(i => `gid://shopify/Product/${i.product_id}`);
+        const activeRule = DRAWER_CONFIG.upsell.rules.find(r => 
+          r.triggerType === 'all' || 
+          (r.triggerProductIds || []).some(id => cartProductIds.includes(id)) ||
+          (r.triggerType === 'cart_conditions' && cart.total_price >= (r.cartValueThreshold || 0) * 100)
+        );
+
+        if (activeRule && activeRule.upsellProductIds?.length > 0) {
+          upsellList.innerHTML = `
+            <div class="app-upsell-card">
+              <div class="app-upsell-img">
+                <img src="https://cdn.shopify.com/s/files/1/0704/6378/2946/products/Main_0449557a-a66f-449e-b8d2-5a413d8d3f18.jpg?v=1674037592" alt="">
+              </div>
+              <div class="app-upsell-info">
+                <p class="app-upsell-name">Special Offer: ${activeRule.title || 'Recommended'}</p>
+                <div class="app-upsell-meta">
+                  <span class="app-upsell-price">₹499</span>
+                  <button class="app-upsell-add" data-variant-id="${activeRule.upsellProductIds[0].split('/').pop()}">Add</button>
+                </div>
+              </div>
+            </div>
+          `;
+        } else { upsellSection.style.display = 'none'; }
+      }
+    }
+
+    // 4. Coupons...
+    const couponSection = document.querySelector('.app-coupon-section');
+    const couponSlider = document.querySelector('.app-coupon-slider');
+    if (couponSection) {
+      if (!DRAWER_CONFIG.coupons.enabled || DRAWER_CONFIG.coupons.list.length === 0) {
+        couponSection.style.display = 'none';
+      } else {
+        couponSection.style.display = 'block';
+        couponSlider.innerHTML = DRAWER_CONFIG.coupons.list.map(coupon => `
+          <div class="app-coupon-card">
+            <div class="app-coupon-icon">🎟️</div>
+            <div class="app-coupon-details">
+              <p class="app-coupon-code">${coupon.code}</p>
+              <p class="app-coupon-desc">${coupon.heading}</p>
+            </div>
+            <button class="app-coupon-apply" onclick="copyToClipboard('${coupon.code}')">Copy</button>
+          </div>
+        `).join('');
+      }
+    }
+
+    const totalPriceEl = document.getElementById('app-cart-total-price');
+    const finalTotalEl = document.getElementById('app-cart-final-total');
+    if (totalPriceEl) totalPriceEl.textContent = formatMoney(cart.total_price);
+    if (finalTotalEl) finalTotalEl.textContent = formatMoney(cart.total_price);
+  }
+
+  function closeDrawer() {
+    const drawer = document.getElementById('app-cart-drawer');
+    if (drawer) {
+      drawer.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+  }
+
+  window.copyToClipboard = function(text) {
+    navigator.clipboard.writeText(text).then(() => { alert('Code copied!'); });
+  };
+
+  document.addEventListener('click', function(e) {
+    // Intercept clicks on any cart link to open the drawer
+    const cartLink = e.target.closest('a[href="/cart"]');
+    if (cartLink) {
+      e.preventDefault();
+      refreshCart(true);
+      return;
+    }
+
+    if (e.target.classList.contains('app-cart-overlay') || e.target.id === 'app-continue-btn' || e.target.id === 'app-close-drawer') closeDrawer();
+    if (e.target.classList.contains('app-upsell-add')) addItem(e.target.getAttribute('data-variant-id'));
+  });
+
+  // Intercept Fetch for /cart/add
+  const originalFetch = window.fetch;
+  window.fetch = async function() {
+    const input = arguments[0];
+    const url = typeof input === "string" ? input : (input instanceof Request ? input.url : "");
+    if (url.includes('/cart/add')) {
+      const response = await originalFetch.apply(this, arguments);
+      refreshCart(true);
+      return response;
+    }
+    return originalFetch.apply(this, arguments);
+  };
+
+  // Intercept XMLHttpRequest for /cart/add (many themes use this)
+  const originalXhrOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(method, url) {
+    this._url = url;
+    return originalXhrOpen.apply(this, arguments);
+  };
+  const originalXhrSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send = function() {
+    this.addEventListener('load', function() {
+      if (this._url && this._url.includes('/cart/add')) {
+        refreshCart(true);
+      }
+    });
+    return originalXhrSend.apply(this, arguments);
+  };
+
+  (async () => {
+    await fetchConfig();
+    refreshCart();
+  })();
+
+})();
+</script>
