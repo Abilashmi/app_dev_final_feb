@@ -79,8 +79,11 @@ export async function saveProductWidgetData(request) {
     const actionType = formData.get("actionType");
 
     if (actionType === "saveCouponConfig") {
+        // Accept all coupon config fields
         const activeTemplate = formData.get("activeTemplate");
         const templateData = formData.get("templateData");
+        const selectedActiveCoupons = formData.get("selectedActiveCoupons");
+        const couponOverrides = formData.get("couponOverrides");
 
         if (!activeTemplate || !templateData) {
             return { success: false, error: "Missing required fields" };
@@ -88,7 +91,16 @@ export async function saveProductWidgetData(request) {
 
         try {
             const parsedTemplates = JSON.parse(templateData);
-            const couponConfig = { activeTemplate, templates: parsedTemplates };
+            // selectedActiveCoupons and couponOverrides may be undefined/null if not sent
+            const parsedSelectedActiveCoupons = selectedActiveCoupons ? JSON.parse(selectedActiveCoupons) : [];
+            const parsedCouponOverrides = couponOverrides ? JSON.parse(couponOverrides) : {};
+            // Save full config
+            const couponConfig = {
+                activeTemplate,
+                templates: parsedTemplates,
+                selectedActiveCoupons: parsedSelectedActiveCoupons,
+                couponOverrides: parsedCouponOverrides
+            };
 
             await db.widgetSettings.upsert({
                 where: { shop },

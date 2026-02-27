@@ -58,7 +58,7 @@
         <div class="app-upsell-list">
           <div class="app-upsell-card">
             <div class="app-upsell-img">
-              <img src="https://cdn.shopify.com/s/files/1/0704/6378/2946/products/Main_0449557a-a66f-449e-b8d2-5a413d8d3f18.jpg?v=1674037592" alt="">
+              <img src="https://cdn.shopify.com/s/files/1/0704/6378/2946/products/Main_0449557a-a66f-449e-b8d2-5a413d8d3f18.jpg?v=1674037592" alt="" width="60" height="60">
             </div>
             <div class="app-upsell-info">
               <p class="app-upsell-name">Premium Leather Wallet</p>
@@ -454,82 +454,43 @@
     upsell: { enabled: true, title: 'Frequently Bought Together', rules: [] }
   };
 
-  function formatMoney(cents) {
+  function formatMoney(cents) {th
     return `₹${Math.floor(cents / 100)}`;
   }
 
-  async function fetchConfig() {
-    const fetchUrl = `${API_BASE}/api/sample?shop=${SHOP_DOMAIN}`;
-    console.log('[CartApp] Fetching config from:', fetchUrl);
-    try {
-      const res = await fetch(fetchUrl, {
-        headers: { 'ngrok-skip-browser-warning': 'true' }
-      });
-      
-      console.log('[CartApp] Fetch response status:', res.status);
+ async function fetchConfig() {
+  const fetchUrl = "https://spread-monitored-chronicles-ray.trycloudflare.com/cartdrawer/save_cart_drawer.php?shopdomain=" + SHOP_DOMAIN;
 
-      if (!res.ok) {
-        console.warn(`[CartApp] API responded with status ${res.status}. Using defaults.`);
-        return;
+  console.log('[CartApp] Fetching config from:', fetchUrl);
+
+  try {
+    const res = await fetch(fetchUrl, {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+        
       }
+    });
 
-      const data = await res.json();
-      console.log('[CartApp] Data received from API:', data);
-
-      if (data.success && data.settings) {
-        console.log('[CartApp] Remote config loaded successfully:', data);
-        const s = data.settings;
-        
-        DRAWER_CONFIG.progressBar = {
-          enabled: s.progressBar?.enabled ?? true,
-          mode: s.progressBar?.mode || 'amount',
-          completionText: s.progressBar?.completionText || '',
-          tiers: (s.progressBar?.tiers || []).sort((a,b) => a.minValue - b.minValue),
-          color: s.progressBar?.barForegroundColor || '#2563eb'
-        };
-
-        DRAWER_CONFIG.cartStatus = data.cartStatus ?? true;
-        
-        console.log('[CartApp] Applied configurations:', {
-            progressBar: DRAWER_CONFIG.progressBar.enabled,
-            coupons: s.coupons?.enabled,
-            upsell: s.upsell?.enabled,
-            cartStatus: DRAWER_CONFIG.cartStatus
-        });
-
-        if (DRAWER_CONFIG.progressBar.tiers.length === 0) {
-          DRAWER_CONFIG.progressBar.tiers = [{ 
-            minValue: s.progressBar?.maxTarget || 1000, 
-            description: 'Free Shipping',
-            titleBeforeAchieving: "You're {COUNT} away from {REWARD}"
-          }];
-        }
-        
-        if (!DRAWER_CONFIG.progressBar.completionText) {
-           const finalReward = DRAWER_CONFIG.progressBar.tiers[DRAWER_CONFIG.progressBar.tiers.length - 1]?.description || 'Rewards';
-           DRAWER_CONFIG.progressBar.completionText = `🎉 You've unlocked everything! Enjoy your ${finalReward}!`;
-        }
-        
-        DRAWER_CONFIG.coupons = {
-          enabled: s.coupons?.enabled ?? true,
-          style: s.coupons?.selectedStyle || 'style-1',
-          list: data.coupons || []
-        };
-        
-        DRAWER_CONFIG.upsell = {
-          enabled: s.upsell?.enabled ?? true,
-          title: s.upsell?.upsellTitle?.text || 'Frequently Bought Together',
-          rules: s.upsell?.manualRules || []
-        };
-        
-        document.documentElement.style.setProperty('--app-accent', DRAWER_CONFIG.progressBar.color);
-      } else {
-          console.warn('[CartApp] API response successful but missing settings/success flag:', data);
-      }
-    } catch (e) {
-      console.error('[CartApp] Network error while fetching config:', e);
+    if (!res.ok) {
+      console.warn("API failed. Using default config.");
+      return;
     }
+
+    const data = await res.json();
+    console.log("Remote config received:", data);
+
+    if (!data) return;
+
+    // Example mapping (adjust based on your PHP response)
+    DRAWER_CONFIG.progressBar = data.progressBar || DRAWER_CONFIG.progressBar;
+    DRAWER_CONFIG.coupons = data.coupons || DRAWER_CONFIG.coupons;
+    DRAWER_CONFIG.upsell = data.upsell || DRAWER_CONFIG.upsell;
+
+  } catch (err) {
+    console.error("Config fetch error:", err);
   }
+}
 
   async function addItem(variantId) {
     try {

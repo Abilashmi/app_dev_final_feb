@@ -250,7 +250,7 @@ export async function action({ request }) {
 
             try {
                 await fetch(
-                    "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/save_fbt_widget.php",
+                    "https://spread-monitored-chronicles-ray.trycloudflare.com/cartdrawer/save_fbt_widget.php",
                     {
                         method: "POST",
                         headers: {

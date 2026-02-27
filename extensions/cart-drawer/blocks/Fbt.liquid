@@ -1,0 +1,298 @@
+{% schema %}
+{
+  "name": "FBT Widget",
+  "target": "section",
+  "settings": []
+}
+{% endschema %}
+
+<div id="ps-fbt-{{ block.id }}"
+     data-product-id="{{ product.id }}"
+     data-shop="{{ shop.permanent_domain }}">
+</div>
+
+<style>
+.ps-fbt-wrapper { padding:20px; box-shadow:0 4px 20px rgba(0,0,0,0.05); }
+.ps-fbt-title { font-weight:800; font-size:18px; margin-bottom:16px; }
+.ps-fbt-products { display:flex; gap:14px; flex-wrap:wrap; }
+.ps-fbt-products.vertical { flex-direction:column; }
+.ps-product-card { padding:12px; border:1px solid; display:flex; gap:10px; transition:0.2s; position:relative; }
+.ps-product-card.horizontal { width:160px; flex-direction:column; text-align:center; }
+.ps-product-card.vertical { width:100%; flex-direction:row; align-items:center; }
+.ps-product-image { width:60px; height:60px; background-size:cover; background-position:center; border-radius:8px; }
+.ps-fbt-footer { margin-top:20px; padding-top:16px; border-top:1px solid; display:flex; justify-content:space-between; align-items:center; }
+.ps-fbt-addall { padding:10px 22px; border-radius:100px; cursor:pointer; font-weight:800; border:none; }
+.ps-classic-btn { padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:700; font-size:12px; }
+.ps-stepper { display:flex; border-radius:6px; overflow:hidden; }
+.ps-stepper button { width:28px; height:28px; border:none; cursor:pointer; }
+.ps-stepper span { width:28px; display:flex; align-items:center; justify-content:center; }
+.ps-bundle-check { width:20px; height:20px; border:2px solid; border-radius:4px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.ps-bundle-check.active { background:currentColor; color:#fff; }
+.ps-required { position:absolute; top:-8px; right:-6px; font-size:9px; font-weight:700; padding:2px 6px; border-radius:4px; }
+</style>
+
+<script>
+(function(){
+
+  const container = document.getElementById("ps-fbt-{{ block.id }}");
+  const shop = container.dataset.shop;
+  const productId = "gid://shopify/Product/" + container.dataset.productId;
+
+  const API_URL = "https://spread-monitored-chronicles-ray.trycloudflare.com/cartdrawer/save_fbt_widget.php?shopdomain=" + shop;
+
+  fetch(API_URL)
+    .then(r=>r.json())
+    .then(response=>{
+
+      if(!response || response.status!=="success") return;
+
+      const data = response.data;
+
+      const templateMap = {
+        fbt1: data.temp1,
+        fbt2: data.temp2,
+        fbt3: data.temp3
+      };
+
+      const config = templateMap[data.selectedTemp];
+      if(!config) return;
+
+      const rules = data.condition || [];
+
+      // -----------------------------
+      // MULTI-RULE AGGREGATION
+      // -----------------------------
+      let matchedProducts = [];
+
+      rules.forEach(rule => {
+
+        if(rule.displayScope === "all"){
+          matchedProducts = matchedProducts.concat(rule.fbtProducts);
+        }
+
+        if(rule.displayScope === "single"){
+          const match = rule.triggerProducts.some(p => p.id === productId);
+          if(match){
+            matchedProducts = matchedProducts.concat(rule.fbtProducts);
+          }
+        }
+
+      });
+
+      if(!matchedProducts.length) return;
+
+      matchedProducts = dedupe(matchedProducts);
+
+      renderFBT(container, config, matchedProducts);
+
+    });
+
+  function dedupe(products){
+    const map = new Map();
+    products.forEach(p => map.set(p.id, p));
+    return Array.from(map.values());
+  }
+
+  function renderFBT(container, config, products){
+
+    container.innerHTML = `
+      <div class="ps-fbt-wrapper"
+           style="
+             background:${config.bgColor};
+             border-radius:${config.borderRadius}px;
+             border:1px solid ${config.borderColor};
+           ">
+        <div class="ps-fbt-title" style="color:${config.textColor}">
+          Frequently Bought Together
+        </div>
+
+        <div class="ps-fbt-products ${config.layout}"></div>
+
+        <div class="ps-fbt-footer"
+             style="border-color:${config.borderColor}">
+          <div>
+            <div style="font-size:13px;opacity:.6;color:${config.textColor}">
+              Total
+            </div>
+            <div class="ps-total-price"
+                 style="font-size:22px;font-weight:900;color:${config.priceColor}">
+              ₹0
+            </div>
+          </div>
+
+          ${config.showAddAllButton ? `
+            <button class="ps-fbt-addall"
+              style="background:${config.buttonColor};color:${config.buttonTextColor}">
+              Add to Cart
+            </button>` : ''}
+        </div>
+      </div>
+    `;
+
+    const wrapper = container.querySelector(".ps-fbt-products");
+    const totalEl = container.querySelector(".ps-total-price");
+    const addBtn = container.querySelector(".ps-fbt-addall");
+
+    let selected = new Map();
+
+    // -----------------------------
+    // DEFAULT SELECTION FOR BUNDLE
+    // -----------------------------
+    if(config.interactionType === "bundle"){
+      products.forEach(p => selected.set(p.id, 1));
+    }
+
+    products.forEach((p,index)=>{
+
+      const card = document.createElement("div");
+      card.className = `ps-product-card ${config.layout}`;
+      card.style.borderColor = config.borderColor;
+      card.style.borderRadius = config.borderRadius+"px";
+      card.style.color = config.textColor;
+
+      card.innerHTML = `
+        <div class="ps-product-image"
+             style="background-image:url('${p.image}')"></div>
+
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px">${p.title}</div>
+          ${config.showPrices ? `
+            <div style="font-size:13px;font-weight:bold;color:${config.priceColor}">
+              ₹${parseFloat(p.price).toLocaleString("en-IN")}
+            </div>` : ''}
+        </div>
+      `;
+
+      // -------- CLASSIC --------
+      if(config.interactionType === "classic"){
+        const btn = document.createElement("button");
+        btn.className="ps-classic-btn";
+        btn.style.border=`1px solid ${config.buttonColor}`;
+        btn.style.color=config.buttonColor;
+        btn.textContent="Add";
+
+        btn.onclick=()=>{
+          if(selected.has(p.id)){
+            selected.delete(p.id);
+            btn.textContent="Add";
+            btn.style.background="transparent";
+          }else{
+            selected.set(p.id,1);
+            btn.textContent="Added ✓";
+            btn.style.background=config.buttonColor;
+            btn.style.color=config.buttonTextColor;
+          }
+          updateTotal();
+        };
+
+        card.appendChild(btn);
+      }
+
+      // -------- QUICK ADD --------
+      if(config.interactionType === "quickAdd"){
+        selected.set(p.id,0);
+
+        const stepper=document.createElement("div");
+        stepper.className="ps-stepper";
+        stepper.style.border=`1px solid ${config.buttonColor}`;
+
+        stepper.innerHTML=`
+          <button style="background:${config.buttonColor};color:${config.buttonTextColor}">−</button>
+          <span>0</span>
+          <button style="background:${config.buttonColor};color:${config.buttonTextColor}">+</button>
+        `;
+
+        const minus=stepper.children[0];
+        const qty=stepper.children[1];
+        const plus=stepper.children[2];
+
+        minus.onclick=()=>{
+          let val=selected.get(p.id);
+          if(val>0){ val--; selected.set(p.id,val); qty.textContent=val; updateTotal();}
+        };
+
+        plus.onclick=()=>{
+          let val=selected.get(p.id);
+          val++; selected.set(p.id,val); qty.textContent=val; updateTotal();
+        };
+
+        card.appendChild(stepper);
+      }
+
+      // -------- BUNDLE --------
+      if(config.interactionType === "bundle"){
+
+        const check=document.createElement("div");
+        check.className="ps-bundle-check active";
+        check.style.borderColor=config.buttonColor;
+        check.style.color=config.buttonColor;
+
+        check.innerHTML="✓";
+
+        check.onclick=()=>{
+          if(selected.size<=1 && selected.has(p.id)) return; // min 1 required
+
+          if(selected.has(p.id)){
+            selected.delete(p.id);
+            check.classList.remove("active");
+            check.innerHTML="";
+          }else{
+            selected.set(p.id,1);
+            check.classList.add("active");
+            check.innerHTML="✓";
+          }
+          updateTotal();
+        };
+
+        if(index===0){
+          const badge=document.createElement("div");
+          badge.className="ps-required";
+          badge.textContent="REQUIRED";
+          badge.style.background=config.buttonColor;
+          badge.style.color=config.buttonTextColor;
+          card.appendChild(badge);
+        }
+
+        card.appendChild(check);
+      }
+
+      wrapper.appendChild(card);
+    });
+
+    function updateTotal(){
+      let total=0;
+      products.forEach(p=>{
+        const qty=selected.get(p.id)||0;
+        total+=qty*parseFloat(p.price);
+      });
+      totalEl.textContent="₹"+total.toLocaleString("en-IN");
+    }
+
+    updateTotal();
+
+    if(addBtn){
+      addBtn.onclick=()=>{
+        let items=[];
+        selected.forEach((qty,id)=>{
+          if(qty>0){
+            items.push({
+              id:id.split("/").pop(),
+              quantity:qty
+            });
+          }
+        });
+
+        if(!items.length) return;
+
+        fetch("/cart/add.js",{
+          method:"POST",
+          headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({items})
+        }).then(()=>window.location.href="/cart");
+      };
+    }
+
+  }
+
+})();
+</script>

@@ -1,14 +1,14 @@
 {
-  "activeTemplate": "template3",
+  "activeTemplate": "template1",
   "templates": {
     "template1": {
       "name": "Classic Banner",
       "headingText": "GET 10% OFF!",
       "subtextText": "Use code: SAVE10 at checkout",
       "bgColor": "#ffffff",
-      "textColor": "#ffffff",
-      "accentColor": "#ffffff",
-      "buttonColor": "#4a5d7c",
+      "textColor": "#1a1a1a",
+      "accentColor": "#2563eb",
+      "buttonColor": "#2563eb",
       "buttonTextColor": "#ffffff",
       "borderRadius": 12,
       "fontSize": 16,
@@ -41,6 +41,16 @@
       "padding": 20
     }
   },
-  "selectedActiveCoupons": [],
-  "couponOverrides": {}
+  "selectedActiveCoupons": [
+    "gid://shopify/DiscountCodeNode/1289947381827"
+  ],
+  "couponOverrides": {
+    "gid://shopify/DiscountCodeNode/1289947381827": {
+      "headingText": "velwo",
+      "subtextText": "velwo",
+      "displayCondition": "all",
+      "accentColor": "#ffa712",
+      "buttonColor": "#e99c1a"
+    }
+  }
 }

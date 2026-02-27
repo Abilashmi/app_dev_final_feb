@@ -1,11 +1,11 @@
 {
   "fbt": {
-    "activeTemplate": "fbt3",
+    "activeTemplate": "fbt1",
     "templates": {
       "fbt1": {
         "name": "Classic Grid",
-        "layout": "horizontal",
-        "interactionType": "classic",
+        "layout": "vertical",
+        "interactionType": "bundle",
         "bgColor": "#ffffff",
         "textColor": "#111827",
         "priceColor": "#059669",
@@ -49,63 +49,77 @@
     "openaiKey": "",
     "manualRules": [
       {
-        "id": "rule-auto-1772012990972",
-        "displayScope": "single",
-        "triggerProducts": [
+        "id": "rule-1772218762259",
+        "displayScope": "all",
+        "triggerProducts": [],
+        "fbtProducts": [
           {
             "id": "gid://shopify/Product/7545196806211",
             "title": "The Collection Snowboard: Hydrogen",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
-            "handle": "the-collection-snowboard-hydrogen"
+            "price": "600.00"
           }
-        ],
+        ]
+      },
+      {
+        "id": "rule-1772218778867",
+        "displayScope": "all",
+        "triggerProducts": [],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196970051",
-            "title": "The Collection Snowboard: Oxygen",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1765536576",
-            "price": "1025.00"
+            "id": "gid://shopify/Product/7545197002819",
+            "title": "The Collection Snowboard: Liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1765536576",
+            "price": "749.95"
           }
         ]
       }
     ],
-    "selectedTemplate": "fbt3",
-    "interactionStyle": "quickAdd",
+    "selectedTemplate": "fbt1",
+    "interactionStyle": "bundle",
     "layoutAlignment": "vertical",
     "color": {
-      "bgColor": "#992d2d",
-      "textColor": "#86bf9e",
-      "priceColor": "#427a55",
-      "buttonColor": "#2e9472",
-      "buttonText": "#65ad95",
-      "borderColor": "#f3f4f6"
+      "bgColor": "#ffffff",
+      "textColor": "#111827",
+      "priceColor": "#059669",
+      "buttonColor": "#111827",
+      "buttonText": "#ffffff",
+      "borderColor": "#e5e7eb"
     },
     "styling": {
-      "borderRadius": 16,
+      "borderRadius": 8,
       "showPrices": true,
       "showAddAllButton": true
     },
     "configurationMode": "Manual Configuration",
     "manualConfiguration": [
       {
-        "ruleId": "rule-auto-1772012990972",
-        "displayScope": "single",
-        "triggeredProduct": "The Collection Snowboard: Hydrogen",
-        "upsellProduct": "The Collection Snowboard: Oxygen",
-        "triggerProducts": [
+        "ruleId": "rule-1772218762259",
+        "displayScope": "all",
+        "triggeredProduct": "All Products",
+        "upsellProduct": "The Collection Snowboard: Hydrogen",
+        "triggerProducts": [],
+        "fbtProducts": [
           {
             "id": "gid://shopify/Product/7545196806211",
             "title": "The Collection Snowboard: Hydrogen",
             "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_0a40b01b-5021-48c1-80d1-aa8ab4876d3d.jpg?v=1765536575",
-            "handle": "the-collection-snowboard-hydrogen"
+            "price": "600.00"
           }
-        ],
+        ]
+      },
+      {
+        "ruleId": "rule-1772218778867",
+        "displayScope": "all",
+        "triggeredProduct": "All Products",
+        "upsellProduct": "The Collection Snowboard: Liquid",
+        "triggerProducts": [],
         "fbtProducts": [
           {
-            "id": "gid://shopify/Product/7545196970051",
-            "title": "The Collection Snowboard: Oxygen",
-            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_d624f226-0a89-4fe1-b333-0d1548b43c06.jpg?v=1765536576",
-            "price": "1025.00"
+            "id": "gid://shopify/Product/7545197002819",
+            "title": "The Collection Snowboard: Liquid",
+            "image": "https://cdn.shopify.com/s/files/1/0668/0025/5043/files/Main_b13ad453-477c-4ed1-9b43-81f3345adfd6.jpg?v=1765536576",
+            "price": "749.95"
           }
         ]
       }

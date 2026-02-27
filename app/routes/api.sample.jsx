@@ -1,5 +1,5 @@
 // ---------------- EXTERNAL API ----------------
-const EXTERNAL_CART_API = "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/save_cart_drawer.php";
+const EXTERNAL_CART_API = "https://spread-monitored-chronicles-ray.trycloudflare.com/cartdrawer/save_cart_drawer.php";
 
 // ---------------- DEFAULTS ----------------
 const DEFAULT_SETTINGS = {
@@ -191,7 +191,7 @@ export async function action({ request }) {
         // Attempt to forward to external PHP endpoint (optional, non-blocking)
         try {
             const externalResponse = await fetch(
-                "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/save_cart_drawer.php",
+                "https://omaha-permissions-moves-fifteen.trycloudflare.com/cartdrawer/save_cart_drawer.php",
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },

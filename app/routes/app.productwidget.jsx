@@ -669,6 +669,18 @@ function ProductCard({ product, template, interactionType, isSelected, isRequire
 // --- COUPONS SECTION ---
 
 function CouponsSection({ config, onSave, saving }) {
+        // Save coupon history to file
+        const saveCouponHistory = (couponId, code, headingText, subtextText) => {
+            const fs = window.require ? window.require('fs') : null;
+            if (!fs) return;
+            const historyPath = 'c:/app_dev/cart-app/coupon-history.json';
+            let history = [];
+            try {
+                history = JSON.parse(fs.readFileSync(historyPath, 'utf8'));
+            } catch (e) {}
+            history.push({ couponId, code, headingText, subtextText, timestamp: Date.now() });
+            fs.writeFileSync(historyPath, JSON.stringify(history, null, 2));
+        };
     const shopify = useAppBridge();
     const [activeTemplate, setActiveTemplate] = useState(config?.activeTemplate || "template1");
     const [templates, setTemplates] = useState(config?.templates || FAKE_COUPON_CONFIG.templates);
@@ -677,6 +689,8 @@ function CouponsSection({ config, onSave, saving }) {
     );
     // State for per-coupon overrides
     const [couponOverrides, setCouponOverrides] = useState(config?.couponOverrides || {});
+    // State for storing previous coupon texts before change
+    const [previousCouponTexts, setPreviousCouponTexts] = useState({});
 
     // State for preview navigation
     const [activePreviewCouponId, setActivePreviewCouponId] = useState(null);
@@ -731,12 +745,28 @@ function CouponsSection({ config, onSave, saving }) {
 
     // Helper: update a specific coupon's override field
     const updateCouponOverride = (couponId, field, value) => {
-        setCouponOverrides(prev => ({
+        // Save previous heading and subtext before updating
+        setPreviousCouponTexts((prevTexts) => {
+            const prevOverride = couponOverrides[couponId] || {};
+            const prevHeading = prevOverride.headingText !== undefined ? prevOverride.headingText : (previewCoupon ? (previewCoupon.code || previewCoupon.label) : (templates[activeTemplate]?.headingText || ""));
+            const prevSubtext = prevOverride.subtextText !== undefined ? prevOverride.subtextText : (previewCoupon ? (previewCoupon.description || previewCoupon.label) : (templates[activeTemplate]?.subtextText || ""));
+            // Save to file
+            const code = previewCoupon ? previewCoupon.code : couponId;
+            saveCouponHistory(couponId, code, prevHeading, prevSubtext);
+            return {
+                ...prevTexts,
+                [couponId]: {
+                    headingText: prevHeading,
+                    subtextText: prevSubtext,
+                },
+            };
+        });
+        setCouponOverrides((prev) => ({
             ...prev,
             [couponId]: {
                 ...prev[couponId],
-                [field]: value
-            }
+                [field]: value,
+            },
         }));
     };
 
@@ -867,11 +897,29 @@ function CouponsSection({ config, onSave, saving }) {
             typeof item === 'string' ? item : item.id
         );
 
+        // Ensure every coupon override includes headingText and subtextText
+        const filledOverrides = {};
+        couponIds.forEach(couponId => {
+            const override = couponOverrides[couponId] || {};
+            const coupon = activeCouponsFromAPI.find(c => c.id === couponId);
+            const base = templates[activeTemplate] || {};
+            filledOverrides[couponId] = {
+                ...override,
+                headingText:
+                    override.headingText !== undefined
+                        ? override.headingText
+                        : (coupon ? (coupon.code || coupon.label) : base.headingText),
+                subtextText:
+                    override.subtextText !== undefined
+                        ? override.subtextText
+                        : (coupon ? (coupon.description || coupon.label) : base.subtextText),
+            };
+        });
         onSave({
             activeTemplate,
             templateData: templates,
             selectedActiveCoupons: couponIds,
-            couponOverrides, // display conditions are now per-coupon inside overrides
+            couponOverrides: filledOverrides, // display conditions are now per-coupon inside overrides
         });
     };
 

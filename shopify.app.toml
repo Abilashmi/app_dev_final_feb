@@ -2,12 +2,11 @@
 
 client_id = "9f7189f9faf11f0771c1ef2f81c42b8d"
 name = "Cart_app"
-application_url = "https://example.com"
+application_url = "https://prefixal-turbanlike-britt.ngrok-free.dev"
 embedded = true
 
 [build]
-automatically_update_urls_on_dev = true
-include_config_on_deploy = true
+automatically_update_urls_on_dev = false
 
 [webhooks]
 api_version = "2026-04"
@@ -28,6 +27,6 @@ scopes = "read_discounts,write_discounts,write_products"
 redirect_urls = [ "https://example.com/api/auth" ]
 
 [app_proxy]
-url = "https://example.com"
+url = "https://spread-monitored-chronicles-ray.trycloudflare.com/cartdrawer"
 prefix = "apps"
 subpath = "cart-app"

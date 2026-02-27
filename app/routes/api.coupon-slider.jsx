@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 
-const EXTERNAL_API = "https://prefixal-turbanlike-britt.ngrok-free.dev/cartdrawer/save_coupon_slider_widget.php";
+const EXTERNAL_API = "https://spread-monitored-chronicles-ray.trycloudflare.com/cartdrawer/save_coupon_slider_widget.php";
 
 const DATA_FILE = path.resolve("coupon-slider-data.json");
 
@@ -218,11 +218,13 @@ function transformForDB(data, shopDomain) {
     // Build per-template DB object
     function buildTemplate(tplKey) {
         const tpl = templates[tplKey] || {};
+        // Get default styles for this template
+        const defaultTpl = (DEFAULT_DATA.templates && DEFAULT_DATA.templates[tplKey]) || {};
 
-        // Separate styles
-        const styles = {};
+        // Merge default styles with user styles (user styles take precedence)
+        const mergedStyles = {};
         for (const k of STYLE_KEYS) {
-            styles[k] = tpl[k] !== undefined ? tpl[k] : "";
+            mergedStyles[k] = tpl[k] !== undefined ? tpl[k] : defaultTpl[k] !== undefined ? defaultTpl[k] : "";
         }
 
         // Only include coupons & overrides if this is the active template
@@ -259,10 +261,10 @@ function transformForDB(data, shopDomain) {
         }
 
         return {
-            name: tpl.name || "",
-            headingText: tpl.headingText || "",
-            subtextText: tpl.subtextText || "",
-            styles: JSON.stringify(styles),
+            name: tpl.name || defaultTpl.name || "",
+            headingText: tpl.headingText || defaultTpl.headingText || "",
+            subtextText: tpl.subtextText || defaultTpl.subtextText || "",
+            styles: JSON.stringify(mergedStyles),
             couponConditions: JSON.stringify(couponConditions),
             selectedCoupons: JSON.stringify(tplCoupons),
             couponStyles: JSON.stringify(couponStyles),
