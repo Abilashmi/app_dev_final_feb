@@ -87,6 +87,7 @@ function transformFromDB(dbData) {
     const couponSelections = {
         selectedCouponIds: couponData.selectedActiveCoupons || [],
         couponOverrides: couponData.couponOverrides || {},
+        allCouponDetails: couponData.allCouponDetails || [],
     };
 
     return { settings, couponSelections, cartActive };

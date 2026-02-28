@@ -897,6 +897,21 @@ export default function CartDrawerAdmin() {
           if (data.couponSelections) {
             setSelectedActiveCoupons(data.couponSelections.selectedCouponIds || []);
             setCouponOverrides(data.couponSelections.couponOverrides || {});
+            // Restore full coupon visual details from DB
+            if (data.couponSelections.allCouponDetails && data.couponSelections.allCouponDetails.length > 0) {
+              setAllCoupons(prev => {
+                const merged = [...prev];
+                data.couponSelections.allCouponDetails.forEach(saved => {
+                  const existingIdx = merged.findIndex(c => c.id === saved.id);
+                  if (existingIdx >= 0) {
+                    merged[existingIdx] = { ...merged[existingIdx], ...saved };
+                  } else {
+                    merged.push(saved);
+                  }
+                });
+                return merged;
+              });
+            }
           }
 
           if (data.cartStatus !== undefined) {
@@ -1541,7 +1556,30 @@ export default function CartDrawerAdmin() {
         layout: couponLayout,
         alignment: couponAlignment,
         selectedActiveCoupons,
-        couponOverrides
+        couponOverrides,
+        allCouponDetails: selectedActiveCoupons.map(id => {
+          const apiCoupon = activeCouponsFromAPI.find(c => c.id === id) || {};
+          const override = couponOverrides[id] || {};
+          return {
+            id,
+            code: override.code || apiCoupon.code || '',
+            label: override.label || apiCoupon.label || apiCoupon.title || '',
+            description: override.description || apiCoupon.description || '',
+            discountType: override.discountType || apiCoupon.discountType || 'percentage',
+            discountValue: override.discountValue ?? apiCoupon.discountValue ?? 0,
+            iconUrl: override.iconUrl || apiCoupon.iconUrl || '🎟️',
+            backgroundColor: override.backgroundColor || apiCoupon.backgroundColor || '#000',
+            textColor: override.textColor || apiCoupon.textColor || '#fff',
+            borderRadius: override.borderRadius ?? apiCoupon.borderRadius ?? 8,
+            button: {
+              text: override.button?.text || apiCoupon.button?.text || 'Apply',
+              textColor: override.button?.textColor || apiCoupon.button?.textColor || '#ffffff',
+              backgroundColor: override.button?.backgroundColor || apiCoupon.button?.backgroundColor || '#000000',
+              borderRadius: override.button?.borderRadius ?? apiCoupon.button?.borderRadius ?? 4,
+            },
+            enabled: override.enabled ?? apiCoupon.enabled ?? true,
+          };
+        }),
       }),
       upsell_data: JSON.stringify({
         ...upsellConfig,
@@ -3764,11 +3802,16 @@ export default function CartDrawerAdmin() {
                     if (selectedActiveCoupons.length === 0) return null;
 
                     const couponsToShow = selectedActiveCoupons
-                      .map(id => activeCouponsFromAPI.find(c => c.id === id))
-                      .filter(Boolean)
-                      .map(apiCoupon => {
-                        const override = couponOverrides[apiCoupon.id] || {};
-                        return { ...apiCoupon, ...override, enabled: true };
+                      .map(id => {
+                        const apiCoupon = activeCouponsFromAPI.find(c => c.id === id) || allCoupons.find(c => (c.internal_id || c.id) === id) || { id };
+                        const override = couponOverrides[id] || {};
+                        return {
+                          ...apiCoupon,
+                          ...override,
+                          code: override.code || apiCoupon.code || 'CODE',
+                          label: override.label || apiCoupon.title || apiCoupon.label || 'Coupon',
+                          enabled: true
+                        };
                       });
 
                     return (
@@ -3815,50 +3858,52 @@ export default function CartDrawerAdmin() {
                               return (
                                 <div key={coupon.id} style={{
                                   minWidth: '240px',
-                                  padding: '12px',
+                                  padding: '12px 16px',
                                   backgroundColor: '#fff',
-                                  borderRadius: '12px',
-                                  border: isApplied ? `2px solid ${displayCoupon.backgroundColor}` : '1px solid #f1f5f9',
-                                  boxShadow: isApplied ? `0 4px 12px ${displayCoupon.backgroundColor}20` : '0 2px 4px rgba(0,0,0,0.02)',
+                                  borderRadius: '8px',
+                                  border: `1px solid ${isApplied ? displayCoupon.backgroundColor : '#e2e8f0'}`,
+                                  boxShadow: isApplied ? `0 2px 8px ${displayCoupon.backgroundColor}30` : '0 2px 4px rgba(0,0,0,0.02)',
                                   display: 'flex',
                                   alignItems: 'center',
                                   gap: '12px',
                                   position: 'relative',
+                                  overflow: 'hidden',
                                   transition: 'all 0.2s ease'
                                 }}>
                                   <div style={{
-                                    width: '44px',
-                                    height: '44px',
+                                    position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px',
+                                    backgroundColor: displayCoupon.backgroundColor || '#1e293b'
+                                  }}></div>
+                                  <div style={{
+                                    width: '46px',
+                                    height: '46px',
                                     borderRadius: '8px',
-                                    backgroundColor: displayCoupon.backgroundColor + '15',
+                                    backgroundColor: '#e2e8f0',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
                                     fontSize: '22px',
-                                    color: displayCoupon.backgroundColor,
-                                    flexShrink: 0,
-                                    border: `1px solid ${displayCoupon.backgroundColor}30`
+                                    flexShrink: 0
                                   }}>
                                     {displayCoupon.iconUrl || '🎟️'}
                                   </div>
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <p style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.01em' }}>{displayCoupon.code}</p>
-                                    <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: '500' }}>{displayCoupon.label}</p>
+                                    <p style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>{displayCoupon.code}</p>
+                                    <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>{displayCoupon.label}</p>
                                   </div>
                                   <button
                                     onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
                                     style={{
-                                      padding: '8px 16px',
-                                      backgroundColor: isApplied ? displayCoupon.backgroundColor : '#f8fafc',
-                                      color: isApplied ? '#fff' : '#1e293b',
-                                      border: isApplied ? 'none' : '1px solid #e2e8f0',
-                                      borderRadius: '20px',
-                                      fontSize: '11px',
-                                      fontWeight: '800',
+                                      padding: '6px 14px',
+                                      backgroundColor: isApplied ? displayCoupon.backgroundColor : 'transparent',
+                                      color: isApplied ? '#fff' : '#475569',
+                                      border: isApplied ? `1px solid ${displayCoupon.backgroundColor}` : '1px solid #cbd5e1',
+                                      borderRadius: '6px',
+                                      fontSize: '13px',
+                                      fontWeight: '600',
                                       cursor: 'pointer',
                                       whiteSpace: 'nowrap',
-                                      textTransform: 'uppercase',
-                                      letterSpacing: '0.02em'
+                                      transition: 'all 0.2s ease',
                                     }}
                                   >
                                     {isApplied ? 'Applied' : 'Apply'}
