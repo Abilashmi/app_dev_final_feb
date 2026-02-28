@@ -1,5 +1,8 @@
+import { authenticate } from "../shopify.server";
+import { getStoredCoupons } from "./api.create_coupon-sample";
+
 // ---------------- EXTERNAL API ----------------
-const EXTERNAL_CART_API = "https://spread-monitored-chronicles-ray.trycloudflare.com/cartdrawer/save_cart_drawer.php";
+const EXTERNAL_CART_API = "https://cameron-shadows-eggs-fruits.trycloudflare.com/cartdrawer/save_cart_drawer.php";
 
 // ---------------- DEFAULTS ----------------
 const DEFAULT_SETTINGS = {
@@ -89,7 +92,6 @@ function transformFromDB(dbData) {
     return { settings, couponSelections, cartActive };
 }
 
-import { getStoredCoupons } from "./api.create_coupon-sample";
 
 // ---------------- LOADER ----------------
 export async function loader({ request }) {
@@ -97,6 +99,72 @@ export async function loader({ request }) {
     const shopDomain = url.searchParams.get("shop") || "";
 
     const storedCoupons = await getStoredCoupons(shopDomain);
+
+    // Try to fetch from Shopify API if authenticated
+    let shopifyProducts = [];
+    let shopifyCollections = [];
+
+    try {
+        const { admin } = await authenticate.admin(request);
+
+        if (admin) {
+            // Fetch Products
+            const productQuery = `
+              query {
+                products(first: 50) {
+                  edges {
+                    node {
+                      id
+                      title
+                      status
+                      totalInventory
+                      featuredImage { url }
+                      variants(first: 1) {
+                        edges {
+                          node {
+                            price
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                collections(first: 50) {
+                  edges {
+                    node {
+                      id
+                      title
+                      productsCount {
+                        count
+                      }
+                    }
+                  }
+                }
+              }
+            `;
+            const gqlRes = await admin.graphql(productQuery);
+            const gqlData = await gqlRes.json();
+
+            if (gqlData.data) {
+                shopifyProducts = (gqlData.data.products?.edges || []).map(({ node }) => ({
+                    id: node.id,
+                    title: node.title,
+                    status: node.status.toLowerCase(),
+                    price: node.variants.edges[0]?.node.price || "0.00",
+                    image: node.featuredImage?.url || "📦",
+                    inventory: node.totalInventory
+                }));
+
+                shopifyCollections = (gqlData.data.collections?.edges || []).map(({ node }) => ({
+                    id: node.id,
+                    title: node.title,
+                    productCount: node.productsCount?.count || 0
+                }));
+            }
+        }
+    } catch (e) {
+        console.warn("Shopify API authentication failed, using mock fallback:", e.message);
+    }
 
     // Map stored coupons to the format app.cartdrawer.jsx expects
     const formattedCoupons = storedCoupons.map(c => ({
@@ -133,17 +201,17 @@ export async function loader({ request }) {
 
         const extBody = await extRes.json();
         console.log(`External Cart API GET response [${extRes.status}]:`, JSON.stringify(extBody));
-
         if (extBody.status === "success" && extBody.data) {
             const { settings, couponSelections, cartActive } = transformFromDB(extBody.data);
-
             return Response.json({
                 success: true,
                 settings,
                 couponSelections,
                 cartStatus: cartActive,
                 cartData: { ...DEFAULT_CART_DATA },
-                coupons: formattedCoupons
+                coupons: formattedCoupons,
+                shopifyProducts,
+                shopifyCollections
             });
         } else {
             console.warn("External Cart API returned non-success, using defaults");
@@ -151,7 +219,9 @@ export async function loader({ request }) {
                 success: true,
                 settings: { ...DEFAULT_SETTINGS },
                 cartData: { ...DEFAULT_CART_DATA },
-                coupons: formattedCoupons
+                coupons: formattedCoupons,
+                shopifyProducts,
+                shopifyCollections
             });
         }
     } catch (error) {
@@ -160,7 +230,9 @@ export async function loader({ request }) {
             success: true,
             settings: { ...DEFAULT_SETTINGS },
             cartData: { ...DEFAULT_CART_DATA },
-            coupons: formattedCoupons
+            coupons: formattedCoupons,
+            shopifyProducts,
+            shopifyCollections
         });
     }
 }
@@ -191,7 +263,7 @@ export async function action({ request }) {
         // Attempt to forward to external PHP endpoint (optional, non-blocking)
         try {
             const externalResponse = await fetch(
-                "https://omaha-permissions-moves-fifteen.trycloudflare.com/cartdrawer/save_cart_drawer.php",
+                "https://cameron-shadows-eggs-fruits.trycloudflare.com/cartdrawer/save_cart_drawer.php",
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },

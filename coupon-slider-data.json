@@ -1,5 +1,5 @@
 {
-  "activeTemplate": "template1",
+  "activeTemplate": "template2",
   "templates": {
     "template1": {
       "name": "Classic Banner",
@@ -46,11 +46,12 @@
   ],
   "couponOverrides": {
     "gid://shopify/DiscountCodeNode/1289947381827": {
+      "bgColor": "#1c8dff",
+      "textColor": "#0e0f11",
+      "accentColor": "#000000",
+      "buttonColor": "#000000",
       "headingText": "velwo",
-      "subtextText": "velwo",
-      "displayCondition": "all",
-      "accentColor": "#ffa712",
-      "buttonColor": "#e99c1a"
+      "subtextText": "velwo"
     }
   }
 }

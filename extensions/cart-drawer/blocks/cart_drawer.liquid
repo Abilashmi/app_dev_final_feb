@@ -1,740 +1,867 @@
-{% schema %}
-{
-  "name": "Cart Drawer Modal",
-  "target": "body",
-  "settings": [
-    {
-      "type": "color",
-      "id": "drawer_bg",
-      "label": "Drawer Background",
-      "default": "#ffffff"
-    }
-  ]
-}
-{% endschema %}
-
-<div id="app-cart-drawer" class="app-cart-drawer">
-  <div class="app-cart-overlay"></div>
-
-  <div 
-    class="app-cart-sidebar" 
-    style="background: {{ block.settings.drawer_bg }};"
-  >
-    <div class="app-cart-header">
-      <h3>Your Cart</h3>
-      <button id="app-close-drawer" class="app-close-btn">&times;</button>
-    </div>
-
-    <div class="app-cart-body">
-      <!-- 1. Progress Bar Section -->
-      <div class="app-progress-section">
-        <div class="app-progress-header">
-          <p>Loading rewards...</p>
-        </div>
-        <div class="app-progress-track-wrapper">
-          <div class="app-progress-track">
-            <div class="app-progress-fill" style="width: 0%;"></div>
-            
-            <!-- Milestones (Dynamic positioning will be handled in JS) -->
-            <div class="app-milestone reached" style="left: 30%;">
-              <div class="app-milestone-node">🚚</div>
-              <div class="app-milestone-label">Reached</div>
-            </div>
-            <div class="app-milestone next" style="left: 75%;">
-              <div class="app-milestone-node">🎁</div>
-              <div class="app-milestone-label">₹750</div>
-            </div>
-            <div class="app-milestone" style="left: 100%;">
-              <div class="app-milestone-node">🏷️</div>
-              <div class="app-milestone-label">₹1000</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 2. Upsell Section -->
-      <div class="app-upsell-section">
-        <p class="app-section-title">Frequently Bought Together</p>
-        <div class="app-upsell-list">
-          <div class="app-upsell-card">
-            <div class="app-upsell-img">
-              <img src="https://cdn.shopify.com/s/files/1/0704/6378/2946/products/Main_0449557a-a66f-449e-b8d2-5a413d8d3f18.jpg?v=1674037592" alt="" width="60" height="60">
-            </div>
-            <div class="app-upsell-info">
-              <p class="app-upsell-name">Premium Leather Wallet</p>
-              <div class="app-upsell-meta">
-                <span class="app-upsell-price">₹499</span>
-                <!-- Variant ID 42718131343523 used as demo -->
-                <button class="app-upsell-add" data-variant-id="42718131343523">Add</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 3. Cart Items Section (DYNAMICALY FILLED) -->
-      <div id="app-cart-items-container">
-        <p style="text-align: center; padding: 20px;">Fetching your cart...</p>
-      </div>
-
-      <!-- 4. Coupons Section -->
-      <div class="app-coupon-section">
-        <p class="app-section-title">Available Offers</p>
-        <div class="app-coupon-slider">
-          <div class="app-coupon-card">
-            <div class="app-coupon-icon">🎟️</div>
-            <div class="app-coupon-details">
-              <p class="app-coupon-code">SAVE10</p>
-              <p class="app-coupon-desc">10% off on all orders</p>
-            </div>
-            <button class="app-coupon-apply">Apply</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="app-cart-footer">
-      <div class="app-cart-totals">
-        <div class="app-total-row">
-          <span>Subtotal</span>
-          <span id="app-cart-total-price">₹0</span>
-        </div>
-        <div class="app-total-row discount">
-          <span>Discount (Applied)</span>
-          <span id="app-cart-discount-price">-₹0</span>
-        </div>
-        <div class="app-total-row final">
-          <span>Total</span>
-          <span id="app-cart-final-total">₹0</span>
-        </div>
-      </div>
-      <div class="app-cart-actions">
-        <a href="/checkout" class="app-checkout-btn">Checkout Now</a>
-        <button id="app-continue-btn">Continue Shopping</button>
-      </div>
-    </div>
-  </div>
-</div>
+{% if shop.permanent_domain != blank %}
+<div id="cc-root"></div>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap');
-
-:root {
-  --app-drawer-width: 420px;
-  --app-accent: #2563eb;
-  --app-bg: #fff;
-  --app-text: #1e293b;
-  --app-muted: #64748b;
-  --app-border: #f1f5f9;
-  --app-success: #10b981;
-}
-
-.app-cart-drawer {
+/* ========== OVERLAY & DRAWER ========== */
+#cc-overlay {
   position: fixed;
   inset: 0;
-  display: none;
-  z-index: 999999999999;
-  font-family: 'Outfit', sans-serif;
-}
-
-.app-cart-drawer.active {
-  display: block;
-}
-
-.app-cart-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0,0,0,0.4);
-  backdrop-filter: blur(8px);
+  z-index: 999999;
+  pointer-events: none;
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity .3s ease;
 }
-
-.app-cart-drawer.active .app-cart-overlay {
+#cc-overlay.active {
+  pointer-events: auto;
   opacity: 1;
 }
-
-.app-cart-sidebar {
+#cc-backdrop {
   position: absolute;
-  top: 0;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(2px);
+}
+#cc-drawer {
+  position: absolute;
   right: 0;
-  width: var(--app-drawer-width);
-  max-width: 90%;
-  height: 100vh;
-  box-shadow: -20px 0 60px rgba(0,0,0,0.1);
+  top: 0;
+  width: 420px;
+  max-width: 100vw;
+  height: 100%;
+  background: #fff;
   display: flex;
   flex-direction: column;
+  box-shadow: -8px 0 30px rgba(0,0,0,0.15);
   transform: translateX(100%);
-  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  z-index: 2;
-  background: var(--app-bg);
+  transition: transform .35s cubic-bezier(.4,0,.2,1);
 }
-
-.app-cart-drawer.active .app-cart-sidebar {
+#cc-overlay.active #cc-drawer {
   transform: translateX(0);
 }
 
-.app-cart-header {
-  padding: 24px;
-  border-bottom: 1px solid var(--app-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* ========== ANIMATIONS ========== */
+@keyframes cc-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes cc-pulse-ring {
+  0% { box-shadow: 0 0 0 0 var(--cc-fg-color66, rgba(37,99,235,0.4)); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@keyframes cc-fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.app-cart-header h3 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--app-text);
+/* ========== SCROLLBAR HIDE ========== */
+.cc-hide-scrollbar::-webkit-scrollbar { display: none; }
+.cc-hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* ========== QUANTITY BUTTONS ========== */
+.cc-qty-btn {
+  width: 28px; height: 28px;
+  background: none; border: none;
+  cursor: pointer; font-weight: bold;
+  font-size: 16px; color: #64748b;
+  display: flex; align-items: center; justify-content: center;
 }
+.cc-qty-btn:hover { color: #1e293b; }
 
-.app-close-btn {
-  background: #f8fafc;
-  border: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  font-size: 20px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: 0.2s;
-}
-
-.app-close-btn:hover {
-  background: #f1f5f9;
-}
-
-.app-cart-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-/* Progress Bar */
-.app-progress-section {
-  background: #fff;
-  padding: 20px;
-  border-radius: 16px;
-  border: 1px solid var(--app-border);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.03);
-}
-
-.app-progress-header {
-  text-align: center;
-  margin-bottom: 20px;
-  font-size: 14px;
-  color: var(--app-muted);
-}
-
-.app-bold { font-weight: 700; color: var(--app-text); }
-.app-reward-accent { color: var(--app-accent); font-weight: 700; }
-
-.app-progress-track {
-  position: relative;
-  height: 8px;
-  background: #f1f5f9;
-  border-radius: 99px;
-  margin: 20px 10px;
-}
-
-.app-progress-fill {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  background: linear-gradient(90deg, var(--app-accent), #60a5fa);
-  border-radius: 99px;
-  transition: width 1s ease;
-  box-shadow: 0 0 10px rgba(37, 99, 235, 0.4);
-}
-
-.app-milestone {
-  position: absolute;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.app-milestone-node {
-  width: 32px;
-  height: 32px;
-  background: #fff;
-  border: 2px solid var(--app-border);
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  transition: 0.3s;
-}
-
-.app-milestone.reached .app-milestone-node {
-  background: var(--app-accent);
-  border-color: var(--app-accent);
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-}
-
-.app-milestone.next .app-milestone-node {
-  border-color: var(--app-accent);
-  animation: app-pulse 2s infinite;
-}
-
-.app-milestone-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--app-muted);
-  position: absolute;
-  bottom: -24px;
-  white-space: nowrap;
-}
-
-/* Sections */
-.app-section-title {
-  margin: 0 0 12px 0;
-  font-size: 12px;
-  font-weight: 800;
+/* ========== ADD/APPLY BUTTONS ========== */
+.cc-add-btn {
+  padding: 6px 12px; font-size: 11px; font-weight: 800;
+  background: #000; color: #fff;
+  border: none; border-radius: 20px; cursor: pointer;
+  transition: all .2s cubic-bezier(.4,0,.2,1);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--app-muted);
+  letter-spacing: 0.02em;
+}
+.cc-add-btn:hover { background: #333; transform: scale(1.02); }
+
+.cc-upsell-card {
+  transition: all .2s ease;
+}
+.cc-upsell-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
 }
 
-/* Upsell */
-.app-upsell-card {
-  display: flex;
-  gap: 12px;
-  padding: 12px;
-  background: #f8fafc;
-  border-radius: 12px;
-  border: 1px solid var(--app-border);
-}
-
-.app-upsell-img {
-  width: 60px;
-  height: 60px;
-  background: #fff;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.app-upsell-img img { width: 100%; height: 100%; object-fit: cover; }
-
-.app-upsell-info { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
-
-.app-upsell-name { margin: 0; font-size: 13px; font-weight: 600; color: var(--app-text); }
-
-.app-upsell-meta { display: flex; align-items: center; justify-content: space-between; }
-
-.app-upsell-price { font-weight: 700; color: var(--app-success); font-size: 14px; }
-
-.app-upsell-add {
-  background: var(--app-text);
-  color: #fff;
-  border: none;
-  padding: 4px 12px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-/* Cart Product */
-.app-cart-product {
-  display: flex;
-  gap: 16px;
-  padding: 16px;
-  border-radius: 16px;
-  background: #fff;
-  border: 1px solid var(--app-border);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.02);
-}
-
-.app-cart-img-wrapper { width: 70px; height: 70px; background: #f8fafc; border-radius: 12px; overflow: hidden; }
-.app-cart-img-wrapper img { width: 100%; height: 100%; object-fit: cover; }
-
-.app-cart-product-title { margin: 0 0 8px 0; font-weight: 600; font-size: 14px; }
-
-.app-cart-qty-price { display: flex; justify-content: space-between; align-items: center; }
-
-.app-cart-qty { font-size: 12px; color: var(--app-muted); }
-
-.app-cart-item-total { font-weight: 700; color: var(--app-text); }
-
-/* Coupons */
-.app-coupon-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: #fff;
-  border-radius: 12px;
-  border: 1px solid var(--app-border);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.03);
-}
-
-.app-coupon-icon { font-size: 24px; }
-
-.app-coupon-code { margin: 0; font-weight: 700; font-size: 14px; }
-
-.app-coupon-desc { margin: 0; font-size: 11px; color: var(--app-muted); }
-
-.app-coupon-apply {
-  margin-left: auto;
-  background: #f1f5f9;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 11px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-/* Footer */
-.app-cart-footer { padding: 24px; border-top: 1px solid var(--app-border); background: #f8fafc; }
-
-.app-total-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; color: var(--app-muted); }
-
-.app-total-row.discount { color: var(--app-success); font-weight: 600; }
-
-.app-total-row.final { margin-top: 12px; font-size: 20px; font-weight: 700; color: var(--app-text); border-top: 1px solid #e2e8f0; paddingTop: 12px; }
-
-.app-cart-actions { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
-
-.app-cart-actions a, .app-cart-actions button {
-  width: 100%;
-  padding: 16px;
-  border-radius: 12px;
-  text-align: center;
-  text-decoration: none;
-  font-weight: 700;
-  font-size: 15px;
-  cursor: pointer;
-  border: none;
-  transition: 0.2s;
-}
-
-.app-checkout-btn { background: var(--app-text); color: #fff; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
-
-#app-continue-btn { background: #fff; border: 1px solid #e2e8f0; color: var(--app-text); }
-
-@keyframes app-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(37, 99, 235, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); }
+/* ========== MOBILE ========== */
+@media (max-width: 480px) {
+  #cc-drawer { width: 100vw; }
 }
 </style>
 
 <script>
-(function() {
-  console.log('[CartApp] Initializing advanced dynamic sidebar...');
+(function(){
 
-  const SHOP_DOMAIN = '{{ shop.permanent_domain }}';
-  const API_BASE = '/apps/cart-app'; 
+console.log("[CartDrawer] Custom Cart Loaded");
 
-  let DRAWER_CONFIG = {
-    progressBar: {
-      enabled: true,
-      mode: 'amount',
-      completionText: '🎉 All rewards unlocked!',
-      tiers: [
-        { minValue: 1000, description: 'Free Shipping', titleBeforeAchieving: "You're {COUNT} away from {REWARD}" }
-      ],
-      color: '#2563eb'
-    },
-    coupons: { enabled: true, style: 'style-1', list: [] },
-    upsell: { enabled: true, title: 'Frequently Bought Together', rules: [] }
-  };
+const SHOP = "{{ shop.permanent_domain }}";
+const API_BASE = "https://cameron-shadows-eggs-fruits.trycloudflare.com/cartdrawer";
+const CONFIG_API = API_BASE + "/save_cart_drawer.php?shopdomain=" + SHOP;
+const COUPON_API = API_BASE + "/save_coupon.php?shopdomain=" + SHOP;
 
-  function formatMoney(cents) {th
-    return `₹${Math.floor(cents / 100)}`;
-  }
+let CONFIG = null;
+let COUPONS = [];
+let appliedCouponCodes = [];
 
- async function fetchConfig() {
-  const fetchUrl = "https://spread-monitored-chronicles-ray.trycloudflare.com/cartdrawer/save_cart_drawer.php?shopdomain=" + SHOP_DOMAIN;
+/* =================== LOAD CONFIG =================== */
 
-  console.log('[CartApp] Fetching config from:', fetchUrl);
-
+async function loadConfig(){
   try {
-    const res = await fetch(fetchUrl, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        
-      }
-    });
+    const [configRes, couponRes] = await Promise.all([
+      fetch(CONFIG_API),
+      fetch(COUPON_API).catch(() => null)
+    ]);
 
-    if (!res.ok) {
-      console.warn("API failed. Using default config.");
-      return;
+    const configJson = await configRes.json();
+
+    if(configJson.status === "success" && configJson.data){
+      const d = configJson.data;
+      // Parse cartStatus
+      const cartActive = d.cartStatus == 1 || d.cart_status == 1 || d.cartstatus == 'active';
+      console.log("[CartDrawer] Config fetched:", d);
+      console.log("[CartDrawer] Cart active status:", cartActive);
+      if(!cartActive) { 
+        console.warn("[CartDrawer] Cart is NOT active. Showing nothing.");
+        CONFIG = null; 
+        return; 
+      }
+
+      CONFIG = {
+        cartStatus: true,
+        progress: parseProgressData(d),
+        coupon: parseCouponData(d),
+        upsell: parseUpsellData(d)
+      };
     }
 
-    const data = await res.json();
-    console.log("Remote config received:", data);
+    // Load coupons
+    if(couponRes){
+      try {
+        const couponJson = await couponRes.json();
+        if(couponJson.status === "success" && Array.isArray(couponJson.data)){
+          COUPONS = couponJson.data;
+        }
+      } catch(e){ console.warn("[CartDrawer] Coupon parse error", e); }
+    }
 
-    if (!data) return;
-
-    // Example mapping (adjust based on your PHP response)
-    DRAWER_CONFIG.progressBar = data.progressBar || DRAWER_CONFIG.progressBar;
-    DRAWER_CONFIG.coupons = data.coupons || DRAWER_CONFIG.coupons;
-    DRAWER_CONFIG.upsell = data.upsell || DRAWER_CONFIG.upsell;
-
-  } catch (err) {
-    console.error("Config fetch error:", err);
+  } catch(e){
+    console.error("[CartDrawer] Config load error:", e);
   }
 }
 
-  async function addItem(variantId) {
-    try {
-      const res = await fetch('/cart/add.js', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: [{ id: variantId, quantity: 1 }] })
-      });
-      if (res.ok) refreshCart(true);
-    } catch (e) { console.error('[CartApp] Add item error:', e); }
+function parseJSON(val){
+  if(!val) return {};
+  if(typeof val === "object") return val;
+  try { return JSON.parse(val); } catch(e){ return {}; }
+}
+
+function parseProgressData(d){
+  const data = parseJSON(d.progress_data);
+  const enabled = d.progress_status == 1 || d.progress_status == "1" || d.progress_status === true;
+  return {
+    enabled,
+    showOnEmpty: data.showOnEmpty !== false,
+    barBackgroundColor: data.barBackgroundColor || '#e2e8f0',
+    barForegroundColor: data.barForegroundColor || '#2563eb',
+    borderRadius: data.borderRadius || 8,
+    completionText: data.completionText || '🎉 All Rewards Unlocked!',
+    maxTarget: data.maxTarget || 1000,
+    mode: data.rewardsCalculation?.[0] === 'cartQuantity' ? 'quantity' : 'amount',
+    tiers: (data.tiers || []).map(t => ({
+      id: t.id,
+      target: t.minValue || 0,
+      rewardText: t.description || 'Reward',
+      products: t.products || [],
+      rewardType: t.rewardType || 'product'
+    })).sort((a,b) => a.target - b.target)
+  };
+}
+
+function parseCouponData(d){
+  const data = parseJSON(d.coupon_data);
+  const enabled = d.coupon_status == 1 || d.coupon_status == "1" || d.coupon_status === true;
+  return {
+    enabled,
+    style: data.style || data.selectedStyle || 'style-2',
+    position: data.position || 'top',
+    layout: data.layout || 'grid',
+    alignment: data.alignment || 'horizontal',
+    selectedActiveCoupons: data.selectedActiveCoupons || [],
+    couponOverrides: data.couponOverrides || {}
+  };
+}
+
+function parseUpsellData(d){
+  const data = parseJSON(d.upsell_data);
+  const enabled = d.upsell_status == 1 || d.upsell_status == "1" || d.upsell_status === true;
+  return {
+    enabled,
+    upsellMode: data.upsellMode || 'manual',
+    useAI: data.useAI !== false,
+    showIfInCart: data.showIfInCart || false,
+    limit: data.limit || 3,
+    showReviews: data.showReviews || false,
+    position: data.position || 'bottom',
+    direction: data.direction || 'block',
+    showOnEmptyCart: data.showOnEmptyCart !== false,
+    buttonText: data.buttonText || 'Add to cart',
+    upsellTitle: {
+      text: data.upsellTitle?.text || 'Recommended for you',
+      color: data.upsellTitle?.color || '#111827',
+      bold: data.upsellTitle?.formatting?.bold || false,
+      italic: data.upsellTitle?.formatting?.italic || false,
+      underline: data.upsellTitle?.formatting?.underline || false
+    },
+    manualRules: data.manualRules || [],
+    activeTemplate: data.activeTemplate || 'grid'
+  };
+}
+
+/* =================== OPEN DRAWER =================== */
+
+async function openDrawer(){
+  console.log("[CartDrawer] Opening drawer...");
+  if(!CONFIG) await loadConfig();
+  if(!CONFIG) return;
+  renderDrawer();
+}
+
+/* =================== CLOSE DRAWER =================== */
+
+function closeDrawer(){
+  const overlay = document.getElementById("cc-overlay");
+  if(overlay){
+    overlay.classList.remove("active");
+    setTimeout(() => {
+      const root = document.getElementById("cc-root");
+      if(root) root.innerHTML = '';
+    }, 350);
   }
+}
 
-  async function refreshCart(open = false) {
-    if (DRAWER_CONFIG.cartStatus === false) return; // Don't show if inactive
+/* =================== FETCH & XHR INTERCEPT =================== */
 
-    try {
-      const res = await fetch('/cart.js');
-      const cart = await res.json();
-      renderCart(cart);
-      if (open) {
-        const drawer = document.getElementById('app-cart-drawer');
-        if (drawer) {
-          drawer.classList.add('active');
-          document.body.style.overflow = 'hidden';
-        }
+const originalFetch = window.fetch;
+window.fetch = async function(...args){
+  const response = await originalFetch.apply(this, args);
+  try {
+    const url = args[0];
+    if(typeof url === "string" && url.includes("/cart/add")){
+      console.log("[CartDrawer] Fetch cart/add detected");
+      setTimeout(() => openDrawer(), 300);
+    }
+  } catch(e){}
+  return response;
+};
+
+const originalOpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(method, url){
+  if(url && url.includes("/cart/add")){
+    this.addEventListener("load", function(){
+      console.log("[CartDrawer] XHR cart/add detected");
+      setTimeout(() => openDrawer(), 300);
+    });
+  }
+  return originalOpen.apply(this, arguments);
+};
+
+document.addEventListener("submit", function(e){
+  const form = e.target;
+  if(form && form.action && form.action.includes("/cart/add")){
+    console.log("[CartDrawer] Form submit cart/add detected");
+    setTimeout(() => openDrawer(), 500);
+  }
+});
+
+/* =================== CART ACTIONS =================== */
+
+async function updateQuantity(key, quantity){
+  try {
+    await originalFetch('/cart/change.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: key, quantity })
+    });
+    renderDrawer();
+  } catch(e){ console.error("[CartDrawer] Qty update error:", e); }
+}
+
+async function removeItem(key){
+  await updateQuantity(key, 0);
+}
+
+async function addToCart(variantId, quantity){
+  try {
+    await originalFetch('/cart/add.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: [{ id: variantId, quantity: quantity || 1 }] })
+    });
+    renderDrawer();
+  } catch(e){ console.error("[CartDrawer] Add to cart error:", e); }
+}
+
+function applyCoupon(code){
+  if(!appliedCouponCodes.includes(code)){
+    appliedCouponCodes.push(code);
+  } else {
+    appliedCouponCodes = appliedCouponCodes.filter(c => c !== code);
+  }
+  renderDrawer();
+}
+
+/* =================== PROGRESS HELPERS =================== */
+
+function getProgressInfo(cartTotal, cartQty, progress){
+  const mode = progress.mode;
+  const currentVal = mode === 'quantity' ? cartQty : cartTotal;
+  const maxTarget = progress.maxTarget || 1000;
+  const tiers = progress.tiers || [];
+
+  const completed = tiers.filter(t => currentVal >= t.target);
+  const upcoming = tiers.find(t => t.target > currentVal);
+  const nextAmount = upcoming ? upcoming.target - currentVal : 0;
+  const percentage = Math.min(100, (currentVal / maxTarget) * 100);
+
+  return { currentVal, maxTarget, completed, upcoming, nextAmount, percentage, mode, tiers };
+}
+
+function getMilestoneIcon(rewardText, isCompleted){
+  const text = (rewardText || '').toLowerCase();
+  if(text.includes('ship')) return isCompleted ? '🚚' : '🚛';
+  if(text.includes('discount') || text.includes('%')) return isCompleted ? '🏷️' : '🎫';
+  return isCompleted ? '🎁' : '🔒';
+}
+
+/* =================== RENDER =================== */
+
+async function renderDrawer(){
+  const cart = await originalFetch('/cart.js').then(r => r.json());
+  const cartTotal = cart.total_price / 100;
+  const cartQty = cart.item_count;
+  const isEmpty = cart.items.length === 0;
+
+  const root = document.getElementById("cc-root");
+  root.innerHTML = '';
+
+  const overlay = document.createElement("div");
+  overlay.id = "cc-overlay";
+
+  let html = `<div id="cc-backdrop"></div><div id="cc-drawer">`;
+
+  /* -------- HEADER -------- */
+  html += `
+    <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;background:#f9fafb;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+      <h3 style="margin:0;font-size:18px;font-weight:600;color:#000;">Your Cart</h3>
+      <button onclick="document.querySelector('#cc-overlay').classList.remove('active');setTimeout(()=>{document.getElementById('cc-root').innerHTML=''},350);"
+        style="background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;padding:4px;">✕</button>
+    </div>
+  `;
+
+  /* -------- BODY -------- */
+  html += `<div style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">`;
+
+  /* ---- PROGRESS BAR ---- */
+  const progress = CONFIG.progress;
+  if(progress.enabled && (progress.showOnEmpty || !isEmpty)){
+    const pInfo = getProgressInfo(cartTotal, cartQty, progress);
+    const fgColor = progress.barForegroundColor || '#2563eb';
+
+    html += `<div style="padding:24px 16px;background:#fff;border-radius:16px;box-shadow:0 4px 20px -5px rgba(0,0,0,0.05);margin-bottom:20px;position:relative;border:1px solid #f1f5f9;">`;
+
+    // Header info
+    html += `<div style="text-align:center;margin-bottom:28px;">`;
+    if(pInfo.upcoming){
+      const amountLeft = pInfo.mode === 'quantity' ? `${pInfo.nextAmount} items` : `₹${pInfo.nextAmount}`;
+      html += `
+        <p style="margin:0 0 4px 0;font-size:15px;font-weight:500;color:#64748b;">
+          You're <span style="color:#0f172a;font-weight:700;">${amountLeft}</span> away
+        </p>
+        <p style="margin:0;font-size:14px;font-weight:700;color:${fgColor};">
+          Unlock: ${pInfo.upcoming.rewardText}
+        </p>
+      `;
+    } else {
+      html += `
+        <div style="color:#10b981;display:flex;align-items:center;justify-content:center;gap:8px;">
+          <span style="font-size:20px;">🎉</span>
+          <span style="font-size:15px;font-weight:700;">${progress.completionText}</span>
+        </div>
+      `;
+    }
+    html += `</div>`;
+
+    // Progress Track
+    html += `<div style="position:relative;height:40px;margin-bottom:8px;padding:0 10px;">`;
+
+    // Background line
+    html += `<div style="position:absolute;top:50%;left:12px;right:12px;height:8px;margin-top:-4px;background:#f1f5f9;border-radius:99px;box-shadow:inset 0 1px 2px rgba(0,0,0,0.06);"></div>`;
+
+    // Foreground fill
+    html += `<div style="position:absolute;top:50%;left:12px;height:8px;margin-top:-4px;width:calc(${pInfo.percentage}% - 24px);max-width:calc(100% - 24px);background:linear-gradient(90deg,${fgColor},#60a5fa,${fgColor});background-size:200% 100%;animation:cc-shimmer 3s infinite linear;border-radius:99px;transition:width 1s cubic-bezier(.4,0,.2,1);box-shadow:0 0 15px ${fgColor}66;z-index:1;"></div>`;
+
+    // Milestone Nodes
+    pInfo.tiers.forEach((ms, idx) => {
+      const isCompleted = pInfo.currentVal >= ms.target;
+      const prevTarget = idx > 0 ? pInfo.tiers[idx-1].target : 0;
+      const isNext = !isCompleted && pInfo.currentVal >= prevTarget;
+      const percent = Math.min(100, Math.max(0, (ms.target / pInfo.maxTarget) * 100));
+      const icon = getMilestoneIcon(ms.rewardText, isCompleted);
+      const nodeSize = (isCompleted || isNext) ? 40 : 32;
+      const fontSize = (isCompleted || isNext) ? 18 : 14;
+
+      html += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:2;display:flex;flex-direction:column;align-items:center;">`;
+
+      // Node circle
+      html += `<div style="width:${nodeSize}px;height:${nodeSize}px;border-radius:12px;background:${isCompleted ? fgColor : '#fff'};border:2px solid ${isCompleted ? fgColor : (isNext ? fgColor : '#cbd5e1')};display:flex;align-items:center;justify-content:center;font-size:${fontSize}px;box-shadow:${isCompleted ? `0 4px 12px ${fgColor}66` : '0 2px 5px rgba(0,0,0,0.05)'};color:${isCompleted ? '#fff' : '#94a3b8'};${isNext ? 'animation:cc-pulse-ring 2s infinite;--cc-fg-color66:'+fgColor+'66;' : ''}position:relative;overflow:hidden;transition:all .3s ease;">`;
+      html += `<span>${icon}</span>`;
+      if(isCompleted){
+        html += `<div style="position:absolute;inset:0;background:${fgColor}40;display:flex;align-items:center;justify-content:center;z-index:1;">
+          <div style="width:18px;height:18px;background:#10b981;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;">✓</div>
+        </div>`;
       }
-    } catch (e) { console.error('[CartApp] Refresh cart error:', e); }
-  }
+      html += `</div>`;
 
-  function renderCart(cart) {
-    console.log('[CartApp] Updating UI with cart data...');
-    
-    // 1. Process Progress Bar
-    const isAmountMode = DRAWER_CONFIG.progressBar.mode === 'amount';
-    const currentValue = isAmountMode ? cart.total_price : cart.item_count;
-    const tiers = DRAWER_CONFIG.progressBar.tiers;
-    const maxTierValue = tiers.length > 0 ? tiers[tiers.length - 1].minValue * (isAmountMode ? 100 : 1) : 1000;
-    
-    const nextTier = tiers.find(t => {
-      const target = t.minValue * (isAmountMode ? 100 : 1);
-      return currentValue < target;
+      // Tooltip label
+      const tooltipBottom = isCompleted ? '-48px' : '-32px';
+      html += `<div style="position:absolute;bottom:${tooltipBottom};left:50%;transform:translateX(-50%);white-space:nowrap;font-size:${isCompleted ? 10 : 11}px;font-weight:700;color:${isCompleted ? '#10b981' : '#64748b'};background:#fff;padding:4px 8px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.08);border:1px solid ${isCompleted ? '#d1fae5' : '#f1f5f9'};opacity:${(isCompleted||isNext)?1:0.7};pointer-events:none;z-index:10;display:flex;flex-direction:column;align-items:center;transition:all .3s ease;">`;
+      if(isCompleted){
+        html += `<span style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;opacity:.8;">Reached</span><span style="color:#0f172a;">${ms.rewardText}</span>`;
+      } else {
+        html += `<span>${pInfo.mode === 'amount' ? '₹'+ms.target : ms.target}</span>`;
+      }
+      html += `</div></div>`;
     });
 
-    const progressFill = document.querySelector('.app-progress-fill');
-    const progressText = document.querySelector('.app-progress-header p');
-    const track = document.querySelector('.app-progress-track');
-    const progressSection = document.querySelector('.app-progress-section');
+    html += `</div>`; // end progress track
+    html += `</div>`; // end progress container
+  }
 
-    if (progressSection) progressSection.style.display = DRAWER_CONFIG.progressBar.enabled ? 'block' : 'none';
+  /* ---- EMPTY STATE ---- */
+  if(isEmpty){
+    html += `
+      <div style="padding:40px 0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;">
+        <div style="font-size:40px;">🛒</div>
+        <p style="margin:0;font-size:16px;font-weight:600;color:#111;">Your cart is empty</p>
+        <p style="margin:0;font-size:13px;color:#6b7280;">Add items to unlock rewards</p>
+      </div>
+    `;
+  }
 
-    if (progressFill) {
-      const percent = Math.min(100, (currentValue / maxTierValue) * 100);
-      progressFill.style.width = `${percent}%`;
-    }
+  /* ---- UPSELL (TOP POSITION) ---- */
+  const upsell = CONFIG.upsell;
+  console.log("[CartDrawer] Checking top upsell. Enabled:", upsell.enabled, "Pos:", upsell.position, "Empty:", isEmpty, "ShowOnEmpty:", upsell.showOnEmptyCart);
+  if(upsell.enabled && upsell.position === 'top' && (upsell.showOnEmptyCart || !isEmpty)){
+    const upsellHtml = renderUpsellSection(cart, upsell);
+    console.log("[CartDrawer] Top upsell HTML length:", upsellHtml.length);
+    html += upsellHtml;
+  }
 
-    if (progressText) {
-      if (nextTier) {
-        const target = nextTier.minValue * (isAmountMode ? 100 : 1);
-        const diff = target - currentValue;
-        const valStr = isAmountMode ? formatMoney(diff) : `${diff} items`;
-        
-        let msg = nextTier.titleBeforeAchieving || "You're {COUNT} away from {REWARD}";
-        if (msg.includes('Free Shipping') && nextTier.description !== 'Free Shipping') {
-           msg = msg.replace('Free Shipping', '{REWARD}');
-        }
+  /* ---- CART ITEMS ---- */
+  if(!isEmpty){
+    html += `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0 4px;">
+        <p style="margin:0;font-size:15px;font-weight:800;color:#1e293b;letter-spacing:-0.01em;">Items included</p>
+        <div style="background:#f1f5f9;padding:2px 8px;border-radius:6px;">
+          <span style="font-size:11px;font-weight:700;color:#64748b;">${cart.items.length} ITEMS</span>
+        </div>
+      </div>
+    `;
 
-        msg = msg.replace('{COUNT}', valStr).replace('{REWARD}', nextTier.description);
-        
-        progressText.innerHTML = msg.includes('<span') ? msg : `<span>${msg}</span>`;
-        if (!progressText.querySelector('.app-bold')) {
-           progressText.innerHTML = msg.replace(valStr, `<span class="app-bold">${valStr}</span>`)
-                                       .replace(nextTier.description, `<span class="app-reward-accent">${nextTier.description}</span>`);
-        }
-      } else {
-        progressText.innerHTML = `<span class="app-success" style="color: var(--app-success); font-weight:700;">${DRAWER_CONFIG.progressBar.completionText}</span>`;
-      }
-    }
+    cart.items.forEach(item => {
+      const price = item.final_line_price / 100;
+      const unitPrice = item.original_price / 100;
+      const lineTotal = price;
 
-    if (track) {
-      const oldMilestones = track.querySelectorAll('.app-milestone');
-      oldMilestones.forEach(m => m.remove());
-
-      tiers.forEach(tier => {
-        const target = tier.minValue * (isAmountMode ? 100 : 1);
-        const pos = (target / maxTierValue) * 100;
-        const reached = currentValue >= target;
-        
-        const milestone = document.createElement('div');
-        milestone.className = `app-milestone ${reached ? 'reached' : ''}`;
-        milestone.style.left = `${pos}%`;
-        milestone.innerHTML = `
-          <div class="app-milestone-node">${reached ? '✅' : '🎁'}</div>
-          <div class="app-milestone-label">${isAmountMode ? formatMoney(target) : tier.minValue}</div>
-          <div class="app-milestone-desc">${tier.description}</div>
-        `;
-        track.appendChild(milestone);
-      });
-    }
-
-    // 2. Update Items List...
-    const container = document.getElementById('app-cart-items-container');
-    if (container) {
-      if (cart.items.length === 0) {
-        container.innerHTML = '<p style="text-align:center; padding: 40px; color: #64748b;">Your cart is empty.<br><br>Add something to see the magic! ✨</p>';
-      } else {
-        container.innerHTML = cart.items.map(item => `
-          <div class="app-cart-product">
-            <div class="app-cart-img-wrapper">
-              <img src="${item.image}" alt="${item.title}" width="80">
-            </div>
-            <div class="app-cart-details">
-              <p class="app-cart-product-title">${item.product_title}</p>
-              <div class="app-cart-qty-price">
-                <span class="app-cart-qty">${item.quantity} × ${formatMoney(item.price)}</span>
-                <span class="app-cart-item-total">${formatMoney(item.line_price)}</span>
-              </div>
-            </div>
+      html += `
+        <div style="display:flex;gap:12px;padding:12px;background:#fff;border-radius:16px;border:1px solid #f1f5f9;transition:all .3s ease;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);position:relative;">
+          <div style="width:70px;height:70px;background:#fff;border-radius:12px;flex-shrink:0;border:1px solid #f1f5f9;overflow:hidden;display:flex;align-items:center;justify-content:center;">
+            ${item.image ? `<img src="${item.image}" alt="${escapeHtml(item.product_title)}" style="width:100%;height:100%;object-fit:cover;">` : `<span style="font-size:32px;">📦</span>`}
           </div>
-        `).join('');
-      }
-    }
-
-    // 3. Upsells...
-    const upsellSection = document.querySelector('.app-upsell-section');
-    const upsellList = document.querySelector('.app-upsell-list');
-    if (upsellSection) {
-      if (!DRAWER_CONFIG.upsell.enabled || DRAWER_CONFIG.upsell.rules.length === 0) {
-        upsellSection.style.display = 'none';
-      } else {
-        upsellSection.style.display = 'block';
-        const titleEl = upsellSection.querySelector('.app-section-title');
-        if (titleEl) titleEl.textContent = DRAWER_CONFIG.upsell.title;
-        
-        const cartProductIds = cart.items.map(i => `gid://shopify/Product/${i.product_id}`);
-        const activeRule = DRAWER_CONFIG.upsell.rules.find(r => 
-          r.triggerType === 'all' || 
-          (r.triggerProductIds || []).some(id => cartProductIds.includes(id)) ||
-          (r.triggerType === 'cart_conditions' && cart.total_price >= (r.cartValueThreshold || 0) * 100)
-        );
-
-        if (activeRule && activeRule.upsellProductIds?.length > 0) {
-          upsellList.innerHTML = `
-            <div class="app-upsell-card">
-              <div class="app-upsell-img">
-                <img src="https://cdn.shopify.com/s/files/1/0704/6378/2946/products/Main_0449557a-a66f-449e-b8d2-5a413d8d3f18.jpg?v=1674037592" alt="">
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+              <p style="margin:0;font-size:14px;font-weight:700;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escapeHtml(item.product_title)}</p>
+              <button onclick="ccRemoveItem('${item.key}')"
+                style="background:none;border:none;padding:4px;cursor:pointer;color:#94a3b8;font-size:16px;transition:color .2s;" title="Remove item">✕</button>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto;">
+              <div style="display:flex;flex-direction:column;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span style="font-size:14px;font-weight:700;color:#0f172a;">₹${unitPrice.toFixed(0)}</span>
+                  <span style="font-size:12px;color:#64748b;font-weight:500;">(${item.quantity} × ₹${unitPrice.toFixed(0)})</span>
+                </div>
               </div>
-              <div class="app-upsell-info">
-                <p class="app-upsell-name">Special Offer: ${activeRule.title || 'Recommended'}</p>
-                <div class="app-upsell-meta">
-                  <span class="app-upsell-price">₹499</span>
-                  <button class="app-upsell-add" data-variant-id="${activeRule.upsellProductIds[0].split('/').pop()}">Add</button>
+              <div style="display:flex;align-items:center;gap:12px;">
+                <div style="display:flex;align-items:center;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;padding:2px;">
+                  <button class="cc-qty-btn" onclick="ccUpdateQty('${item.key}',${item.quantity - 1})">−</button>
+                  <span style="width:24px;text-align:center;font-size:13px;font-weight:700;color:#1e293b;">${item.quantity}</span>
+                  <button class="cc-qty-btn" onclick="ccUpdateQty('${item.key}',${item.quantity + 1})">+</button>
+                </div>
+                <div style="text-align:right;min-width:60px;">
+                  <span style="font-weight:800;font-size:15px;color:#0f172a;">₹${lineTotal.toFixed(0)}</span>
                 </div>
               </div>
             </div>
-          `;
-        } else { upsellSection.style.display = 'none'; }
-      }
-    }
-
-    // 4. Coupons...
-    const couponSection = document.querySelector('.app-coupon-section');
-    const couponSlider = document.querySelector('.app-coupon-slider');
-    if (couponSection) {
-      if (!DRAWER_CONFIG.coupons.enabled || DRAWER_CONFIG.coupons.list.length === 0) {
-        couponSection.style.display = 'none';
-      } else {
-        couponSection.style.display = 'block';
-        couponSlider.innerHTML = DRAWER_CONFIG.coupons.list.map(coupon => `
-          <div class="app-coupon-card">
-            <div class="app-coupon-icon">🎟️</div>
-            <div class="app-coupon-details">
-              <p class="app-coupon-code">${coupon.code}</p>
-              <p class="app-coupon-desc">${coupon.heading}</p>
-            </div>
-            <button class="app-coupon-apply" onclick="copyToClipboard('${coupon.code}')">Copy</button>
           </div>
-        `).join('');
+        </div>
+      `;
+    });
+
+    /* ---- COUPON SECTION ---- */
+    const coupon = CONFIG.coupon;
+    if(coupon.enabled && coupon.selectedActiveCoupons.length > 0){
+      html += renderCouponSection(coupon, cartTotal);
+    }
+  }
+
+  /* ---- UPSELL (BOTTOM POSITION) ---- */
+  console.log("[CartDrawer] Checking bottom upsell. Enabled:", upsell.enabled, "Pos:", upsell.position);
+  if(upsell.enabled && upsell.position === 'bottom' && (upsell.showOnEmptyCart || !isEmpty)){
+    const upsellHtml = renderUpsellSection(cart, upsell);
+    console.log("[CartDrawer] Bottom upsell HTML length:", upsellHtml.length);
+    html += upsellHtml;
+  }
+
+  html += `</div>`; // end body
+
+  /* -------- FOOTER -------- */
+  const subtotal = cartTotal;
+  let totalDiscount = 0;
+
+  // Calculate coupon discounts
+  appliedCouponCodes.forEach(code => {
+    const couponMatch = COUPONS.find(c => c.code === code);
+    if(couponMatch){
+      const val = parseFloat(couponMatch.value || 0);
+      if(couponMatch.valueType === 'percentage'){
+        totalDiscount += subtotal * (val / 100);
+      } else {
+        totalDiscount += val;
       }
     }
+  });
+  const finalTotal = Math.max(0, subtotal - totalDiscount);
 
-    const totalPriceEl = document.getElementById('app-cart-total-price');
-    const finalTotalEl = document.getElementById('app-cart-final-total');
-    if (totalPriceEl) totalPriceEl.textContent = formatMoney(cart.total_price);
-    if (finalTotalEl) finalTotalEl.textContent = formatMoney(cart.total_price);
+  html += `
+    <div style="padding:20px;background:#fff;border-top:1px solid #f1f5f9;box-shadow:0 -4px 6px -1px rgba(0,0,0,0.05);flex-shrink:0;">
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:14px;color:#64748b;font-weight:500;">Subtotal</span>
+          <span style="font-size:14px;color:#0f172a;font-weight:700;">₹${subtotal.toFixed(0)}</span>
+        </div>
+  `;
+
+  if(totalDiscount > 0){
+    html += `
+        <div style="display:flex;justify-content:space-between;align-items:center;color:#10b981;">
+          <span style="font-size:14px;font-weight:500;">Discounts</span>
+          <span style="font-size:14px;font-weight:700;">-₹${totalDiscount.toFixed(0)}</span>
+        </div>
+    `;
   }
 
-  function closeDrawer() {
-    const drawer = document.getElementById('app-cart-drawer');
-    if (drawer) {
-      drawer.classList.remove('active');
-      document.body.style.overflow = '';
-    }
-  }
+  html += `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:10px;border-top:1px solid #f1f5f9;">
+          <span style="font-size:16px;color:#0f172a;font-weight:800;">Total</span>
+          <span style="font-size:18px;color:#0f172a;font-weight:900;">₹${finalTotal.toFixed(0)}</span>
+        </div>
+      </div>
+      <a href="/checkout" style="text-decoration:none;">
+        <button style="width:100%;padding:16px;background:#111827;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
+          Checkout Now <span style="font-size:18px;">→</span>
+        </button>
+      </a>
+      <p style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
+        Shipping and taxes calculated at checkout
+      </p>
+    </div>
+  `;
 
-  window.copyToClipboard = function(text) {
-    navigator.clipboard.writeText(text).then(() => { alert('Code copied!'); });
-  };
+  html += `</div>`; // end drawer
 
-  document.addEventListener('click', function(e) {
-    // Intercept clicks on any cart link to open the drawer
-    const cartLink = e.target.closest('a[href="/cart"]');
-    if (cartLink) {
-      e.preventDefault();
-      refreshCart(true);
-      return;
-    }
+  overlay.innerHTML = html;
+  root.appendChild(overlay);
 
-    if (e.target.classList.contains('app-cart-overlay') || e.target.id === 'app-continue-btn' || e.target.id === 'app-close-drawer') closeDrawer();
-    if (e.target.classList.contains('app-upsell-add')) addItem(e.target.getAttribute('data-variant-id'));
+  // Trigger open animation
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      overlay.classList.add("active");
+    });
   });
 
-  // Intercept Fetch for /cart/add
-  const originalFetch = window.fetch;
-  window.fetch = async function() {
-    const input = arguments[0];
-    const url = typeof input === "string" ? input : (input instanceof Request ? input.url : "");
-    if (url.includes('/cart/add')) {
-      const response = await originalFetch.apply(this, arguments);
-      refreshCart(true);
-      return response;
+  // Backdrop click to close
+  document.getElementById("cc-backdrop").addEventListener("click", closeDrawer);
+}
+
+/* =================== COUPON SECTION RENDERER =================== */
+
+function renderCouponSection(couponConfig, cartTotal){
+  const selectedIds = couponConfig.selectedActiveCoupons || [];
+  const overrides = couponConfig.couponOverrides || {};
+  const style = couponConfig.style || 'style-2';
+  const layout = couponConfig.layout || 'grid';
+  const alignment = couponConfig.alignment || 'horizontal';
+
+  // Match selected coupons with loaded COUPONS data
+  const couponsToShow = selectedIds.map(id => {
+    const apiCoupon = COUPONS.find(c => (c.internal_id || c.id) === id);
+    const override = overrides[id] || {};
+    if(apiCoupon){
+      return {
+        id,
+        code: override.code || apiCoupon.code || 'CODE',
+        label: override.label || apiCoupon.title || apiCoupon.code || 'Coupon',
+        description: override.description || (apiCoupon.type === 'amount_off_order' ? 'Order Discount' : 'Product Discount'),
+        discountType: apiCoupon.valueType === 'percentage' ? 'percentage' : 'fixed',
+        discountValue: parseFloat(override.discountValue || apiCoupon.value || 0),
+        backgroundColor: override.backgroundColor || '#6366f1',
+        textColor: override.textColor || '#ffffff',
+        iconUrl: override.iconUrl || '🎟️'
+      };
     }
-    return originalFetch.apply(this, arguments);
-  };
+    return {
+      id,
+      code: override.code || 'CODE',
+      label: override.label || 'Coupon',
+      description: override.description || 'Discount',
+      discountType: 'percentage',
+      discountValue: parseFloat(override.discountValue || 0),
+      backgroundColor: override.backgroundColor || '#6366f1',
+      textColor: override.textColor || '#ffffff',
+      iconUrl: override.iconUrl || '🎟️'
+    };
+  }).filter(c => c);
 
-  // Intercept XMLHttpRequest for /cart/add (many themes use this)
-  const originalXhrOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function(method, url) {
-    this._url = url;
-    return originalXhrOpen.apply(this, arguments);
-  };
-  const originalXhrSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.send = function() {
-    this.addEventListener('load', function() {
-      if (this._url && this._url.includes('/cart/add')) {
-        refreshCart(true);
+  if(couponsToShow.length === 0) return '';
+
+  let gridStyle = '';
+  if(layout === 'grid'){
+    gridStyle = alignment === 'horizontal'
+      ? 'display:grid;grid-template-columns:repeat(2,1fr);gap:12px;'
+      : 'display:grid;grid-template-columns:1fr;gap:12px;';
+  } else {
+    gridStyle = alignment === 'horizontal'
+      ? 'display:flex;flex-direction:row;gap:12px;overflow-x:auto;padding-bottom:4px;'
+      : 'display:flex;flex-direction:column;gap:12px;overflow-y:auto;';
+  }
+
+  let html = `
+    <div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -1 : 999};">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <p style="margin:0;font-size:14px;font-weight:700;color:#1e293b;">Available Offers</p>
+      </div>
+      <div class="cc-hide-scrollbar" style="${gridStyle}">
+  `;
+
+  couponsToShow.forEach(coupon => {
+    const isApplied = appliedCouponCodes.includes(coupon.code);
+
+    if(style === 'style-1'){
+      // Style 1: Horizontal banner with left accent
+      html += `
+        <div style="min-width:260px;padding:12px;background:#fff;border-radius:12px;border:${isApplied ? '1px solid '+coupon.backgroundColor : '1px solid #e2e8f0'};box-shadow:0 2px 8px rgba(0,0,0,0.05);display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;">
+          ${isApplied ? `<div style="position:absolute;top:0;left:0;width:4px;height:100%;background:${coupon.backgroundColor};"></div>` : ''}
+          <div style="width:48px;height:48px;border-radius:10px;background:${coupon.backgroundColor}20;display:flex;align-items:center;justify-content:center;font-size:24px;color:${coupon.backgroundColor};flex-shrink:0;">${coupon.iconUrl}</div>
+          <div style="flex:1;min-width:0;">
+            <p style="margin:0;font-size:14px;font-weight:700;color:#1e293b;">${escapeHtml(coupon.code)}</p>
+            <p style="margin:0;font-size:12px;color:#64748b;">${escapeHtml(coupon.label)}</p>
+          </div>
+          <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 12px;background:${isApplied ? '#ecfdf5' : '#f8fafc'};color:${isApplied ? '#059669' : '#475569'};border:none;border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">${isApplied ? 'Applied' : 'Apply'}</button>
+        </div>
+      `;
+    } else if(style === 'style-2'){
+      // Style 2: Centered card
+      html += `
+        <div style="min-width:180px;padding:16px;background:#fff;border-radius:16px;border:${isApplied ? '2px solid '+coupon.backgroundColor : '1px solid #e2e8f0'};box-shadow:0 4px 12px rgba(0,0,0,0.08);display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;position:relative;">
+          <div style="width:56px;height:56px;border-radius:16px;background:${coupon.backgroundColor};display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;box-shadow:0 4px 10px ${coupon.backgroundColor}60;">${coupon.iconUrl}</div>
+          <div>
+            <p style="margin:0 0 2px 0;font-size:15px;font-weight:800;color:#1e293b;">${escapeHtml(coupon.code)}</p>
+            <p style="margin:0;font-size:11px;color:#64748b;">${escapeHtml(coupon.description)}</p>
+          </div>
+          <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="width:100%;padding:8px;margin-top:4px;background:${isApplied ? '#10b981' : '#1e293b'};color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">${isApplied ? '✓ Applied' : 'Apply Coupon'}</button>
+        </div>
+      `;
+    } else {
+      // Style 3: Bold header + dashed code box
+      html += `
+        <div style="min-width:280px;padding:0;background:#fff;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 2px 6px rgba(0,0,0,0.04);display:flex;flex-direction:column;overflow:hidden;">
+          <div style="background:${coupon.backgroundColor};padding:12px 16px;display:flex;align-items:center;justify-content:space-between;color:${coupon.textColor};">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:18px;">${coupon.iconUrl}</span>
+              <span style="font-size:14px;font-weight:700;">${escapeHtml(coupon.label)}</span>
+            </div>
+            <div style="background:rgba(255,255,255,0.2);padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;">${coupon.discountValue}% OFF</div>
+          </div>
+          <div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <div style="flex:1;border:1px dashed #cbd5e1;border-radius:6px;padding:6px 10px;background:#f8fafc;">
+              <p style="margin:0;font-size:13px;font-weight:700;color:#334155;font-family:monospace;">${escapeHtml(coupon.code)}</p>
+            </div>
+            <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${isApplied ? '#10b981' : '#2563eb'};font-size:12px;font-weight:700;cursor:pointer;padding:4px;">${isApplied ? 'REMOVE' : 'APPLY'}</button>
+          </div>
+        </div>
+      `;
+    }
+  });
+
+  html += `</div></div>`;
+  return html;
+}
+
+/* =================== UPSELL SECTION RENDERER =================== */
+
+function renderUpsellSection(cart, upsellConfig){
+  console.log("[CartDrawer] Rendering upsell section. Enabled:", upsellConfig.enabled, "Position:", upsellConfig.position);
+  // For the storefront, we use manual rules to determine upsell products
+  const cartProductIds = cart.items.map(item => {
+    // Extract numeric product ID from Shopify variant
+    return String(item.product_id);
+  });
+  console.log("[CartDrawer] Cart Product IDs:", cartProductIds);
+
+  let matchedUpsellDetails = [];
+
+  if(upsellConfig.manualRules && upsellConfig.manualRules.length > 0){
+    console.log("[CartDrawer] Found", upsellConfig.manualRules.length, "manual rules");
+    // Find matching rule based on trigger products
+    for(const rule of upsellConfig.manualRules){
+      if(!rule.enabled && rule.enabled !== undefined) {
+        console.log("[CartDrawer] Skipping disabled rule:", rule.id);
+        continue;
       }
-    });
-    return originalXhrSend.apply(this, arguments);
-  };
+      
+      // Normalize trigger IDs by stripping GID prefix
+      const triggerIds = (rule.triggerProductIds || []).map(id => String(id).replace('gid://shopify/Product/', ''));
+      const triggerType = rule.triggerType || 'products';
+      
+      console.log("[CartDrawer] Evaluating rule:", rule.id, "Type:", triggerType, "Triggers:", triggerIds);
+      
+      const hasMatch = triggerIds.some(id => cartProductIds.includes(id));
+      if(hasMatch || triggerType === 'all' || triggerIds.length === 0){
+        console.log("[CartDrawer] Rule MATCHED! Fetching upsell products...");
+        // Normalize upsell IDs as well
+        upsellProducts = (rule.upsellProductIds || []).map(id => String(id).replace('gid://shopify/Product/', ''));
+        matchedUpsellDetails = rule.upsellProductDetails || [];
+        break;
+      }
+    }
+  }
 
-  (async () => {
-    await fetchConfig();
-    refreshCart();
-  })();
+  // Filter out products already in cart if setting says so
+  if(!upsellConfig.showIfInCart){
+    const beforeFilter = upsellProducts.length;
+    upsellProducts = upsellProducts.filter(id => !cartProductIds.includes(String(id)));
+    if(beforeFilter !== upsellProducts.length){
+      console.log("[CartDrawer] Filtered out", beforeFilter - upsellProducts.length, "products already in cart");
+    }
+  }
+
+  // Apply limit
+  if(upsellConfig.limit){
+    upsellProducts = upsellProducts.slice(0, upsellConfig.limit);
+  }
+
+  console.log("[CartDrawer] Final Upsell Product IDs to show:", upsellProducts);
+
+  if(upsellProducts.length === 0) {
+    console.log("[CartDrawer] No upsell products to show.");
+    return '';
+  }
+
+  const dir = upsellConfig.direction || 'block';
+  const titleStyle = `
+    font-size:12px;
+    font-weight:${upsellConfig.upsellTitle.bold ? 900 : 800};
+    font-style:${upsellConfig.upsellTitle.italic ? 'italic' : 'normal'};
+    text-decoration:${upsellConfig.upsellTitle.underline ? 'underline' : 'none'};
+    color:${upsellConfig.upsellTitle.color};
+    text-transform:uppercase;letter-spacing:.05em;
+  `;
+
+  let html = `
+    <div style="padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb;${upsellConfig.position === 'top' ? 'border-top:1px solid #e5e7eb;margin-top:12px;' : ''}flex-shrink:0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <p style="margin:0;${titleStyle}">${escapeHtml(upsellConfig.upsellTitle.text)}</p>
+      </div>
+      <div class="cc-hide-scrollbar" style="display:flex;flex-direction:${dir === 'row' ? 'row' : 'column'};gap:12px;overflow-x:${dir === 'row' ? 'auto' : 'hidden'};padding-bottom:4px;" id="cc-upsell-list">
+  `;
+
+  upsellProducts.forEach(productId => {
+    // Try to find details in matchedUpsellDetails
+    const detail = (matchedUpsellDetails || []).find(d => String(d.id).replace('gid://shopify/Product/', '') === productId) || {};
+    const title = detail.title || 'Product';
+    const priceText = detail.price ? "₹" + parseFloat(detail.price).toFixed(0) : "";
+    const imageHtml = (detail.image && detail.image !== "📦") 
+      ? `<img src="${detail.image}" style="width:100%;height:100%;object-fit:cover;">`
+      : `<span style="font-size:24px;color:#94a3b8;">📦</span>`;
+
+    html += `
+      <div class="cc-upsell-card" data-product-id="${productId}" style="
+        min-width:${dir === 'row' ? '140px' : '100%'};
+        max-width:${dir === 'row' ? '140px' : '100%'};
+        background:#fff;border-radius:12px;border:1px solid #f1f5f9;padding:8px;
+        display:flex;flex-direction:${dir === 'row' ? 'column' : 'row'};
+        align-items:center;gap:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);transition:transform .2s ease;">
+        <div style="width:${dir === 'row' ? '100%' : '60px'};height:${dir === 'row' ? '80px' : '60px'};background:#f8fafc;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          ${imageHtml}
+        </div>
+        <div style="flex:1;min-width:0;text-align:${dir === 'row' ? 'center' : 'left'};width:100%;display:flex;flex-direction:column;justify-content:space-between;">
+          <p style="margin:0 0 4px 0;font-size:11px;font-weight:700;color:#0f172a;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.2;height:2.4em;">
+            ${escapeHtml(title)}
+          </p>
+          <div style="display:flex;flex-direction:${dir === 'row' ? 'column' : 'row'};align-items:center;justify-content:${dir === 'row' ? 'center' : 'space-between'};gap:4px;width:100%;">
+            <span style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
+            <button class="cc-add-btn" style="width:${dir === 'row' ? '100%' : 'auto'};margin-top:${dir === 'row' ? '4px' : '0'};" onclick="ccAddToCart('${productId}')">${escapeHtml(upsellConfig.buttonText)}</button>
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  html += `</div></div>`;
+  return html;
+}
+
+/* =================== UTILITY =================== */
+
+function escapeHtml(str){
+  if(!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
+/* =================== GLOBAL FUNCTIONS (called from onclick) =================== */
+
+window.ccUpdateQty = function(key, qty){
+  updateQuantity(key, Math.max(0, qty));
+};
+
+window.ccRemoveItem = function(key){
+  removeItem(key);
+};
+
+window.ccAddToCart = function(variantId){
+  addToCart(variantId, 1);
+};
+
+window.ccApplyCoupon = function(code){
+  applyCoupon(code);
+};
+
+window.testCart = openDrawer;
 
 })();
 </script>
+{% endif %}
+
+{% schema %}
+{
+  "name": "Custom Cart Drawer",
+  "target": "body",
+  "enabled_on": {
+    "templates": ["*"]
+  }
+}
+{% endschema %}

@@ -39,14 +39,11 @@ import {
   COUPON_STYLE_METADATA,
   globalCouponStyle,
   saveUpsellConfig,
-  shopifyProducts,
-  mockCollections,
   UPSELL_STYLES,
   UPSELL_STYLE_METADATA,
   DEFAULT_UPSELL_CONFIG,
   getUpsellConfig,
   evaluateUpsellRules,
-  SAMPLE_UPSELL_PRODUCTS,
   trackUpsellEvent
 } from '../services/api.cart-settings.shared';
 
@@ -770,7 +767,6 @@ export default function CartDrawerAdmin() {
     position: 'bottom',
     direction: 'block',
     showOnEmptyCart: true,
-    manualRules: [],
   });
   const [initialUpsellConfig, setInitialUpsellConfig] = useState(null);
   const [upsellSaving, setUpsellSaving] = useState(false);
@@ -1149,8 +1145,7 @@ export default function CartDrawerAdmin() {
 
   const handleMilestoneProductClick = (productIds, rewardText) => {
     // Collect all products from currently loaded states
-    const allAvailableProducts = [...loadedShopifyProducts, ...initialProducts];
-    const products = allAvailableProducts.filter(p => productIds.includes(p.id));
+    const products = loadedShopifyProducts.filter(p => productIds.includes(p.id));
     setSelectedMilestoneProduct(products);
     setSelectedMilestoneText(rewardText || "");
     setShowProductModal(true);
@@ -1209,7 +1204,7 @@ export default function CartDrawerAdmin() {
     );
   };
 
-  const filteredProducts = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).filter(product => {
+  const filteredProducts = loadedShopifyProducts.filter(product => {
     const matchesQuery = product.title.toLowerCase().includes(productSearchQuery.toLowerCase());
     const isArchived = product.status === 'archived';
     const isDraft = product.status === 'draft';
@@ -1223,7 +1218,7 @@ export default function CartDrawerAdmin() {
     return matchesQuery;
   });
 
-  const filteredCollections = (loadedShopifyCollections.length > 0 ? loadedShopifyCollections : mockCollections).filter(collection => {
+  const filteredCollections = loadedShopifyCollections.filter(collection => {
     const matchesQuery = collection.title.toLowerCase().includes(collectionSearchQuery.toLowerCase());
     if (showOnlySelectedCollections && !selectedCollectionIds.includes(collection.id)) return false;
     return matchesQuery;
@@ -1486,12 +1481,12 @@ export default function CartDrawerAdmin() {
     if (!upsellConfig) return '';
 
     if (upsellConfig.enabled && !upsellConfig.useAI) {
-      if (!upsellConfig.manualRules || upsellConfig.manualRules.length === 0) {
+      if (!manualUpsellRules || manualUpsellRules.length === 0) {
         return 'Please add at least one manual upsell rule or enable AI.';
       }
 
-      for (let i = 0; i < upsellConfig.manualRules.length; i++) {
-        const rule = upsellConfig.manualRules[i];
+      for (let i = 0; i < manualUpsellRules.length; i++) {
+        const rule = manualUpsellRules[i];
         if (!rule.triggerProductIds || rule.triggerProductIds.length === 0) {
           return `Rule #${i + 1}: Select at least one trigger product.`;
         }
@@ -1521,6 +1516,20 @@ export default function CartDrawerAdmin() {
     const isCouponOn = featureOverrides.couponSliderEnabled !== undefined ? featureOverrides.couponSliderEnabled : featureStates.couponSliderEnabled;
     const isUpsellOn = featureOverrides.upsellEnabled !== undefined ? featureOverrides.upsellEnabled : featureStates.upsellEnabled;
 
+    // Augment manual rules with product metadata for storefront convenience
+    const savableManualRules = manualUpsellRules.map(rule => {
+      const getDetails = (ids) => (ids || []).map(id => {
+        const p = loadedShopifyProducts.find(lp => lp.id === id);
+        return p ? { id: p.id, title: p.title, price: p.price, image: p.image } : { id };
+      });
+
+      return {
+        ...rule,
+        triggerProductDetails: getDetails(rule.triggerProductIds),
+        upsellProductDetails: getDetails(rule.upsellProductIds)
+      };
+    });
+
     const sampleData = {
       Id: SHOP_ID,
       shop: SHOP_ID,
@@ -1536,7 +1545,7 @@ export default function CartDrawerAdmin() {
       }),
       upsell_data: JSON.stringify({
         ...upsellConfig,
-        manualRules: manualUpsellRules
+        manualRules: savableManualRules
       }),
       progress_status: isProgressOn ? 1 : 0,
       coupon_status: isCouponOn ? 1 : 0,
@@ -1641,31 +1650,6 @@ export default function CartDrawerAdmin() {
   };
 
   const saveProductPickerSelection = () => {
-    if (editingRuleId?.startsWith('manual-')) {
-      const parts = editingRuleId.split('-');
-      const index = parseInt(parts[1]);
-      const field = parts[2]; // 'trigger' or 'upsell'
-
-      const newRules = [...(upsellConfig.manualRules || [])];
-      if (newRules[index]) {
-        if (field === 'trigger') {
-          newRules[index].triggerProductIds = tempSelectedProductIds;
-        } else {
-          newRules[index].upsellProductIds = tempSelectedProductIds;
-        }
-
-        setUpsellConfig({
-          ...upsellConfig,
-          manualRules: newRules
-        });
-      }
-
-      setShowProductPickerModal(false);
-      setEditingRuleId(null);
-      setProductPickerMode(null);
-      setTempSelectedProductIds([]);
-      return;
-    }
 
     if (editingRuleId === 'rule2-trigger') {
       setUpsellConfig({
@@ -2163,7 +2147,7 @@ export default function CartDrawerAdmin() {
                     <BlockStack gap="200">
                       <InlineStack align="space-between" blockAlign="center">
                         <Text as="label" variant="bodyMd" fontWeight="semibold">
-                          {progressMode === 'amount' ? 'Reward products' : 'Items included'} — {activeTier.products?.length || 0} of {(loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).length} products added
+                          {progressMode === 'amount' ? 'Reward products' : 'Items included'} — {activeTier.products?.length || 0} of {loadedShopifyProducts.length} products added
                         </Text>
                         <Button
                           onClick={() => handleOpenProductPicker(activeTierIndex)}
@@ -2177,7 +2161,7 @@ export default function CartDrawerAdmin() {
                       {activeTier.products && activeTier.products.length > 0 ? (
                         <BlockStack gap="150">
                           {activeTier.products.map(productId => {
-                            const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
+                            const product = loadedShopifyProducts.find(p => p.id === productId);
                             return product ? (
                               <div
                                 key={productId}
@@ -2859,38 +2843,24 @@ export default function CartDrawerAdmin() {
                   <Divider />
 
                   <BlockStack gap="300">
-                    {upsellConfig.manualRules?.length > 0 ? (
-                      upsellConfig.manualRules.map((rule, idx) => (
-                        <div key={idx} style={{ padding: '12px', border: '1px solid #e1e3e5', borderRadius: '8px', backgroundColor: '#f9fafb' }}>
+                    {manualUpsellRules?.length > 0 ? (
+                      manualUpsellRules.map((rule, idx) => (
+                        <div key={rule.id} style={{ padding: '12px', border: '1px solid #e1e3e5', borderRadius: '8px', backgroundColor: '#f9fafb' }}>
                           <BlockStack gap="200">
                             <InlineStack align="space-between">
                               <Text variant="bodyMd" fontWeight="bold">Rule #{idx + 1}</Text>
-                              <Button variant="plain" tone="critical" onClick={() => {
-                                const newRules = [...upsellConfig.manualRules];
-                                newRules.splice(idx, 1);
-                                setUpsellConfig({ ...upsellConfig, manualRules: newRules });
-                              }}>Remove</Button>
+                              <Button variant="plain" tone="critical" onClick={() => removeManualUpsellRule(rule.id)}>Remove</Button>
                             </InlineStack>
                             <Divider />
                             <BlockStack gap="100">
                               <Text variant="bodySm" fontWeight="bold">If this product is in cart:</Text>
-                              <Button onClick={() => {
-                                setEditingRuleId(`manual-${idx}-trigger`);
-                                setProductPickerMode('trigger');
-                                setTempSelectedProductIds(rule.triggerProductIds || []);
-                                setShowProductPickerModal(true);
-                              }}>
+                              <Button onClick={() => openProductPicker(rule.id, 'trigger')}>
                                 {rule.triggerProductIds?.length ? `${rule.triggerProductIds.length} Trigger Products` : 'Select trigger product'}
                               </Button>
                             </BlockStack>
                             <BlockStack gap="100">
                               <Text variant="bodySm" fontWeight="bold">Then recommend these products:</Text>
-                              <Button onClick={() => {
-                                setEditingRuleId(`manual-${idx}-upsell`);
-                                setProductPickerMode('upsell');
-                                setTempSelectedProductIds(rule.upsellProductIds || []);
-                                setShowProductPickerModal(true);
-                              }}>
+                              <Button onClick={() => openProductPicker(rule.id, 'upsell')}>
                                 {rule.upsellProductIds?.length ? `${rule.upsellProductIds.length} Upsell Products` : 'Select upsell products'}
                               </Button>
                             </BlockStack>
@@ -2902,10 +2872,7 @@ export default function CartDrawerAdmin() {
                         <Text tone="subdued">No manual rules yet. Add your first rule below.</Text>
                       </div>
                     )}
-                    <Button variant="primary" onClick={() => {
-                      const newRules = [...(upsellConfig.manualRules || []), { triggerProductIds: [], upsellProductIds: [] }];
-                      setUpsellConfig({ ...upsellConfig, manualRules: newRules });
-                    }}>Add new rule</Button>
+                    <Button variant="primary" onClick={addManualUpsellRule}>Add new rule</Button>
                   </BlockStack>
                 </BlockStack>
               </Card>
@@ -3042,7 +3009,7 @@ export default function CartDrawerAdmin() {
     const currentItems = cartData.items || [];
     const cartProductIds = currentItems.map(item => item.productId || item.id || item.variantId).filter(Boolean);
     const cartCollectionIds = cartProductIds.flatMap((productId) => {
-      const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
+      const product = loadedShopifyProducts.find(p => p.id === productId);
       return product?.collections || [];
     });
 
@@ -3065,7 +3032,7 @@ export default function CartDrawerAdmin() {
     const allReachedProductIds = [...new Set(reachedWithProducts.flatMap(ms => ms.associatedProducts))];
 
     const unlockedRewards = allReachedProductIds.map((productId, idx) => {
-      const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
+      const product = loadedShopifyProducts.find(p => p.id === productId);
       if (!product) return null;
       const isUrl = product.image && (product.image.startsWith('http') || product.image.startsWith('//'));
       const priceVal = product.price ? Number(product.price) : 0;
@@ -3094,7 +3061,23 @@ export default function CartDrawerAdmin() {
       };
     });
 
-    const itemsToRender = [...normalizedMockItems, ...unlockedRewards];
+    let itemsToRender = [...normalizedMockItems, ...unlockedRewards];
+
+    // LIVE PREVIEW ENHANCEMENT: If cart is empty, show one real product to demonstrate upsells
+    if (itemsToRender.length === 0 && loadedShopifyProducts.length > 0) {
+      const p = loadedShopifyProducts[0];
+      const isUrl = p.image && (p.image.startsWith('http') || p.image.startsWith('//'));
+      itemsToRender = [{
+        id: p.id,
+        productId: p.id,
+        name: p.title,
+        price: Number(p.price || 0),
+        quantity: 1,
+        displayImage: isUrl ? p.image : null,
+        placeholderImage: !isUrl ? (p.image || '📦') : '📦',
+        isPreviewPlaceholder: true
+      }];
+    }
 
     // Recalculate totals including automatic additions
     const totalWithRewards = itemsToRender.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -3114,16 +3097,25 @@ export default function CartDrawerAdmin() {
 
     if (internalEnabled) {
       if (internalUseAI) {
-        // Mock AI recommendations
-        upsellProductsToShow = ['sp-2', 'sp-6', 'sp-8'];
-      } else if (upsellConfig.manualRules?.length > 0) {
-        // Manual Rules Evaluation
-        const cartProductIds = itemsToRender.map(item => item.productId || item.id);
-        const matchingRule = upsellConfig.manualRules.find(rule =>
-          rule.triggerProductIds?.some(id => cartProductIds.includes(id))
-        );
-        if (matchingRule) {
-          upsellProductsToShow = matchingRule.upsellProductIds || [];
+        // AI recommendations - use actual products for realism
+        upsellProductsToShow = loadedShopifyProducts.slice(1, 4).map(p => p.id);
+        if (upsellProductsToShow.length === 0) upsellProductsToShow = ['sp-2', 'sp-6', 'sp-8'];
+      } else if (manualUpsellRules?.length > 0) {
+        // Manual Rules Evaluation (aligned with storefront)
+        const cartProductIds = itemsToRender.map(item => String(item.productId || item.id).replace('gid://shopify/Product/', ''));
+
+        for (const rule of manualUpsellRules) {
+          if (!rule.enabled && rule.enabled !== undefined) continue;
+
+          const triggerIds = (rule.triggerProductIds || []).map(id => String(id).replace('gid://shopify/Product/', ''));
+          const triggerType = rule.triggerType || 'products';
+
+          const hasMatch = triggerType === 'all' || triggerIds.length === 0 || triggerIds.some(id => cartProductIds.includes(id));
+
+          if (hasMatch) {
+            upsellProductsToShow = rule.upsellProductIds || [];
+            break;
+          }
         }
       }
 
@@ -3177,15 +3169,14 @@ export default function CartDrawerAdmin() {
           msOverflowStyle: 'none'
         }}>
           {upsellProductsToShow.length > 0 ? upsellProductsToShow.map(productId => {
-            const product = SAMPLE_UPSELL_PRODUCTS.find(p => p.id === productId)
-              || (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
+            const product = loadedShopifyProducts.find(p => p.id === productId);
             if (!product) return null;
             const hasImage = product.image && (typeof product.image === 'string') && (product.image.startsWith('http') || product.image.startsWith('//'));
 
             return (
               <div key={product.id} style={{
                 minWidth: currentDir === 'row' ? '140px' : '100%',
-                maxWidth: currentDir === 'row' ? '140px' : '100%',
+                width: currentDir === 'row' ? '140px' : '100%',
                 backgroundColor: '#fff',
                 borderRadius: '12px',
                 border: '1px solid #f1f5f9',
@@ -3193,9 +3184,11 @@ export default function CartDrawerAdmin() {
                 display: 'flex',
                 flexDirection: currentDir === 'row' ? 'column' : 'row',
                 alignItems: 'center',
-                gap: '10px',
+                justifyContent: 'center',
+                gap: '8px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                transition: 'transform 0.2s ease'
+                transition: 'transform 0.2s ease',
+                flexShrink: 0
               }}>
                 <div style={{
                   width: currentDir === 'row' ? '100%' : '60px',
@@ -3215,8 +3208,27 @@ export default function CartDrawerAdmin() {
                   )}
                 </div>
 
-                <div style={{ flex: 1, minWidth: 0, textAlign: currentDir === 'row' ? 'center' : 'left' }}>
-                  <p style={{ margin: '0 0 2px 0', fontSize: '11px', fontWeight: '700', color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{
+                  flex: 1,
+                  minWidth: 0,
+                  textAlign: currentDir === 'row' ? 'center' : 'left',
+                  width: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between'
+                }}>
+                  <p style={{
+                    margin: '0 0 4px 0',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    color: '#0f172a',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
+                    lineHeight: '1.2',
+                    height: '2.4em'
+                  }}>
                     {product.title}
                   </p>
 
@@ -3227,23 +3239,33 @@ export default function CartDrawerAdmin() {
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', flexDirection: currentDir === 'row' ? 'column' : 'row', alignItems: 'center', justifyContent: currentDir === 'row' ? 'center' : 'space-between', gap: '6px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: '800', color: '#10b981' }}>₹{product.price}</span>
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: currentDir === 'row' ? 'column' : 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    width: '100%'
+                  }}>
+                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#10b981' }}>₹{product.price}</span>
                     <button
                       onClick={() => handleAddToCart(product)}
                       style={{
-                        padding: '4px 10px',
-                        fontSize: '10px',
-                        fontWeight: '700',
-                        backgroundColor: '#111',
+                        width: currentDir === 'row' ? '100%' : 'auto',
+                        padding: '6px 12px',
+                        fontSize: '11px',
+                        fontWeight: '800',
+                        backgroundColor: '#000',
                         color: '#fff',
                         border: 'none',
-                        borderRadius: '6px',
+                        borderRadius: '20px',
                         cursor: 'pointer',
-                        width: currentDir === 'row' ? '100%' : 'auto'
+                        marginTop: currentDir === 'row' ? '4px' : '0',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.02em'
                       }}
                     >
-                      {upsellConfig.buttonText || 'Add'}
+                      {upsellConfig.buttonText || 'Add to cart'}
                     </button>
                   </div>
                 </div>
@@ -3455,7 +3477,7 @@ export default function CartDrawerAdmin() {
                             }}>
                               {(() => {
                                 if (ms.associatedProducts.length > 0) {
-                                  const firstProd = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === ms.associatedProducts[0]);
+                                  const firstProd = loadedShopifyProducts.find(p => p.id === ms.associatedProducts[0]);
                                   if (firstProd && firstProd.image && (firstProd.image.startsWith('http') || firstProd.image.startsWith('//'))) {
                                     return <img src={firstProd.image} alt="Reward" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isCompleted ? 1 : 0.5 }} />;
                                   }
@@ -3566,7 +3588,7 @@ export default function CartDrawerAdmin() {
                         msOverflowStyle: 'none'
                       }}>
                         {allReachedProductIds.map(productId => {
-                          const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === productId);
+                          const product = loadedShopifyProducts.find(p => p.id === productId);
                           if (!product) return null;
                           return (
                             <div key={product.id} style={{
@@ -3741,26 +3763,13 @@ export default function CartDrawerAdmin() {
                     // Determine which coupons to show - ONLY show if explicitly selected
                     if (selectedActiveCoupons.length === 0) return null;
 
-                    const couponsToShow = selectedActiveCoupons.map(id => {
-                      const apiCoupon = activeCouponsFromAPI.find(c => c.id === id);
-                      const override = couponOverrides[id] || {};
-                      if (apiCoupon) {
+                    const couponsToShow = selectedActiveCoupons
+                      .map(id => activeCouponsFromAPI.find(c => c.id === id))
+                      .filter(Boolean)
+                      .map(apiCoupon => {
+                        const override = couponOverrides[apiCoupon.id] || {};
                         return { ...apiCoupon, ...override, enabled: true };
-                      }
-                      return {
-                        id,
-                        code: override.code || 'LOADING...',
-                        label: override.label || 'Coupon',
-                        description: override.description || '...',
-                        discountType: 'percentage',
-                        discountValue: 0,
-                        backgroundColor: override.backgroundColor || '#000',
-                        textColor: override.textColor || '#fff',
-                        iconUrl: override.iconUrl || '🎟️',
-                        enabled: true,
-                        ...override
-                      };
-                    });
+                      });
 
                     return (
                       <div style={{
@@ -3804,14 +3813,56 @@ export default function CartDrawerAdmin() {
 
                             if (selectedCouponStyle === COUPON_STYLES.STYLE_1) {
                               return (
-                                <div key={coupon.id} style={{ minWidth: '260px', padding: '12px', backgroundColor: '#fff', borderRadius: '12px', border: isApplied ? `1px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '12px', position: 'relative', overflow: 'hidden' }}>
-                                  {isApplied && <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', backgroundColor: displayCoupon.backgroundColor }}></div>}
-                                  <div style={{ width: '48px', height: '48px', borderRadius: '10px', backgroundColor: displayCoupon.backgroundColor + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', color: displayCoupon.backgroundColor, flexShrink: 0 }}>{displayCoupon.iconUrl || '🎟️'}</div>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: '#1e293b' }}>{displayCoupon.code}</p>
-                                    <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{displayCoupon.label}</p>
+                                <div key={coupon.id} style={{
+                                  minWidth: '240px',
+                                  padding: '12px',
+                                  backgroundColor: '#fff',
+                                  borderRadius: '12px',
+                                  border: isApplied ? `2px solid ${displayCoupon.backgroundColor}` : '1px solid #f1f5f9',
+                                  boxShadow: isApplied ? `0 4px 12px ${displayCoupon.backgroundColor}20` : '0 2px 4px rgba(0,0,0,0.02)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '12px',
+                                  position: 'relative',
+                                  transition: 'all 0.2s ease'
+                                }}>
+                                  <div style={{
+                                    width: '44px',
+                                    height: '44px',
+                                    borderRadius: '8px',
+                                    backgroundColor: displayCoupon.backgroundColor + '15',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    fontSize: '22px',
+                                    color: displayCoupon.backgroundColor,
+                                    flexShrink: 0,
+                                    border: `1px solid ${displayCoupon.backgroundColor}30`
+                                  }}>
+                                    {displayCoupon.iconUrl || '🎟️'}
                                   </div>
-                                  <button onClick={() => handleCopyCouponCode(coupon.code, coupon.id)} style={{ padding: '6px 12px', backgroundColor: isApplied ? '#ecfdf5' : '#f8fafc', color: isApplied ? '#059669' : '#475569', border: 'none', borderRadius: '8px', fontSize: '11px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>{isApplied ? 'Applied' : 'Apply'}</button>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <p style={{ margin: 0, fontSize: '14px', fontWeight: '800', color: '#1e293b', letterSpacing: '-0.01em' }}>{displayCoupon.code}</p>
+                                    <p style={{ margin: 0, fontSize: '11px', color: '#64748b', fontWeight: '500' }}>{displayCoupon.label}</p>
+                                  </div>
+                                  <button
+                                    onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
+                                    style={{
+                                      padding: '8px 16px',
+                                      backgroundColor: isApplied ? displayCoupon.backgroundColor : '#f8fafc',
+                                      color: isApplied ? '#fff' : '#1e293b',
+                                      border: isApplied ? 'none' : '1px solid #e2e8f0',
+                                      borderRadius: '20px',
+                                      fontSize: '11px',
+                                      fontWeight: '800',
+                                      cursor: 'pointer',
+                                      whiteSpace: 'nowrap',
+                                      textTransform: 'uppercase',
+                                      letterSpacing: '0.02em'
+                                    }}
+                                  >
+                                    {isApplied ? 'Applied' : 'Apply'}
+                                  </button>
                                 </div>
                               );
                             }
@@ -4159,7 +4210,7 @@ export default function CartDrawerAdmin() {
                 label="Reward Products"
                 selected={selectedProductIds}
                 onChange={setSelectedProductIds}
-                products={loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts}
+                products={loadedShopifyProducts}
               />
             </BlockStack>
           </Modal.Section>
@@ -4193,7 +4244,7 @@ export default function CartDrawerAdmin() {
               <BlockStack gap="200">
                 <Text variant="bodySm" fontWeight="semibold">Collections</Text>
                 <BlockStack gap="100">
-                  {mockCollections
+                  {loadedShopifyCollections
                     .filter(col => col.title.toLowerCase().includes((productSearchQuery || '').toLowerCase()))
                     .map(col => (
                       <Checkbox
@@ -4211,7 +4262,7 @@ export default function CartDrawerAdmin() {
                         }}
                       />
                     ))}
-                  {mockCollections.filter(col => col.title.toLowerCase().includes((productSearchQuery || '').toLowerCase())).length === 0 && (
+                  {loadedShopifyCollections.filter(col => col.title.toLowerCase().includes((productSearchQuery || '').toLowerCase())).length === 0 && (
                     <Text variant="bodySm" tone="subdued">No collections found</Text>
                   )}
                 </BlockStack>
@@ -4220,7 +4271,7 @@ export default function CartDrawerAdmin() {
               <BlockStack gap="200">
                 <Text variant="bodySm" fontWeight="semibold">Products</Text>
                 <BlockStack gap="100">
-                  {(loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts)
+                  {loadedShopifyProducts
                     .filter(p => p.title.toLowerCase().includes((productSearchQuery || '').toLowerCase()))
                     .map(prod => (
                       <Checkbox
@@ -4238,7 +4289,7 @@ export default function CartDrawerAdmin() {
                         }}
                       />
                     ))}
-                  {(loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts)
+                  {loadedShopifyProducts
                     .filter(p => p.title.toLowerCase().includes((productSearchQuery || '').toLowerCase())).length === 0 && (
                       <Text variant="bodySm" tone="subdued">No products found</Text>
                     )}
@@ -4250,7 +4301,7 @@ export default function CartDrawerAdmin() {
                   <Text variant="bodySm" fontWeight="semibold">Selected ({tempSelectedProductIds.length + tempSelectedCollectionIds.length})</Text>
                   <InlineStack gap="100" wrap>
                     {tempSelectedCollectionIds.map(id => {
-                      const collection = mockCollections.find(c => c.id === id);
+                      const collection = loadedShopifyCollections.find(c => c.id === id);
                       return (
                         <Tag key={id} onRemove={() =>
                           setTempSelectedCollectionIds(
@@ -4262,7 +4313,7 @@ export default function CartDrawerAdmin() {
                       );
                     })}
                     {tempSelectedProductIds.map(id => {
-                      const product = (loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts).find(p => p.id === id);
+                      const product = loadedShopifyProducts.find(p => p.id === id);
                       return (
                         <Tag key={id} onRemove={() =>
                           setTempSelectedProductIds(

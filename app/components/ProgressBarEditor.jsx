@@ -166,9 +166,8 @@ export default function ProgressBarEditor({
   handleSaveProgressBarSettings,
   handleOpenProductPicker,
   loadedShopifyProducts,
-  shopifyProducts,
 }) {
-  const productsList = loadedShopifyProducts.length > 0 ? loadedShopifyProducts : shopifyProducts;
+  const productsList = loadedShopifyProducts;
 
   return (
     <div style={{ padding: '0 20px 20px 20px' }}>

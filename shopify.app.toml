@@ -27,6 +27,6 @@ scopes = "read_discounts,write_discounts,write_products"
 redirect_urls = [ "https://example.com/api/auth" ]
 
 [app_proxy]
-url = "https://spread-monitored-chronicles-ray.trycloudflare.com/cartdrawer"
+url = "https://cameron-shadows-eggs-fruits.trycloudflare.com/cartdrawer"
 prefix = "apps"
 subpath = "cart-app"
