@@ -649,6 +649,10 @@ const getActiveMilestone = (currentValue, milestones, mode = 'amount') => {
   };
 };
 
+const isEnabled = (val) => {
+  return val == 1 || val == "1" || val === true || val === 'true' || val === 'active' || val === 'enabled';
+};
+
 
 export default function CartDrawerAdmin() {
   // ==========================================
@@ -678,6 +682,8 @@ export default function CartDrawerAdmin() {
   const [progressBarSettings, setProgressBarSettings] = useState({
     showOnEmpty: true,
     barBackgroundColor: '#E2E2E2',
+    barForegroundColor: '#2563eb',
+    fill_gradient: '',
     borderRadius: 8,
     completionText: 'Free shipping unlocked!',
     rewardsCalculation: ['cartTotal'], // 'cartTotal' or 'cartQuantity'
@@ -851,15 +857,35 @@ export default function CartDrawerAdmin() {
 
           // 2. Update Feature States
           setFeatureStates({
-            progressBarEnabled: settings.progressBar?.enabled ?? false,
-            couponSliderEnabled: settings.coupons?.enabled ?? false,
-            upsellEnabled: settings.upsell?.enabled ?? false, // Default to false if missing
+            progressBarEnabled: isEnabled(settings.progressBar?.enabled),
+            couponSliderEnabled: isEnabled(settings.coupons?.enabled),
+            upsellEnabled: isEnabled(settings.upsell?.enabled),
           });
 
-          // 3. Update Progress Bar
+          // 3. Update Progress Bar - Ensure defaults exist
           if (settings.progressBar) {
-            setProgressBarSettings(settings.progressBar);
-            setProgressMode(settings.progressBar.mode || 'amount');
+            const pbData = settings.progressBar;
+            const normalizedPB = {
+              enabled: isEnabled(pbData.enabled),
+              mode: pbData.mode || 'amount',
+              showOnEmpty: pbData.showOnEmpty !== false,
+              barBackgroundColor: pbData.barBackgroundColor || pbData.track_color || '#e2e8f0',
+              barForegroundColor: pbData.barForegroundColor || pbData.fill_color || '#2563eb',
+              fill_gradient: pbData.fill_gradient || '',
+              borderRadius: pbData.borderRadius || 8,
+              completionText: pbData.completionText || '🎉 All Rewards Unlocked!',
+              maxTarget: pbData.maxTarget || 1000,
+              placement: pbData.placement || 'top',
+              tiers: (pbData.tiers || []).map(t => ({
+                id: t.id,
+                minValue: t.minValue || 0,
+                description: t.description || 'Reward',
+                products: t.products || [],
+                rewardType: t.rewardType || 'product'
+              })).sort((a, b) => a.minValue - b.minValue)
+            };
+            setProgressBarSettings(normalizedPB);
+            setProgressMode(normalizedPB.mode);
           }
 
           // 4. Update Upsell - Merge with defaults
@@ -1563,7 +1589,14 @@ export default function CartDrawerAdmin() {
       Id: SHOP_ID,
       shop: SHOP_ID,
       cartstatus: targetStatus === 'active' ? 'active' : 'inactive',
-      progress_data: JSON.stringify(progressBarSettings),
+      progress_data: JSON.stringify({
+        ...progressBarSettings,
+        // Send both to ensure persistence regardless of DB schema expectations
+        track_color: progressBarSettings.barBackgroundColor,
+        fill_color: progressBarSettings.barForegroundColor,
+        mode: progressMode,
+        enabled: isProgressOn, // Critical sync
+      }),
       coupon_data: JSON.stringify({
         style: selectedCouponStyle,
         position: couponPosition,
@@ -1586,10 +1619,10 @@ export default function CartDrawerAdmin() {
             textColor: override.textColor || apiCoupon.textColor || '#fff',
             borderRadius: override.borderRadius ?? apiCoupon.borderRadius ?? 8,
             button: {
-              text: override.button?.text || apiCoupon.button?.text || 'Apply',
-              textColor: override.button?.textColor || apiCoupon.button?.textColor || '#ffffff',
-              backgroundColor: override.button?.backgroundColor || apiCoupon.button?.backgroundColor || '#000000',
-              borderRadius: override.button?.borderRadius ?? apiCoupon.button?.borderRadius ?? 4,
+              text: override['button.text'] ?? override.button?.text ?? apiCoupon.button?.text ?? 'Apply',
+              textColor: override['button.textColor'] ?? override.button?.textColor ?? apiCoupon.button?.textColor ?? '#ffffff',
+              backgroundColor: override['button.backgroundColor'] ?? override.button?.backgroundColor ?? apiCoupon.button?.backgroundColor ?? '#000000',
+              borderRadius: override['button.borderRadius'] ?? override.button?.borderRadius ?? apiCoupon.button?.borderRadius ?? 4,
             },
             enabled: override.enabled ?? apiCoupon.enabled ?? true,
           };
@@ -2770,7 +2803,7 @@ export default function CartDrawerAdmin() {
 
                             <TextField
                               label="Button Text"
-                              value={editingCoupon.button?.text || 'Apply'}
+                              value={editingCoupon.button?.text ?? 'Apply'}
                               onChange={(value) => updateCouponField('button.text', value)}
                               autoComplete="off"
                             />
@@ -3068,7 +3101,7 @@ export default function CartDrawerAdmin() {
     const currentProgressMode = progressMode || 'amount';
 
     // Derive milestones from current settings for LIVE preview
-    const previewMilestones = progressBarSettings.tiers.map(tier => ({
+    const previewMilestones = (progressBarSettings?.tiers || []).map(tier => ({
       id: tier.id,
       target: tier.minValue,
       label: currentProgressMode === 'amount' ? `₹${tier.minValue}` : `${tier.minValue} items`,
@@ -3144,7 +3177,7 @@ export default function CartDrawerAdmin() {
 
     // Calculate Upsell Recommendations Once for use in Footer or Body
     let upsellProductsToShow = [];
-    const internalEnabled = featureStates.upsellEnabled;
+    const internalEnabled = isEnabled(featureStates.upsellEnabled);
     const internalUseAI = upsellConfig.useAI !== undefined ? upsellConfig.useAI : true;
 
     if (internalEnabled) {
@@ -3183,7 +3216,7 @@ export default function CartDrawerAdmin() {
       }
     }
 
-    const currentEnabled = featureStates.upsellEnabled;
+    const currentEnabled = isEnabled(featureStates.upsellEnabled);
     const currentUseAI = upsellConfig.useAI !== undefined ? upsellConfig.useAI : true;
     const currentPos = upsellConfig.position || 'bottom';
     const currentDir = upsellConfig.direction || 'block';
@@ -3381,7 +3414,7 @@ export default function CartDrawerAdmin() {
           {/* Body */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* Progress Bar Feature - Integrated Milestones */}
-            {featureStates.progressBarEnabled && (progressBarSettings.showOnEmpty || !showEmpty) && (
+            {isEnabled(featureStates.progressBarEnabled) && (isEnabled(progressBarSettings.showOnEmpty) || !showEmpty) && (
               <div style={{
                 padding: '24px 16px',
                 order: progressBarSettings.placement === 'bottom' ? 10 : -2,
@@ -3446,7 +3479,7 @@ export default function CartDrawerAdmin() {
                     right: '12px',
                     height: '8px',
                     marginTop: '-4px',
-                    backgroundColor: '#f1f5f9',
+                    backgroundColor: progressBarSettings.barBackgroundColor || '#f1f5f9',
                     borderRadius: '99px',
                     boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)'
                   }} />
@@ -3465,8 +3498,7 @@ export default function CartDrawerAdmin() {
                         marginTop: '-4px',
                         width: `calc(${percentage}% - 24px)`,
                         maxWidth: 'calc(100% - 24px)',
-                        backgroundColor: progressBarSettings.barForegroundColor || '#2563eb',
-                        background: `linear-gradient(90deg, ${progressBarSettings.barForegroundColor || '#2563eb'}, #60a5fa, ${progressBarSettings.barForegroundColor || '#2563eb'})`,
+                        background: progressBarSettings.fill_gradient || `linear-gradient(90deg, ${progressBarSettings.barForegroundColor || '#2563eb'}, #60a5fa, ${progressBarSettings.barForegroundColor || '#2563eb'})`,
                         backgroundSize: '200% 100%',
                         animation: 'shimmer 3s infinite linear',
                         borderRadius: '99px',
@@ -3810,7 +3842,7 @@ export default function CartDrawerAdmin() {
                   );
                 })}
                 {/* Coupon Feature - Product Widget Style */}
-                {featureStates.couponSliderEnabled && (
+                {isEnabled(featureStates.couponSliderEnabled) && (
                   (() => {
                     // Determine which coupons to show - ONLY show if explicitly selected
                     if (selectedActiveCoupons.length === 0) return null;

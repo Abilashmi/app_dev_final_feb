@@ -11,6 +11,8 @@ const DEFAULT_SETTINGS = {
         mode: "amount",
         showOnEmpty: true,
         barBackgroundColor: "#e2e8f0",
+        barForegroundColor: "#2563eb",
+        fill_gradient: "",
         borderRadius: 8,
         completionText: "🎉 You've unlocked free shipping!",
         maxTarget: 1000,

@@ -184,9 +184,13 @@ function parseJSON(val){
   try { return JSON.parse(val); } catch(e){ return {}; }
 }
 
+function isEnabled(val) {
+  return val == 1 || val == "1" || val === true || val === 'true' || val === 'active' || val === 'enabled';
+}
+
 function parseProgressData(d){
-  const data = parseJSON(d.progress_data);
-  const enabled = d.progress_status == 1 || d.progress_status == "1" || d.progress_status === true;
+  const data = parseJSON(d.progress_data || d.progressData);
+  const enabled = isEnabled(d.progress_status) || isEnabled(d.progressStatus) || isEnabled(data.enabled);
   return {
     enabled,
     showOnEmpty: data.showOnEmpty !== false,
@@ -207,8 +211,8 @@ function parseProgressData(d){
 }
 
 function parseCouponData(d){
-  const data = parseJSON(d.coupon_data);
-  const enabled = d.coupon_status == 1 || d.coupon_status == "1" || d.coupon_status === true;
+  const data = parseJSON(d.coupon_data || d.couponData);
+  const enabled = isEnabled(d.coupon_status) || isEnabled(d.couponStatus) || isEnabled(data.enabled);
   return {
     enabled,
     style: data.style || data.selectedStyle || 'style-2',
@@ -222,8 +226,8 @@ function parseCouponData(d){
 }
 
 function parseUpsellData(d){
-  const data = parseJSON(d.upsell_data);
-  const enabled = d.upsell_status == 1 || d.upsell_status == "1" || d.upsell_status === true;
+  const data = parseJSON(d.upsell_data || d.upsellData);
+  const enabled = isEnabled(d.upsell_status) || isEnabled(d.upsellStatus) || isEnabled(data.enabled);
   return {
     enabled,
     upsellMode: data.upsellMode || 'manual',
@@ -659,9 +663,9 @@ function renderCouponSection(couponConfig, cartTotal){
         backgroundColor: saved.backgroundColor || '#000',
         textColor: saved.textColor || '#fff',
         iconUrl: saved.iconUrl || '🎟️',
-        buttonText: btn.text || 'Apply',
-        buttonBackgroundColor: btn.backgroundColor || '#000000',
-        buttonTextColor: btn.textColor || '#ffffff',
+        buttonText: btn.text ?? 'Apply',
+        buttonBackgroundColor: btn.backgroundColor ?? '#000000',
+        buttonTextColor: btn.textColor ?? '#ffffff',
         borderRadius: saved.borderRadius || 8
       };
     }
@@ -680,9 +684,9 @@ function renderCouponSection(couponConfig, cartTotal){
         backgroundColor: override.backgroundColor || apiCoupon.backgroundColor || '#6366f1',
         textColor: override.textColor || apiCoupon.textColor || '#ffffff',
         iconUrl: override.iconUrl || apiCoupon.iconUrl || '🎟️',
-        buttonText: override['button.text'] || override.button?.text || apiCoupon.buttonText || apiCoupon.button?.text || 'Apply',
-        buttonBackgroundColor: override['button.backgroundColor'] || override.button?.backgroundColor || apiCoupon.buttonBackgroundColor || apiCoupon.button?.backgroundColor || '#000000',
-        buttonTextColor: override['button.textColor'] || override.button?.textColor || apiCoupon.buttonTextColor || apiCoupon.button?.textColor || '#ffffff',
+        buttonText: override['button.text'] ?? override.button?.text ?? apiCoupon.buttonText ?? apiCoupon.button?.text ?? 'Apply',
+        buttonBackgroundColor: override['button.backgroundColor'] ?? override.button?.backgroundColor ?? apiCoupon.buttonBackgroundColor ?? apiCoupon.button?.backgroundColor ?? '#000000',
+        buttonTextColor: override['button.textColor'] ?? override.button?.textColor ?? apiCoupon.buttonTextColor ?? apiCoupon.button?.textColor ?? '#ffffff',
         borderRadius: override.borderRadius || apiCoupon.borderRadius || 8
       };
     }
@@ -698,9 +702,9 @@ function renderCouponSection(couponConfig, cartTotal){
       backgroundColor: override.backgroundColor || '#6366f1',
       textColor: override.textColor || '#ffffff',
       iconUrl: override.iconUrl || '🎟️',
-      buttonText: override['button.text'] || override.button?.text || 'Apply',
-      buttonBackgroundColor: override['button.backgroundColor'] || override.button?.backgroundColor || '#000000',
-      buttonTextColor: override['button.textColor'] || override.button?.textColor || '#ffffff',
+      buttonText: override['button.text'] ?? override.button?.text ?? 'Apply',
+      buttonBackgroundColor: override['button.backgroundColor'] ?? override.button?.backgroundColor ?? '#000000',
+      buttonTextColor: override['button.textColor'] ?? override.button?.textColor ?? '#ffffff',
       borderRadius: override.borderRadius || 8
     };
   }).filter(c => c);
