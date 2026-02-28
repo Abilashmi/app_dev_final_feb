@@ -1300,13 +1300,27 @@ export default function CartDrawerAdmin() {
   };
 
   const updateCouponOverride = (couponId, field, value) => {
-    setCouponOverrides(prev => ({
-      ...prev,
-      [couponId]: {
-        ...(prev[couponId] || {}),
-        [field]: value,
-      },
-    }));
+    setCouponOverrides(prev => {
+      const existing = { ...(prev[couponId] || {}) };
+      const keys = field.split('.');
+      if (keys.length === 1) {
+        // Simple field like 'label', 'backgroundColor', etc.
+        existing[field] = value;
+      } else {
+        // Nested field like 'button.backgroundColor' → { button: { backgroundColor: value } }
+        let target = existing;
+        for (let i = 0; i < keys.length - 1; i++) {
+          if (!target[keys[i]] || typeof target[keys[i]] !== 'object') {
+            target[keys[i]] = {};
+          } else {
+            target[keys[i]] = { ...target[keys[i]] };
+          }
+          target = target[keys[i]];
+        }
+        target[keys[keys.length - 1]] = value;
+      }
+      return { ...prev, [couponId]: existing };
+    });
   };
 
   const handleToggleCouponEnabled = (checked) => {
