@@ -1005,7 +1005,7 @@ export default function CartDrawerAdmin() {
   React.useEffect(() => {
     const calculatedTotal = mockCartItems.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.quantity) || 1)), 0);
     const calculatedQuantity = mockCartItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
-    
+
     if (cartData.cartValue !== calculatedTotal || cartData.totalQuantity !== calculatedQuantity) {
       setCartData(prev => ({
         ...prev,
@@ -1908,8 +1908,8 @@ export default function CartDrawerAdmin() {
         <div style={{ padding: '24px 20px' }}>
           <BlockStack gap="500">
             {/* Section 1: Cart Status */}
-            <div style={{ 
-              padding: '20px', 
+            <div style={{
+              padding: '20px',
               backgroundColor: cartStatus ? '#f0fdf4' : '#fef2f2',
               borderRadius: '16px',
               border: `2px solid ${cartStatus ? '#86efac' : '#fca5a5'}`,
@@ -1937,8 +1937,8 @@ export default function CartDrawerAdmin() {
             <Divider />
 
             {/* Section 2: Preview State */}
-            <div style={{ 
-              padding: '20px', 
+            <div style={{
+              padding: '20px',
               backgroundColor: '#ffffff',
               borderRadius: '16px',
               border: '1px solid #e5e7eb',
@@ -1987,8 +1987,8 @@ export default function CartDrawerAdmin() {
 
             <Divider />
 
-            <div style={{ 
-              padding: '20px', 
+            <div style={{
+              padding: '20px',
               backgroundColor: '#ffffff',
               borderRadius: '16px',
               border: '1px solid #e5e7eb',
@@ -2202,8 +2202,8 @@ export default function CartDrawerAdmin() {
       }).sort((a, b) => a.target - b.target);
 
       // Auto-calculate maxTarget from highest tier
-      const maxTargetSetting = liveMilestones.length > 0 
-        ? Math.max(...liveMilestones.map(m => m.target)) 
+      const maxTargetSetting = liveMilestones.length > 0
+        ? Math.max(...liveMilestones.map(m => m.target))
         : 1000;
       const progressPercent = calculateProgress(currentValue, maxTargetSetting);
       const milestone = getActiveMilestone(currentValue, liveMilestones, progressMode);
@@ -2226,7 +2226,7 @@ export default function CartDrawerAdmin() {
             </div>
 
             {/* SECTION 1: General Settings */}
-            <div style={{ 
+            <div style={{
               backgroundColor: '#ffffff',
               borderRadius: '12px',
               border: '1px solid #e5e7eb',
@@ -2287,7 +2287,7 @@ export default function CartDrawerAdmin() {
 
 
             {/* SECTION 3: Styling */}
-            <div style={{ 
+            <div style={{
               backgroundColor: '#ffffff',
               borderRadius: '12px',
               border: '1px solid #e5e7eb',
@@ -2363,7 +2363,7 @@ export default function CartDrawerAdmin() {
 
 
             {/* SECTION 4: Tier Settings */}
-            <div style={{ 
+            <div style={{
               backgroundColor: '#ffffff',
               borderRadius: '12px',
               border: '1px solid #e5e7eb',
@@ -2383,7 +2383,7 @@ export default function CartDrawerAdmin() {
                     Add Tier
                   </Button>
                 </div>
-                
+
                 <BlockStack gap="200">
                   <Text variant="bodyMd" fontWeight="semibold">Progress Mode</Text>
                   <div style={{ display: 'flex', gap: '12px' }}>
@@ -2486,7 +2486,7 @@ export default function CartDrawerAdmin() {
                     </div>
 
                     {/* Milestone Icon Selector */}
-                    <div style={{ 
+                    <div style={{
                       padding: '16px',
                       backgroundColor: '#fafbfc',
                       borderRadius: '8px',
@@ -2511,7 +2511,7 @@ export default function CartDrawerAdmin() {
                             }
                           }}
                         />
-                        
+
                         {/* Custom SVG Input */}
                         {(activeTier.iconType === 'custom' || activeTier.iconPreset === 'custom') && (
                           <TextField
@@ -2548,8 +2548,8 @@ export default function CartDrawerAdmin() {
                             {activeTier.iconType === 'custom' && activeTier.iconCustomSvg ? (
                               <div dangerouslySetInnerHTML={{ __html: activeTier.iconCustomSvg }} style={{ width: '24px', height: '24px' }} />
                             ) : (
-                              <div dangerouslySetInnerHTML={{ 
-                                __html: MILESTONE_ICON_PRESETS.find(p => p.value === (activeTier.iconPreset || 'gift'))?.svg || MILESTONE_ICON_PRESETS[0].svg 
+                              <div dangerouslySetInnerHTML={{
+                                __html: MILESTONE_ICON_PRESETS.find(p => p.value === (activeTier.iconPreset || 'gift'))?.svg || MILESTONE_ICON_PRESETS[0].svg
                               }} style={{ width: '24px', height: '24px', color: progressBarSettings.barForegroundColor }} />
                             )}
                           </div>
@@ -2557,7 +2557,7 @@ export default function CartDrawerAdmin() {
                       </BlockStack>
                     </div>
 
-                    <div style={{ 
+                    <div style={{
                       padding: '16px',
                       backgroundColor: '#fafbfc',
                       borderRadius: '8px',
@@ -2577,68 +2577,68 @@ export default function CartDrawerAdmin() {
                       </InlineStack>
                     </div>
 
-                      {activeTier.products && activeTier.products.length > 0 ? (
-                        <BlockStack gap="150">
-                          {activeTier.products.map(productId => {
-                            const product = loadedShopifyProducts.find(p => p.id === productId);
-                            return product ? (
-                              <div
-                                key={productId}
+                    {activeTier.products && activeTier.products.length > 0 ? (
+                      <BlockStack gap="150">
+                        {activeTier.products.map(productId => {
+                          const product = loadedShopifyProducts.find(p => p.id === productId);
+                          return product ? (
+                            <div
+                              key={productId}
+                              style={{
+                                padding: '12px',
+                                backgroundColor: '#f9fafb',
+                                borderRadius: '6px',
+                                border: '1px solid #e5e7eb',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                              }}
+                            >
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                                  <span style={{ fontSize: '16px' }}>{product.image}</span>
+                                  <Text variant="bodyMd" fontWeight="semibold">{product.title}</Text>
+                                </div>
+                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                  <Text as="span" variant="bodySm" tone="subdued">
+                                    ${product.price}
+                                  </Text>
+                                  <Badge tone="success">
+                                    🎁 {activeTier.description} Reward
+                                  </Badge>
+                                  <Text as="span" variant="bodySm" tone="subdued">
+                                    {product.variants} variants
+                                  </Text>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  updateTierSetting(
+                                    activeTierIndex,
+                                    'products',
+                                    activeTier.products.filter(id => id !== productId)
+                                  );
+                                }}
                                 style={{
-                                  padding: '12px',
-                                  backgroundColor: '#f9fafb',
-                                  borderRadius: '6px',
-                                  border: '1px solid #e5e7eb',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  color: '#6b7280',
+                                  fontSize: '20px',
+                                  padding: '4px 8px',
                                 }}
                               >
-                                <div style={{ flex: 1 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                    <span style={{ fontSize: '16px' }}>{product.image}</span>
-                                    <Text variant="bodyMd" fontWeight="semibold">{product.title}</Text>
-                                  </div>
-                                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                                    <Text as="span" variant="bodySm" tone="subdued">
-                                      ${product.price}
-                                    </Text>
-                                    <Badge tone="success">
-                                      🎁 {activeTier.description} Reward
-                                    </Badge>
-                                    <Text as="span" variant="bodySm" tone="subdued">
-                                      {product.variants} variants
-                                    </Text>
-                                  </div>
-                                </div>
-                                <button
-                                  onClick={() => {
-                                    updateTierSetting(
-                                      activeTierIndex,
-                                      'products',
-                                      activeTier.products.filter(id => id !== productId)
-                                    );
-                                  }}
-                                  style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    color: '#6b7280',
-                                    fontSize: '20px',
-                                    padding: '4px 8px',
-                                  }}
-                                >
-                                  ×
-                                </button>
-                              </div>
-                            ) : null;
-                          })}
-                        </BlockStack>
-                      ) : (
-                        <Text as="p" tone="subdued" variant="bodySm">
-                          No products selected. Click "Add product" to select reward products for this tier.
-                        </Text>
-                      )}
+                                ×
+                              </button>
+                            </div>
+                          ) : null;
+                        })}
+                      </BlockStack>
+                    ) : (
+                      <Text as="p" tone="subdued" variant="bodySm">
+                        No products selected. Click "Add product" to select reward products for this tier.
+                      </Text>
+                    )}
 
                     {progressBarSettings.tiers.length > 1 && (
                       <Button
@@ -3421,7 +3421,7 @@ export default function CartDrawerAdmin() {
             </div>
 
             {/* Checkout Name */}
-            <div style={{ 
+            <div style={{
               backgroundColor: '#ffffff',
               borderRadius: '12px',
               border: '1px solid #e5e7eb',
@@ -3453,7 +3453,7 @@ export default function CartDrawerAdmin() {
             </div>
 
             {/* Custom CSS */}
-            <div style={{ 
+            <div style={{
               backgroundColor: '#ffffff',
               borderRadius: '12px',
               border: '1px solid #e5e7eb',
@@ -3507,7 +3507,7 @@ export default function CartDrawerAdmin() {
 
   const renderCartPreview = () => {
     const showEmpty = previewCartState[0] === 'empty';
-    
+
     // HARDCODED SAMPLE PRODUCT for preview
     const samplePreviewProduct = {
       id: 'preview-sample-1',
@@ -3520,10 +3520,10 @@ export default function CartDrawerAdmin() {
       placeholderImage: '📦',
       isSampleProduct: true
     };
-    
+
     // Use sample product if cart is empty, otherwise use actual cart items
     const currentItems = showEmpty ? [] : (cartData.items && cartData.items.length > 0 ? cartData.items : [samplePreviewProduct]);
-    
+
     // CRITICAL FIX: Force calculate cart value from items
     const actualCartValue = currentItems.reduce((sum, item) => {
       const price = Number(item.price) || 0;
@@ -3531,7 +3531,7 @@ export default function CartDrawerAdmin() {
       return sum + (price * qty);
     }, 0);
     const actualCartQuantity = currentItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
-    
+
     const cartProductIds = currentItems.map(item => item.productId || item.id || item.variantId).filter(Boolean);
     const cartCollectionIds = cartProductIds.flatMap((productId) => {
       const product = loadedShopifyProducts.find(p => p.id === productId);
@@ -3555,7 +3555,7 @@ export default function CartDrawerAdmin() {
     const maxTargetSetting = previewMilestones.length > 0
       ? Math.max(...previewMilestones.map(m => m.target))
       : (currentProgressMode === 'amount' ? 1000 : 10);
-    
+
     console.log('[Progress Debug] Cart Value:', actualCartValue);
     console.log('[Progress Debug] Max Target:', maxTargetSetting);
     console.log('[Progress Debug] Milestones:', previewMilestones.map(m => ({ target: m.target, desc: m.rewardText })));
@@ -3847,7 +3847,7 @@ export default function CartDrawerAdmin() {
           </div>
 
           {/* Body */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ flex: 1, overflowY: 'hidden', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* Progress Bar Feature - Integrated Milestones */}
             {isEnabled(featureStates.progressBarEnabled) && (!showEmpty || isEnabled(progressBarSettings.showOnEmpty)) && (
               <div style={{
@@ -3955,7 +3955,7 @@ export default function CartDrawerAdmin() {
                     // Get icon from tier settings
                     const tier = progressBarSettings.tiers.find(t => t.id === ms.id);
                     let iconDisplay = '🎁';
-                    
+
                     if (tier) {
                       if (tier.iconType === 'custom' && tier.iconCustomSvg) {
                         iconDisplay = tier.iconCustomSvg;
@@ -4014,13 +4014,13 @@ export default function CartDrawerAdmin() {
                                     return <img src={firstProd.image} alt="Reward" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isCompleted ? 1 : 0.5 }} />;
                                   }
                                   return firstProd?.image || (
-                                    typeof iconDisplay === 'string' && iconDisplay.startsWith('<svg') ? 
-                                      <div dangerouslySetInnerHTML={{ __html: iconDisplay }} style={{ width: '20px', height: '20px', color: isCompleted ? '#fff' : '#94a3b8' }} /> : 
+                                    typeof iconDisplay === 'string' && iconDisplay.startsWith('<svg') ?
+                                      <div dangerouslySetInnerHTML={{ __html: iconDisplay }} style={{ width: '20px', height: '20px', color: isCompleted ? '#fff' : '#94a3b8' }} /> :
                                       iconDisplay
                                   );
                                 }
-                                return typeof iconDisplay === 'string' && iconDisplay.startsWith('<svg') ? 
-                                  <div dangerouslySetInnerHTML={{ __html: iconDisplay }} style={{ width: '20px', height: '20px', color: isCompleted ? '#fff' : '#94a3b8' }} /> : 
+                                return typeof iconDisplay === 'string' && iconDisplay.startsWith('<svg') ?
+                                  <div dangerouslySetInnerHTML={{ __html: iconDisplay }} style={{ width: '20px', height: '20px', color: isCompleted ? '#fff' : '#94a3b8' }} /> :
                                   iconDisplay;
                               })()}
 

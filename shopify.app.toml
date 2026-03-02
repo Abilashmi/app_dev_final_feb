@@ -2,7 +2,7 @@
 
 client_id = "9f7189f9faf11f0771c1ef2f81c42b8d"
 name = "Cart_app"
-application_url = "https://3d23-2405-201-e015-cf-ad3b-35fc-8e1e-1a1b.ngrok-free.app"
+application_url = "https://prefixal-turbanlike-britt.ngrok-free.dev"
 embedded = true
 
 [build]
@@ -27,6 +27,7 @@ scopes = "read_discounts,write_discounts,write_products"
 redirect_urls = [ "https://example.com/api/auth" ]
 
 [app_proxy]
-url = "https://warriors-route-brands-qualify.trycloudflare.com/cartdrawer"
+url = "https://mining-icons-mothers-looksmart.trycloudflare.com/cartdrawer"
 prefix = "apps"
 subpath = "cart-app"
+

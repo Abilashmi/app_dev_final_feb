@@ -4,7 +4,7 @@ import { getStoredCoupons } from "./api.create_coupon-sample";
 // ---------------- EXTERNAL API ----------------
 // Single source of truth for the external PHP backend URL.
 // Update this when the ngrok tunnel URL changes.
-const EXTERNAL_CART_API = "https://warriors-route-brands-qualify.trycloudflare.com/cartdrawer/save_cart_drawer.php";
+const EXTERNAL_CART_API = "https://mining-icons-mothers-looksmart.trycloudflare.com/cartdrawer/save_cart_drawer.php";
 
 // ---------------- DEFAULTS ----------------
 const DEFAULT_SETTINGS = {
@@ -20,12 +20,12 @@ const DEFAULT_SETTINGS = {
         maxTarget: 1000,
         placement: "top",
         tiers: [
-            { 
-                id: 1, 
-                minValue: 500, 
+            {
+                id: 1,
+                minValue: 500,
                 minQuantity: 3,
-                description: "Free Shipping", 
-                products: [], 
+                description: "Free Shipping",
+                products: [],
                 rewardType: 'product',
                 iconType: 'preset',
                 iconPreset: 'gift',

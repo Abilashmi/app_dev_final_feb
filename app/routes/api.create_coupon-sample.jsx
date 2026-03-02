@@ -3,7 +3,7 @@
 // Configuration
 // ===============================
 
-const PHP_ENDPOINT = "https://warriors-route-brands-qualify.trycloudflare.com/cartdrawer/save_coupon.php";
+const PHP_ENDPOINT = "https://mining-icons-mothers-looksmart.trycloudflare.com/cartdrawer/save_coupon.php";
 
 
 // ===============================
