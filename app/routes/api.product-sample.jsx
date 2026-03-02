@@ -250,7 +250,7 @@ export async function action({ request }) {
 
             try {
                 await fetch(
-                    "https://cameron-shadows-eggs-fruits.trycloudflare.com/cartdrawer/save_fbt_widget.php",
+                    "https://warriors-route-brands-qualify.trycloudflare.com/cartdrawer/save_fbt_widget.php",
                     {
                         method: "POST",
                         headers: {

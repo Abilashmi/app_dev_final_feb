@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 
-const EXTERNAL_API = "https://cameron-shadows-eggs-fruits.trycloudflare.com/cartdrawer/save_coupon_slider_widget.php";
+const EXTERNAL_API = "https://warriors-route-brands-qualify.trycloudflare.com/cartdrawer/save_coupon_slider_widget.php";
 
 const DATA_FILE = path.resolve("coupon-slider-data.json");
 

@@ -48,6 +48,21 @@ import {
 } from '../services/api.cart-settings.shared';
 
 // ==========================================
+// MILESTONE ICON PRESETS
+// ==========================================
+const MILESTONE_ICON_PRESETS = [
+  { value: 'gift', label: 'Gift', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-2.18c.11-.31.18-.65.18-1a2.996 2.996 0 0 0-5.5-1.65l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76l1-1.36 1 1.36L15.38 12 17 10.83 14.92 8H20v6z"/></svg>' },
+  { value: 'shipping', label: 'Shipping', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 18.5a1.5 1.5 0 0 1-1.5-1.5 1.5 1.5 0 0 1 1.5-1.5 1.5 1.5 0 0 1 1.5 1.5 1.5 1.5 0 0 1-1.5 1.5m1.5-9 1.96 2.5H17V9.5m-11 9A1.5 1.5 0 0 1 4.5 17 1.5 1.5 0 0 1 6 15.5 1.5 1.5 0 0 1 7.5 17 1.5 1.5 0 0 1 6 18.5M20 8h-3V4H3c-1.11 0-2 .89-2 2v11h2a3 3 0 0 0 3 3 3 3 0 0 0 3-3h6a3 3 0 0 0 3 3 3 3 0 0 0 3-3h2v-5l-3-4Z"/></svg>' },
+  { value: 'discount', label: 'Discount', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>' },
+  { value: 'star', label: 'Star', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>' },
+  { value: 'trophy', label: 'Trophy', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.9 2-2V5c0-1.11-.89-2-2-2zm0 5h-2V5h2v3zM4 5h2v3H4V5zm7 10.93c-3.95-.49-7-3.85-7-7.93h14c0 4.08-3.05 7.44-7 7.93z"/><path d="M16 19H8v2h8z"/></svg>' },
+  { value: 'heart', label: 'Heart', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 21.35-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>' },
+  { value: 'diamond', label: 'Diamond', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5L2 9l10 12L22 9l-3-6zM9.62 8l1.5-3h1.76l1.5 3H9.62zM11 10v6.68L5.44 10H11zm2 0h5.56L13 16.68V10zM19.26 8h-2.65l-1.5-3h2.65l1.5 3zM6.24 5h2.65l-1.5 3H4.74l1.5-3z"/></svg>' },
+  { value: 'lock', label: 'Lock', svg: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>' },
+  { value: 'custom', label: 'Custom SVG', svg: '' }
+];
+
+// ==========================================
 // MOCK API FUNCTIONS
 // ==========================================
 
@@ -63,7 +78,6 @@ const getShopIdFromUrl = () => {
 };
 
 const SHOP_ID = getShopIdFromUrl();
-console.log('[Upsell] Using shopId:', SHOP_ID);
 
 // Mock cart data
 const mockCartData = {
@@ -156,7 +170,7 @@ const initialMilestones = [];
 const mockApi = {
   getCartData: async () => {
     try {
-      const response = await fetch(`/api/sample?shop=${SHOP_ID}`);
+      const response = await fetch(`/api/cartdrawer-config?shop=${SHOP_ID}`);
       const data = await response.json();
       return data.cartData || initialCartData;
     } catch {
@@ -165,7 +179,7 @@ const mockApi = {
   },
   getMilestones: async (mode = 'amount') => {
     try {
-      const response = await fetch(`/api/sample?shop=${SHOP_ID}`);
+      const response = await fetch(`/api/cartdrawer-config?shop=${SHOP_ID}`);
       const data = await response.json();
       return data.settings?.progressBar?.tiers || initialMilestones;
     } catch {
@@ -174,7 +188,7 @@ const mockApi = {
   },
   getProducts: async (productIds) => {
     try {
-      const response = await fetch(`/api/sample?shop=${SHOP_ID}`);
+      const response = await fetch(`/api/cartdrawer-config?shop=${SHOP_ID}`);
       const data = await response.json();
       const allProducts = [...(data.shopifyProducts || []), ...(data.cartData?.items || [])];
       return allProducts.filter(p => productIds.includes(p.id));
@@ -184,7 +198,7 @@ const mockApi = {
   },
   getShopifyProducts: async () => {
     try {
-      const response = await fetch(`/api/sample?shop=${SHOP_ID}`);
+      const response = await fetch(`/api/cartdrawer-config?shop=${SHOP_ID}`);
       const data = await response.json();
       return data.shopifyProducts || [];
     } catch {
@@ -669,7 +683,7 @@ export default function CartDrawerAdmin() {
   const [previewCartState, setPreviewCartState] = useState(['items']); // 'empty' | 'items'
 
   // Selected feature tab
-  const [selectedTab, setSelectedTab] = useState('progress-bar'); // 'progress-bar' | 'coupon' | 'upsell'
+  const [selectedTab, setSelectedTab] = useState('progress-bar'); // 'progress-bar' | 'coupon' | 'upsell' | 'settings'
 
   // Feature enable states
   const [featureStates, setFeatureStates] = useState({
@@ -688,17 +702,27 @@ export default function CartDrawerAdmin() {
     completionText: 'Free shipping unlocked!',
     rewardsCalculation: ['cartTotal'], // 'cartTotal' or 'cartQuantity'
     maxTarget: 1000,
+    mode: 'amount', // 'amount' or 'quantity'
     tiers: [
       {
         id: 1,
         rewardType: 'product',
         minValue: 50,
+        minQuantity: 3,
         description: 'Cool Product',
         titleBeforeAchieving: "You're {COUNT} away from product ____",
         products: [],
+        iconType: 'preset',
+        iconPreset: 'gift',
+        iconCustomSvg: '',
       },
     ],
   });
+
+  // Settings Tab State
+  const [checkoutName, setCheckoutName] = useState('Checkout Now');
+  const [checkoutFooterText, setCheckoutFooterText] = useState('Shipping and taxes calculated at checkout');
+  const [customCSS, setCustomCSS] = useState('');
 
   const [activeTierIndex, setActiveTierIndex] = useState(0);
 
@@ -824,15 +848,13 @@ export default function CartDrawerAdmin() {
   useEffect(() => {
     async function loadAppConfig() {
       try {
-        console.log('[App] Loading initial configuration from /api/sample');
-        const response = await fetch(`/api/sample?shop=${SHOP_ID}`, {
+        const response = await fetch(`/api/cartdrawer-config?shop=${SHOP_ID}`, {
           headers: { 'X-Shop-ID': SHOP_ID }
         });
 
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
         const data = await response.json();
-        console.log('✅ App configuration loaded:', data);
 
         if (data.success && data.settings) {
           const { settings, coupons } = data;
@@ -881,7 +903,10 @@ export default function CartDrawerAdmin() {
                 minValue: t.minValue || 0,
                 description: t.description || 'Reward',
                 products: t.products || [],
-                rewardType: t.rewardType || 'product'
+                rewardType: t.rewardType || 'product',
+                iconType: t.iconType || 'preset',
+                iconPreset: t.iconPreset || 'gift',
+                iconCustomSvg: t.iconCustomSvg || ''
               })).sort((a, b) => a.minValue - b.minValue)
             };
             setProgressBarSettings(normalizedPB);
@@ -940,11 +965,22 @@ export default function CartDrawerAdmin() {
             }
           }
 
+          // 7. Load Settings (Checkout Name & Custom CSS)
+          if (settings.checkoutName) {
+            setCheckoutName(settings.checkoutName);
+          }
+          if (settings.checkoutFooterText) {
+            setCheckoutFooterText(settings.checkoutFooterText);
+          }
+          if (settings.customCSS) {
+            setCustomCSS(settings.customCSS);
+          }
+
           if (data.cartStatus !== undefined) {
             setCartStatus(data.cartStatus);
           }
 
-          // 7. Update Product & Cart Data
+          // 8. Update Product & Cart Data
           if (data.shopifyProducts) {
             setLoadedShopifyProducts(data.shopifyProducts);
           }
@@ -964,6 +1000,20 @@ export default function CartDrawerAdmin() {
 
   // Mock items are now part of cartData loaded from API
   const mockCartItems = cartData.items || [];
+
+  // Recalculate cart total from items to ensure it's always in sync
+  React.useEffect(() => {
+    const calculatedTotal = mockCartItems.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.quantity) || 1)), 0);
+    const calculatedQuantity = mockCartItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+    
+    if (cartData.cartValue !== calculatedTotal || cartData.totalQuantity !== calculatedQuantity) {
+      setCartData(prev => ({
+        ...prev,
+        cartValue: calculatedTotal,
+        totalQuantity: calculatedQuantity
+      }));
+    }
+  }, [mockCartItems.length, JSON.stringify(mockCartItems)]);
 
   const cartTotal = mockCartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
@@ -1026,13 +1076,18 @@ export default function CartDrawerAdmin() {
   };
 
   const addTier = () => {
+    if (progressBarSettings.tiers.length >= 5) return;
     const newTier = {
-      id: Date.now(), // Use timestamp for unique ID instead of index
+      id: Date.now(),
       rewardType: 'product',
-      minValue: (progressBarSettings.rewardsCalculation && progressBarSettings.rewardsCalculation[0]) === 'cartTotal' ? 100 : 10,
+      minValue: 100,
+      minQuantity: 1,
       description: '',
       titleBeforeAchieving: "You're {COUNT} away from ____",
       products: [],
+      iconType: 'preset',
+      iconPreset: 'gift',
+      iconCustomSvg: '',
     };
     setProgressBarSettings(prev => ({
       ...prev,
@@ -1632,6 +1687,11 @@ export default function CartDrawerAdmin() {
         ...upsellConfig,
         manualRules: savableManualRules
       }),
+      settings_data: JSON.stringify({
+        checkoutName,
+        checkoutFooterText,
+        customCSS
+      }),
       progress_status: isProgressOn ? 1 : 0,
       coupon_status: isCouponOn ? 1 : 0,
       upsell_status: isUpsellOn ? 1 : 0
@@ -1641,7 +1701,7 @@ export default function CartDrawerAdmin() {
     setIsSaving(true);
 
     try {
-      const response = await fetch('/api/sample', {
+      const response = await fetch('/api/cartdrawer-config', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1844,17 +1904,22 @@ export default function CartDrawerAdmin() {
 
   const renderLeftSidebar = () => {
     return (
-      <div style={{ width: '280px', borderRight: '1px solid #e5e7eb', height: '100vh', overflowY: 'auto' }}>
-        <div style={{ padding: '16px' }}>
-          <BlockStack gap="400">
+      <div style={{ width: '320px', borderRight: '1px solid #e5e7eb', height: '100vh', overflowY: 'auto', backgroundColor: '#fafbfc' }}>
+        <div style={{ padding: '24px 20px' }}>
+          <BlockStack gap="500">
             {/* Section 1: Cart Status */}
-            <Card>
-              <BlockStack gap="200">
-                <Text variant="headingMd" as="h2">Cart Status</Text>
+            <div style={{ 
+              padding: '20px', 
+              backgroundColor: cartStatus ? '#f0fdf4' : '#fef2f2',
+              borderRadius: '16px',
+              border: `2px solid ${cartStatus ? '#86efac' : '#fca5a5'}`,
+              boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)'
+            }}>
+              <BlockStack gap="300">
                 <InlineStack align="space-between" blockAlign="center">
-                  <Text as="span">Status</Text>
-                  <Badge tone={cartStatus ? 'success' : 'critical'}>
-                    {cartStatus ? 'Active' : 'Inactive'}
+                  <Text variant="headingMd" as="h2" fontWeight="bold">Cart Status</Text>
+                  <Badge tone={cartStatus ? 'success' : 'critical'} size="large">
+                    {cartStatus ? '● Active' : '● Inactive'}
                   </Badge>
                 </InlineStack>
                 <Button
@@ -1862,85 +1927,242 @@ export default function CartDrawerAdmin() {
                   variant={cartStatus ? 'secondary' : 'primary'}
                   loading={isSaving}
                   fullWidth
+                  size="large"
                 >
-                  {cartStatus ? 'Deactivate' : 'Activate'}
+                  {cartStatus ? 'Deactivate Cart' : 'Activate Cart'}
                 </Button>
               </BlockStack>
-            </Card>
+            </div>
 
             <Divider />
 
             {/* Section 2: Preview State */}
-            <Card>
+            <div style={{ 
+              padding: '20px', 
+              backgroundColor: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid #e5e7eb',
+              boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)'
+            }}>
               <BlockStack gap="300">
-                <Text variant="headingMd" as="h2">Cart Preview</Text>
-                <ChoiceList
-                  title=""
-                  choices={[
-                    { label: 'Show items in cart', value: 'items' },
-                    { label: 'Show empty cart', value: 'empty' },
-                  ]}
-                  selected={previewCartState.length > 0 ? previewCartState : ['items']}
-                  onChange={setPreviewCartState}
-                />
+                <Text variant="headingMd" as="h2" fontWeight="bold">Preview Mode</Text>
+                <div style={{ display: 'flex', gap: '8px', flexDirection: 'column' }}>
+                  <button
+                    onClick={() => setPreviewCartState(['items'])}
+                    style={{
+                      padding: '12px 16px',
+                      backgroundColor: previewCartState[0] === 'items' ? '#111827' : '#f9fafb',
+                      color: previewCartState[0] === 'items' ? '#ffffff' : '#374151',
+                      border: previewCartState[0] === 'items' ? 'none' : '1px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      textAlign: 'left'
+                    }}
+                  >
+                    Cart with items
+                  </button>
+                  <button
+                    onClick={() => setPreviewCartState(['empty'])}
+                    style={{
+                      padding: '12px 16px',
+                      backgroundColor: previewCartState[0] === 'empty' ? '#111827' : '#f9fafb',
+                      color: previewCartState[0] === 'empty' ? '#ffffff' : '#374151',
+                      border: previewCartState[0] === 'empty' ? 'none' : '1px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      textAlign: 'left'
+                    }}
+                  >
+                    Empty cart
+                  </button>
+                </div>
               </BlockStack>
-            </Card>
+            </div>
 
             <Divider />
 
-            {/* Section 3: Feature Tabs */}
-            <Card>
+            <div style={{ 
+              padding: '20px', 
+              backgroundColor: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid #e5e7eb',
+              boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.05)'
+            }}>
               <BlockStack gap="300">
-                <Text variant="headingMd" as="h2">Features</Text>
+                <Text variant="headingMd" as="h2" fontWeight="bold">Features</Text>
 
                 <BlockStack gap="200">
-                  <div style={{ position: 'relative' }}>
-                    <Button
-                      pressed={selectedTab === 'progress-bar'}
-                      onClick={() => setSelectedTab('progress-bar')}
-                      fullWidth
-                    >
-                      <InlineStack align="space-between" blockAlign="center" style={{ width: '100%' }}>
-                        <Text as="span">Progress Bar</Text>
-                        <Badge tone={featureStates.progressBarEnabled ? 'success' : 'subdued'}>
-                          {featureStates.progressBarEnabled ? 'On' : 'Off'}
-                        </Badge>
-                      </InlineStack>
-                    </Button>
-                  </div>
+                  <button
+                    onClick={() => setSelectedTab('progress-bar')}
+                    style={{
+                      padding: '12px',
+                      backgroundColor: selectedTab === 'progress-bar' ? '#f0f9ff' : '#ffffff',
+                      border: selectedTab === 'progress-bar' ? '2px solid #0ea5e9' : '1px solid #e5e7eb',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      textAlign: 'left',
+                      width: '100%'
+                    }}
+                  >
+                    <InlineStack align="space-between" blockAlign="center">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          backgroundColor: selectedTab === 'progress-bar' ? '#0ea5e9' : '#f1f5f9',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={selectedTab === 'progress-bar' ? '#ffffff' : '#64748b'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="12" y1="20" x2="12" y2="10"></line>
+                            <line x1="18" y1="20" x2="18" y2="4"></line>
+                            <line x1="6" y1="20" x2="6" y2="16"></line>
+                          </svg>
+                        </div>
+                        <div>
+                          <Text as="span" variant="bodySm" fontWeight="semibold">Progress Bar</Text>
+                        </div>
+                      </div>
+                      <Badge tone={featureStates.progressBarEnabled ? 'success' : 'subdued'} size="small">
+                        {featureStates.progressBarEnabled ? 'ON' : 'OFF'}
+                      </Badge>
+                    </InlineStack>
+                  </button>
 
-                  <div style={{ position: 'relative' }}>
-                    <Button
-                      pressed={selectedTab === 'coupon'}
-                      onClick={() => setSelectedTab('coupon')}
-                      fullWidth
-                    >
-                      <InlineStack align="space-between" blockAlign="center" style={{ width: '100%' }}>
-                        <Text as="span">Coupon Slider</Text>
-                        <Badge tone={featureStates.couponSliderEnabled ? 'success' : 'subdued'}>
-                          {featureStates.couponSliderEnabled ? 'On' : 'Off'}
-                        </Badge>
-                      </InlineStack>
-                    </Button>
-                  </div>
+                  <button
+                    onClick={() => setSelectedTab('coupon')}
+                    style={{
+                      padding: '12px',
+                      backgroundColor: selectedTab === 'coupon' ? '#f0fdf4' : '#ffffff',
+                      border: selectedTab === 'coupon' ? '2px solid #10b981' : '1px solid #e5e7eb',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      textAlign: 'left',
+                      width: '100%'
+                    }}
+                  >
+                    <InlineStack align="space-between" blockAlign="center">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          backgroundColor: selectedTab === 'coupon' ? '#10b981' : '#f1f5f9',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={selectedTab === 'coupon' ? '#ffffff' : '#64748b'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                            <polyline points="7.5 4.21 12 6.81 16.5 4.21"></polyline>
+                            <polyline points="7.5 19.79 7.5 14.6 3 12"></polyline>
+                            <polyline points="21 12 16.5 14.6 16.5 19.79"></polyline>
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                            <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                          </svg>
+                        </div>
+                        <div>
+                          <Text as="span" variant="bodySm" fontWeight="semibold">Coupon Slider</Text>
+                        </div>
+                      </div>
+                      <Badge tone={featureStates.couponSliderEnabled ? 'success' : 'subdued'} size="small">
+                        {featureStates.couponSliderEnabled ? 'ON' : 'OFF'}
+                      </Badge>
+                    </InlineStack>
+                  </button>
 
-                  <div style={{ position: 'relative' }}>
-                    <Button
-                      pressed={selectedTab === 'upsell'}
-                      onClick={() => setSelectedTab('upsell')}
-                      fullWidth
-                    >
-                      <InlineStack align="space-between" blockAlign="center" style={{ width: '100%' }}>
-                        <Text as="span">Upsell Products</Text>
-                        <Badge tone={featureStates.upsellEnabled ? 'success' : 'subdued'}>
-                          {featureStates.upsellEnabled ? 'On' : 'Off'}
-                        </Badge>
-                      </InlineStack>
-                    </Button>
-                  </div>
+                  <button
+                    onClick={() => setSelectedTab('upsell')}
+                    style={{
+                      padding: '12px',
+                      backgroundColor: selectedTab === 'upsell' ? '#fef3c7' : '#ffffff',
+                      border: selectedTab === 'upsell' ? '2px solid #f59e0b' : '1px solid #e5e7eb',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      textAlign: 'left',
+                      width: '100%'
+                    }}
+                  >
+                    <InlineStack align="space-between" blockAlign="center">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          backgroundColor: selectedTab === 'upsell' ? '#f59e0b' : '#f1f5f9',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={selectedTab === 'upsell' ? '#ffffff' : '#64748b'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <path d="M16 10a4 4 0 0 1-8 0"></path>
+                          </svg>
+                        </div>
+                        <div>
+                          <Text as="span" variant="bodySm" fontWeight="semibold">Upsell Products</Text>
+                        </div>
+                      </div>
+                      <Badge tone={featureStates.upsellEnabled ? 'success' : 'subdued'} size="small">
+                        {featureStates.upsellEnabled ? 'ON' : 'OFF'}
+                      </Badge>
+                    </InlineStack>
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedTab('settings')}
+                    style={{
+                      padding: '12px',
+                      backgroundColor: selectedTab === 'settings' ? '#f3e8ff' : '#ffffff',
+                      border: selectedTab === 'settings' ? '2px solid #a855f7' : '1px solid #e5e7eb',
+                      borderRadius: '10px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      textAlign: 'left',
+                      width: '100%'
+                    }}
+                  >
+                    <InlineStack align="space-between" blockAlign="center">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '32px',
+                          height: '32px',
+                          borderRadius: '8px',
+                          backgroundColor: selectedTab === 'settings' ? '#a855f7' : '#f1f5f9',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={selectedTab === 'settings' ? '#ffffff' : '#64748b'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M12 1v6m0 6v6m-9-9h6m6 0h6"></path>
+                          </svg>
+                        </div>
+                        <div>
+                          <Text as="span" variant="bodySm" fontWeight="semibold">Settings</Text>
+                        </div>
+                      </div>
+                    </InlineStack>
+                  </button>
                 </BlockStack>
               </BlockStack>
-            </Card>
+            </div>
           </BlockStack>
         </div>
       </div>
@@ -1968,158 +2190,144 @@ export default function CartDrawerAdmin() {
       const currentValue = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
 
       // Derive milestones for LIVE editor updates
-      const liveMilestones = (progressBarSettings?.tiers || []).map(tier => ({
-        id: tier.id,
-        target: tier.minValue,
-        label: progressMode === 'amount' ? `₹${tier.minValue}` : `${tier.minValue} items`,
-        rewardText: tier.description,
-        associatedProducts: tier.products || []
-      })).sort((a, b) => a.target - b.target);
+      const liveMilestones = (progressBarSettings?.tiers || []).map(tier => {
+        const target = progressMode === 'quantity' ? (tier.minQuantity || 1) : (tier.minValue || 0);
+        return {
+          id: tier.id,
+          target: target,
+          label: progressMode === 'quantity' ? `${target} items` : `₹${target}`,
+          rewardText: tier.description,
+          associatedProducts: tier.products || []
+        };
+      }).sort((a, b) => a.target - b.target);
 
-      const maxTargetSetting = progressBarSettings?.maxTarget || 1000;
+      // Auto-calculate maxTarget from highest tier
+      const maxTargetSetting = liveMilestones.length > 0 
+        ? Math.max(...liveMilestones.map(m => m.target)) 
+        : 1000;
       const progressPercent = calculateProgress(currentValue, maxTargetSetting);
       const milestone = getActiveMilestone(currentValue, liveMilestones, progressMode);
 
       return (
-        <div style={{ padding: '20px', height: '100%', overflowY: 'auto' }}>
-          <BlockStack gap="400">
-            <InlineStack align="space-between" blockAlign="center">
-              <Text variant="headingLg" as="h1">Progress Bar Settings</Text>
+        <div style={{ padding: '24px', height: '100%', overflowY: 'auto', backgroundColor: '#fafbfc' }}>
+          <BlockStack gap="500">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <div>
+                <Text variant="heading2xl" as="h1" fontWeight="bold">Progress Bar</Text>
+                <Text variant="bodySm" tone="subdued" as="p" style={{ marginTop: '4px' }}>Configure milestone rewards and progress tracking</Text>
+              </div>
               <Button
-                variant={featureStates.progressBarEnabled ? 'secondary' : 'primary'}
+                variant={featureStates.progressBarEnabled ? 'primary' : 'secondary'}
                 onClick={() => toggleFeature('progressBarEnabled')}
+                size="large"
               >
-                {featureStates.progressBarEnabled ? 'Disable' : 'Enable'}
+                {featureStates.progressBarEnabled ? 'Enabled' : 'Enable'}
               </Button>
-            </InlineStack>
+            </div>
 
             {/* SECTION 1: General Settings */}
-            <Card>
-              <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">General Settings</Text>
-
+            <div style={{ 
+              backgroundColor: '#ffffff',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              overflow: 'hidden'
+            }}>
+              <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9' }}>
+                <Text variant="headingMd" as="h2" fontWeight="bold">Display Settings</Text>
+              </div>
+              <div style={{ padding: '20px' }}>
                 <BlockStack gap="400">
-                  <Text variant="headingSm" as="h3">Behavior & Layout</Text>
                   <Checkbox
-                    label="Show progress bar when cart is empty"
+                    label="Show when cart is empty"
                     checked={progressBarSettings.showOnEmpty}
                     onChange={(value) => updateProgressBarSetting('showOnEmpty', value)}
                   />
 
                   <BlockStack gap="200">
-                    <Text variant="bodyMd" fontWeight="semibold">Placement</Text>
-                    <InlineStack gap="300">
-                      <RadioButton
-                        label="Top of Cart"
-                        checked={progressBarSettings.placement !== 'bottom'}
-                        id="placement-top"
-                        name="progressBarPlacement"
-                        onChange={() => updateProgressBarSetting('placement', 'top')}
-                      />
-                      <RadioButton
-                        label="Bottom of Cart"
-                        checked={progressBarSettings.placement === 'bottom'}
-                        id="placement-bottom"
-                        name="progressBarPlacement"
-                        onChange={() => updateProgressBarSetting('placement', 'bottom')}
-                      />
-                    </InlineStack>
-                  </BlockStack>
-                  <BlockStack gap="200">
-                    <Text variant="bodyMd" fontWeight="semibold">Max Scale (100% Goal)</Text>
-                    <TextField
-                      type="number"
-                      value={progressBarSettings.maxTarget || 1000}
-                      onChange={(value) => updateProgressBarSetting('maxTarget', Number(value))}
-                      suffix={progressMode === 'amount' ? '₹' : 'items'}
-                      autoComplete="off"
-                      helpText="The value at which the bar reaches 100% fullness."
-                    />
+                    <Text variant="bodyMd" fontWeight="semibold">Position</Text>
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <button
+                        onClick={() => updateProgressBarSetting('placement', 'top')}
+                        style={{
+                          flex: 1,
+                          padding: '12px',
+                          backgroundColor: progressBarSettings.placement !== 'bottom' ? '#f0f9ff' : '#ffffff',
+                          border: progressBarSettings.placement !== 'bottom' ? '2px solid #0ea5e9' : '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          color: progressBarSettings.placement !== 'bottom' ? '#0369a1' : '#64748b'
+                        }}
+                      >
+                        Top of Cart
+                      </button>
+                      <button
+                        onClick={() => updateProgressBarSetting('placement', 'bottom')}
+                        style={{
+                          flex: 1,
+                          padding: '12px',
+                          backgroundColor: progressBarSettings.placement === 'bottom' ? '#f0f9ff' : '#ffffff',
+                          border: progressBarSettings.placement === 'bottom' ? '2px solid #0ea5e9' : '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          color: progressBarSettings.placement === 'bottom' ? '#0369a1' : '#64748b'
+                        }}
+                      >
+                        Bottom of Cart
+                      </button>
+                    </div>
                   </BlockStack>
                 </BlockStack>
+              </div>
+            </div>
 
-                <Divider />
 
+
+            {/* SECTION 3: Styling */}
+            <div style={{ 
+              backgroundColor: '#ffffff',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              overflow: 'hidden'
+            }}>
+              <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9' }}>
+                <Text variant="headingMd" as="h2" fontWeight="bold">Styling</Text>
+              </div>
+              <div style={{ padding: '20px' }}>
                 <BlockStack gap="400">
-                  <Text variant="headingSm" as="h3">Appearance</Text>
-                  <BlockStack gap="200">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     <ColorPickerField
-                      label="Bar Background"
+                      label="Background Color"
                       value={progressBarSettings.barBackgroundColor}
                       onChange={(value) => updateProgressBarSetting('barBackgroundColor', value)}
                     />
-                  </BlockStack>
-
-                  <BlockStack gap="200">
                     <ColorPickerField
-                      label="Bar Foreground (Fill)"
+                      label="Fill Color"
                       value={progressBarSettings.barForegroundColor}
                       onChange={(value) => updateProgressBarSetting('barForegroundColor', value)}
                     />
-                  </BlockStack>
-
-                  <BlockStack gap="200">
-                    <Text variant="bodyMd" fontWeight="semibold">Corner Radius</Text>
-                    <TextField
-                      type="number"
-                      value={progressBarSettings.borderRadius}
-                      onChange={(value) => updateProgressBarSetting('borderRadius', Number(value))}
-                      suffix="px"
-                      autoComplete="off"
-                    />
-                  </BlockStack>
-                </BlockStack>
-
-                <Divider />
-
-                <BlockStack gap="200">
-                  <Text variant="headingSm" as="h3">Messages</Text>
-                  <InlineStack align="space-between" blockAlign="center">
-                    <Text as="span" variant="bodyMd" fontWeight="semibold">
-                      Completion Message
-                    </Text>
-                    <Button
-                      plain
-                      onClick={() => updateProgressBarSetting('completionText', '')}
-                    >
-                      Clear
-                    </Button>
-                  </InlineStack>
+                  </div>
                   <TextField
+                    label="Border radius"
+                    type="number"
+                    value={progressBarSettings.borderRadius}
+                    onChange={(value) => updateProgressBarSetting('borderRadius', Number(value))}
+                    suffix="px"
+                    autoComplete="off"
+                  />
+                  <TextField
+                    label="Completion message"
                     value={progressBarSettings.completionText}
                     onChange={(value) => updateProgressBarSetting('completionText', value)}
-                    multiline={3}
                     autoComplete="off"
-                    placeholder="e.g. All Rewards Unlocked!"
+                    placeholder="e.g. All rewards unlocked!"
                   />
                 </BlockStack>
-              </BlockStack>
-            </Card>
-
-            {/* SECTION 2: Progress Mode Selection */}
-            <Card>
-              <BlockStack gap="400">
-                <Text variant="headingMd" as="h2">Progress Calculation</Text>
-
-                <ChoiceList
-                  title=""
-                  choices={[
-                    {
-                      label: 'Cart Value Based (Spend)',
-                      value: 'amount',
-                      helpText: 'Progress tracked by total cart value (₹)',
-                    },
-                    {
-                      label: 'Item Quantity Based (Count)',
-                      value: 'quantity',
-                      helpText: 'Progress tracked by total number of items',
-                    },
-                  ]}
-                  selected={[progressMode || 'amount']}
-                  onChange={(value) => setProgressMode(value[0])}
-                />
-              </BlockStack>
-            </Card>
+              </div>
+            </div>
 
             {/* SECTION 3: Active Milestones Display */}
             {/* <Card>
@@ -2154,94 +2362,220 @@ export default function CartDrawerAdmin() {
  */}
 
 
-            {/* SECTION 5: Tier Settings */}
-            <Card>
-              <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text variant="headingMd" as="h2">Tiers — Add or remove rewards</Text>
+            {/* SECTION 4: Tier Settings */}
+            <div style={{ 
+              backgroundColor: '#ffffff',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              overflow: 'hidden'
+            }}>
+              <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <div>
+                    <Text variant="headingMd" as="h2" fontWeight="bold">Milestone Tiers</Text>
+                    <Text variant="bodySm" tone="subdued" style={{ marginTop: '4px' }}>Configure rewards at different levels (Max 5 tiers)</Text>
+                  </div>
                   <Button
                     onClick={addTier}
                     variant="primary"
-                    size="slim"
+                    disabled={progressBarSettings.tiers.length >= 5}
                   >
-                    + Add tier
+                    Add Tier
                   </Button>
-                </InlineStack>
-
-                {/* Tier Tabs */}
-                <div style={{ borderBottom: '1px solid #e5e7eb', display: 'flex', gap: '0' }}>
-                  {(progressBarSettings?.tiers || []).map((tier, idx) => (
+                </div>
+                
+                <BlockStack gap="200">
+                  <Text variant="bodyMd" fontWeight="semibold">Progress Mode</Text>
+                  <div style={{ display: 'flex', gap: '12px' }}>
                     <button
-                      key={tier.id}
-                      onClick={() => setActiveTierIndex(idx)}
+                      onClick={() => {
+                        updateProgressBarSetting('mode', 'amount');
+                        setProgressMode('amount');
+                      }}
                       style={{
-                        padding: '12px 16px',
-                        fontSize: '14px',
-                        fontWeight: activeTierIndex === idx ? '600' : '500',
-                        color: activeTierIndex === idx ? '#000' : '#6b7280',
-                        backgroundColor: activeTierIndex === idx ? '#fff' : 'transparent',
-                        border: 'none',
-                        borderBottom: activeTierIndex === idx ? '2px solid #000' : 'none',
+                        flex: 1,
+                        padding: '12px',
+                        backgroundColor: progressMode === 'amount' ? '#f0f9ff' : '#ffffff',
+                        border: progressMode === 'amount' ? '2px solid #0ea5e9' : '1px solid #e5e7eb',
+                        borderRadius: '8px',
                         cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: progressMode === 'amount' ? '#0369a1' : '#64748b'
                       }}
                     >
-                      Tier {idx + 1}
+                      Cart Amount (₹)
                     </button>
-                  ))}
-                </div>
+                    <button
+                      onClick={() => {
+                        updateProgressBarSetting('mode', 'quantity');
+                        setProgressMode('quantity');
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '12px',
+                        backgroundColor: progressMode === 'quantity' ? '#f0f9ff' : '#ffffff',
+                        border: progressMode === 'quantity' ? '2px solid #0ea5e9' : '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: progressMode === 'quantity' ? '#0369a1' : '#64748b'
+                      }}
+                    >
+                      Product Count
+                    </button>
+                  </div>
+                </BlockStack>
+              </div>
 
-                {/* Active Tier Content */}
+              {/* Tier Tabs */}
+              <div style={{ display: 'flex', borderBottom: '1px solid #f1f5f9', backgroundColor: '#fafbfc' }}>
+                {(progressBarSettings?.tiers || []).map((tier, idx) => (
+                  <button
+                    key={tier.id}
+                    onClick={() => setActiveTierIndex(idx)}
+                    style={{
+                      padding: '14px 20px',
+                      fontSize: '13px',
+                      fontWeight: activeTierIndex === idx ? '600' : '500',
+                      color: activeTierIndex === idx ? '#0ea5e9' : '#64748b',
+                      backgroundColor: activeTierIndex === idx ? '#ffffff' : 'transparent',
+                      border: 'none',
+                      borderBottom: activeTierIndex === idx ? '2px solid #0ea5e9' : '2px solid transparent',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Tier {idx + 1}
+                  </button>
+                ))}
+              </div>
+
+              {/* Active Tier Content */}
+              <div style={{ padding: '20px' }}>
                 {activeTier && (
-                  <BlockStack gap="300">
-                    <BlockStack gap="200">
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Text as="label" variant="bodyMd" fontWeight="semibold">
-                          {progressMode === 'amount' ? 'Minimum spending' : 'Minimum item count'}
-                        </Text>
-                      </InlineStack>
+                  <BlockStack gap="400">
+                    <div style={{ display: 'grid', gridTemplateColumns: progressMode === 'quantity' ? '1fr 1fr 1fr' : '1fr 1fr', gap: '16px' }}>
+                      {progressMode === 'amount' ? (
+                        <TextField
+                          label="Minimum spend"
+                          type="number"
+                          value={activeTier.minValue}
+                          onChange={(value) => updateTierSetting(activeTierIndex, 'minValue', Number(value))}
+                          prefix="₹"
+                          autoComplete="off"
+                        />
+                      ) : (
+                        <TextField
+                          label="Minimum quantity"
+                          type="number"
+                          value={activeTier.minQuantity || 1}
+                          onChange={(value) => updateTierSetting(activeTierIndex, 'minQuantity', Number(value))}
+                          suffix="items"
+                          autoComplete="off"
+                        />
+                      )}
                       <TextField
-                        type="number"
-                        value={activeTier.minValue}
-                        onChange={(value) => updateTierSetting(activeTierIndex, 'minValue', Number(value))}
-                        prefix={progressMode === 'amount' ? '₹' : '#'}
-                        autoComplete="off"
-                      />
-                    </BlockStack>
-
-                    <BlockStack gap="200">
-                      <InlineStack align="space-between" blockAlign="center">
-                        <Text as="label" variant="bodyMd" fontWeight="semibold">
-                          Reward description
-                        </Text>
-                        <Button
-                          plain
-                          size="slim"
-                          onClick={() => updateTierSetting(activeTierIndex, 'description', '')}
-                        >
-                          Clear
-                        </Button>
-                      </InlineStack>
-                      <TextField
+                        label="Reward name"
                         value={activeTier.description}
                         onChange={(value) => updateTierSetting(activeTierIndex, 'description', value)}
                         placeholder="e.g., Free Shipping"
                         autoComplete="off"
                       />
-                    </BlockStack>
+                    </div>
 
-                    <BlockStack gap="200">
+                    {/* Milestone Icon Selector */}
+                    <div style={{ 
+                      padding: '16px',
+                      backgroundColor: '#fafbfc',
+                      borderRadius: '8px',
+                      border: '1px solid #e5e7eb'
+                    }}>
+                      <BlockStack gap="300">
+                        <Text variant="bodyMd" fontWeight="semibold">Milestone Icon</Text>
+                        <Select
+                          label="Icon type"
+                          labelHidden
+                          options={MILESTONE_ICON_PRESETS.map(preset => ({
+                            label: preset.label,
+                            value: preset.value
+                          }))}
+                          value={activeTier.iconType === 'custom' ? 'custom' : (activeTier.iconPreset || 'gift')}
+                          onChange={(value) => {
+                            if (value === 'custom') {
+                              updateTierSetting(activeTierIndex, 'iconType', 'custom');
+                            } else {
+                              updateTierSetting(activeTierIndex, 'iconType', 'preset');
+                              updateTierSetting(activeTierIndex, 'iconPreset', value);
+                            }
+                          }}
+                        />
+                        
+                        {/* Custom SVG Input */}
+                        {(activeTier.iconType === 'custom' || activeTier.iconPreset === 'custom') && (
+                          <TextField
+                            label="Custom SVG Code"
+                            value={activeTier.iconCustomSvg || ''}
+                            onChange={(value) => updateTierSetting(activeTierIndex, 'iconCustomSvg', value)}
+                            placeholder='<svg>...</svg>'
+                            multiline={4}
+                            autoComplete="off"
+                            helpText="Paste your SVG code here"
+                          />
+                        )}
+
+                        {/* Icon Preview */}
+                        <div style={{
+                          padding: '12px',
+                          backgroundColor: '#fff',
+                          borderRadius: '6px',
+                          border: '1px solid #e5e7eb',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px'
+                        }}>
+                          <Text variant="bodySm" tone="subdued">Preview:</Text>
+                          <div style={{
+                            width: '32px',
+                            height: '32px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            backgroundColor: '#f8fafc',
+                            borderRadius: '6px'
+                          }}>
+                            {activeTier.iconType === 'custom' && activeTier.iconCustomSvg ? (
+                              <div dangerouslySetInnerHTML={{ __html: activeTier.iconCustomSvg }} style={{ width: '24px', height: '24px' }} />
+                            ) : (
+                              <div dangerouslySetInnerHTML={{ 
+                                __html: MILESTONE_ICON_PRESETS.find(p => p.value === (activeTier.iconPreset || 'gift'))?.svg || MILESTONE_ICON_PRESETS[0].svg 
+                              }} style={{ width: '24px', height: '24px', color: progressBarSettings.barForegroundColor }} />
+                            )}
+                          </div>
+                        </div>
+                      </BlockStack>
+                    </div>
+
+                    <div style={{ 
+                      padding: '16px',
+                      backgroundColor: '#fafbfc',
+                      borderRadius: '8px',
+                      border: '1px solid #e5e7eb'
+                    }}>
                       <InlineStack align="space-between" blockAlign="center">
-                        <Text as="label" variant="bodyMd" fontWeight="semibold">
-                          {progressMode === 'amount' ? 'Reward products' : 'Items included'} — {activeTier.products?.length || 0} of {loadedShopifyProducts.length} products added
-                        </Text>
+                        <div>
+                          <Text variant="bodyMd" fontWeight="semibold">Reward Products</Text>
+                          <Text variant="bodySm" tone="subdued">{activeTier.products?.length || 0} of {loadedShopifyProducts.length} selected</Text>
+                        </div>
                         <Button
                           onClick={() => handleOpenProductPicker(activeTierIndex)}
-                          variant="secondary"
                           size="slim"
                         >
-                          + Add product
+                          Select Products
                         </Button>
                       </InlineStack>
+                    </div>
 
                       {activeTier.products && activeTier.products.length > 0 ? (
                         <BlockStack gap="150">
@@ -2305,30 +2639,24 @@ export default function CartDrawerAdmin() {
                           No products selected. Click "Add product" to select reward products for this tier.
                         </Text>
                       )}
-                    </BlockStack>
 
                     {progressBarSettings.tiers.length > 1 && (
                       <Button
                         onClick={() => removeTier(activeTierIndex)}
-                        variant="tertiary"
+                        variant="plain"
                         tone="critical"
-                        fullWidth
                       >
-                        Delete Tier
+                        Delete This Tier
                       </Button>
                     )}
                   </BlockStack>
                 )}
-              </BlockStack>
-            </Card>
+              </div>
+            </div>
 
-            <div style={{ marginTop: '20px', paddingBottom: '40px', display: 'flex', justifyContent: 'flex-end' }}>
-              <Button
-                variant="primary"
-                size="slim"
-                onClick={handleSaveProgressBarSettings}
-              >
-                Save
+            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <Button size="large" onClick={handleSaveProgressBarSettings} variant="primary">
+                Save Changes
               </Button>
             </div>
           </BlockStack >
@@ -3080,6 +3408,94 @@ export default function CartDrawerAdmin() {
       );
     }
 
+    // Settings Tab
+    if (selectedTab === 'settings') {
+      return (
+        <div style={{ padding: '24px', height: '100%', overflowY: 'auto', backgroundColor: '#fafbfc' }}>
+          <BlockStack gap="500">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <div>
+                <Text variant="heading2xl" as="h1" fontWeight="bold">Settings</Text>
+                <Text variant="bodySm" tone="subdued" as="p" style={{ marginTop: '4px' }}>Configure global cart drawer settings</Text>
+              </div>
+            </div>
+
+            {/* Checkout Name */}
+            <div style={{ 
+              backgroundColor: '#ffffff',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              overflow: 'hidden'
+            }}>
+              <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9' }}>
+                <Text variant="headingMd" as="h2" fontWeight="bold">Checkout Configuration</Text>
+              </div>
+              <div style={{ padding: '20px' }}>
+                <BlockStack gap="400">
+                  <TextField
+                    label="Checkout Button Text"
+                    value={checkoutName}
+                    onChange={setCheckoutName}
+                    autoComplete="off"
+                    helpText="Text displayed on the checkout button"
+                    placeholder="e.g., Checkout Now, Proceed to Checkout"
+                  />
+                  <TextField
+                    label="Checkout Footer Text"
+                    value={checkoutFooterText}
+                    onChange={setCheckoutFooterText}
+                    autoComplete="off"
+                    helpText="Text displayed below the checkout button"
+                    placeholder="e.g., Shipping and taxes calculated at checkout"
+                  />
+                </BlockStack>
+              </div>
+            </div>
+
+            {/* Custom CSS */}
+            <div style={{ 
+              backgroundColor: '#ffffff',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              overflow: 'hidden'
+            }}>
+              <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9' }}>
+                <Text variant="headingMd" as="h2" fontWeight="bold">Custom Styling</Text>
+                <Text variant="bodySm" tone="subdued" style={{ marginTop: '4px' }}>Add custom CSS to override default styles</Text>
+              </div>
+              <div style={{ padding: '20px' }}>
+                <BlockStack gap="400">
+                  <TextField
+                    label="Custom CSS"
+                    value={customCSS}
+                    onChange={setCustomCSS}
+                    multiline={10}
+                    autoComplete="off"
+                    helpText="Add your custom CSS rules here. Changes will be applied to the cart drawer."
+                    placeholder=".cart-drawer {\n  /* Your custom styles */\n}"
+                  />
+                  <Banner tone="info">
+                    <p>Use CSS selectors to target specific elements. Example: <code>.cart-drawer-item</code>, <code>.cart-total</code></p>
+                  </Banner>
+                </BlockStack>
+              </div>
+            </div>
+
+            {/* Save Button */}
+            <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <Button size="large" onClick={async () => {
+                await handleSaveAll();
+                setSaveToastMessage('✅ Settings saved successfully');
+                setShowSaveToast(true);
+              }} variant="primary">
+                Save Settings
+              </Button>
+            </div>
+          </BlockStack>
+        </div>
+      );
+    }
+
     return null;
   };
 
@@ -3091,28 +3507,61 @@ export default function CartDrawerAdmin() {
 
   const renderCartPreview = () => {
     const showEmpty = previewCartState[0] === 'empty';
-    const currentItems = cartData.items || [];
+    
+    // HARDCODED SAMPLE PRODUCT for preview
+    const samplePreviewProduct = {
+      id: 'preview-sample-1',
+      productId: 'preview-sample-1',
+      name: 'Sample Product',
+      title: 'Sample Product',
+      price: 10,
+      quantity: 1,
+      displayImage: null,
+      placeholderImage: '📦',
+      isSampleProduct: true
+    };
+    
+    // Use sample product if cart is empty, otherwise use actual cart items
+    const currentItems = showEmpty ? [] : (cartData.items && cartData.items.length > 0 ? cartData.items : [samplePreviewProduct]);
+    
+    // CRITICAL FIX: Force calculate cart value from items
+    const actualCartValue = currentItems.reduce((sum, item) => {
+      const price = Number(item.price) || 0;
+      const qty = Number(item.quantity) || 1;
+      return sum + (price * qty);
+    }, 0);
+    const actualCartQuantity = currentItems.reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+    
     const cartProductIds = currentItems.map(item => item.productId || item.id || item.variantId).filter(Boolean);
     const cartCollectionIds = cartProductIds.flatMap((productId) => {
       const product = loadedShopifyProducts.find(p => p.id === productId);
       return product?.collections || [];
     });
 
-    const currentProgressMode = progressMode || 'amount';
+    const currentProgressMode = progressBarSettings?.mode || progressMode || 'amount';
 
     // Derive milestones from current settings for LIVE preview
-    const previewMilestones = (progressBarSettings?.tiers || []).map(tier => ({
-      id: tier.id,
-      target: tier.minValue,
-      label: currentProgressMode === 'amount' ? `₹${tier.minValue}` : `${tier.minValue} items`,
-      rewardText: tier.description,
-      associatedProducts: tier.products || []
-    })).sort((a, b) => a.target - b.target);
+    const previewMilestones = (progressBarSettings?.tiers || []).map(tier => {
+      const target = currentProgressMode === 'quantity' ? (tier.minQuantity || 1) : (tier.minValue || 0);
+      return {
+        id: tier.id,
+        target: target,
+        label: currentProgressMode === 'quantity' ? `${target} items` : `₹${target}`,
+        rewardText: tier.description,
+        associatedProducts: tier.products || []
+      };
+    }).sort((a, b) => a.target - b.target);
 
-    const maxTargetSetting = progressBarSettings.maxTarget || 1000;
+    const maxTargetSetting = previewMilestones.length > 0
+      ? Math.max(...previewMilestones.map(m => m.target))
+      : (currentProgressMode === 'amount' ? 1000 : 10);
+    
+    console.log('[Progress Debug] Cart Value:', actualCartValue);
+    console.log('[Progress Debug] Max Target:', maxTargetSetting);
+    console.log('[Progress Debug] Milestones:', previewMilestones.map(m => ({ target: m.target, desc: m.rewardText })));
 
     // Derive unlocked rewards for the items list
-    const currentProgressVal = currentProgressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
+    const currentProgressVal = currentProgressMode === 'amount' ? actualCartValue : actualCartQuantity;
     const reachedWithProducts = previewMilestones.filter(ms => currentProgressVal >= ms.target && ms.associatedProducts.length > 0);
     const allReachedProductIds = [...new Set(reachedWithProducts.flatMap(ms => ms.associatedProducts))];
 
@@ -3148,21 +3597,7 @@ export default function CartDrawerAdmin() {
 
     let itemsToRender = [...normalizedMockItems, ...unlockedRewards];
 
-    // LIVE PREVIEW ENHANCEMENT: If cart is empty, show one real product to demonstrate upsells
-    if (itemsToRender.length === 0 && loadedShopifyProducts.length > 0) {
-      const p = loadedShopifyProducts[0];
-      const isUrl = p.image && (p.image.startsWith('http') || p.image.startsWith('//'));
-      itemsToRender = [{
-        id: p.id,
-        productId: p.id,
-        name: p.title,
-        price: Number(p.price || 0),
-        quantity: 1,
-        displayImage: isUrl ? p.image : null,
-        placeholderImage: !isUrl ? (p.image || '📦') : '📦',
-        isPreviewPlaceholder: true
-      }];
-    }
+    // LIVE PREVIEW ENHANCEMENT: Removed - now using hardcoded sample product above
 
     // Recalculate totals including automatic additions
     const totalWithRewards = itemsToRender.reduce((sum, item) => sum + (item.price * item.quantity), 0);
@@ -3414,7 +3849,7 @@ export default function CartDrawerAdmin() {
           {/* Body */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* Progress Bar Feature - Integrated Milestones */}
-            {isEnabled(featureStates.progressBarEnabled) && (isEnabled(progressBarSettings.showOnEmpty) || !showEmpty) && (
+            {isEnabled(featureStates.progressBarEnabled) && (!showEmpty || isEnabled(progressBarSettings.showOnEmpty)) && (
               <div style={{
                 padding: '24px 16px',
                 order: progressBarSettings.placement === 'bottom' ? 10 : -2,
@@ -3445,14 +3880,15 @@ export default function CartDrawerAdmin() {
                 {/* Header Info */}
                 <div style={{ textAlign: 'center', marginBottom: '28px' }}>
                   {(() => {
-                    const activeMilestone = getActiveMilestone(progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity, previewMilestones, progressMode);
+                    const currentVal = currentProgressMode === 'amount' ? actualCartValue : actualCartQuantity;
+                    const activeMilestone = getActiveMilestone(currentVal, previewMilestones, currentProgressMode);
                     if (activeMilestone.upcoming) {
                       const amountLeft = activeMilestone.nextAmount;
                       const rewardText = activeMilestone.upcoming.rewardText;
                       return (
                         <div>
                           <p style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: '500', color: '#64748b' }}>
-                            You're <span style={{ color: '#0f172a', fontWeight: '700' }}>{progressMode === 'amount' ? `₹${amountLeft}` : `${amountLeft} items`}</span> away
+                            You're <span style={{ color: '#0f172a', fontWeight: '700' }}>{currentProgressMode === 'amount' ? `₹${amountLeft}` : `${amountLeft} items`}</span> away
                           </p>
                           <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: progressBarSettings.barForegroundColor || '#2563eb' }}>
                             Unlock: {rewardText}
@@ -3486,8 +3922,9 @@ export default function CartDrawerAdmin() {
 
                   {/* Foreground Fill */}
                   {(() => {
-                    const currentVal = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
-                    const percentage = Math.min(100, (currentVal / maxTargetSetting) * 100);
+                    const currentVal = currentProgressMode === 'amount' ? actualCartValue : actualCartQuantity;
+                    const percentage = currentVal > 0 && maxTargetSetting > 0 ? Math.min(100, (currentVal / maxTargetSetting) * 100) : 0;
+                    console.log('[Progress Fill] Mode:', currentProgressMode, 'Current:', currentVal, 'Max Target:', maxTargetSetting, 'Progress %:', percentage);
 
                     return (
                       <div style={{
@@ -3496,7 +3933,7 @@ export default function CartDrawerAdmin() {
                         left: '12px',
                         height: '8px',
                         marginTop: '-4px',
-                        width: `calc(${percentage}% - 24px)`,
+                        width: `${percentage}%`,
                         maxWidth: 'calc(100% - 24px)',
                         background: progressBarSettings.fill_gradient || `linear-gradient(90deg, ${progressBarSettings.barForegroundColor || '#2563eb'}, #60a5fa, ${progressBarSettings.barForegroundColor || '#2563eb'})`,
                         backgroundSize: '200% 100%',
@@ -3511,15 +3948,26 @@ export default function CartDrawerAdmin() {
 
                   {/* Milestone Nodes */}
                   {previewMilestones.map((ms, idx) => {
-                    const currentVal = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
+                    const currentVal = currentProgressMode === 'amount' ? actualCartValue : actualCartQuantity;
                     const isCompleted = currentVal >= ms.target;
-                    const percent = Math.min(100, Math.max(0, (ms.target / maxTargetSetting) * 100));
+                    const percent = (ms.target / maxTargetSetting) * 100;
 
-                    // Icon logic based on text or generic
-                    let icon = '🔒';
-                    if (isCompleted) icon = '🎁';
-                    if (ms.rewardText.toLowerCase().includes('ship')) icon = isCompleted ? '🚚' : '🚛';
-                    if (ms.rewardText.toLowerCase().includes('discount') || ms.rewardText.includes('%')) icon = isCompleted ? '🏷️' : '🎫';
+                    // Get icon from tier settings
+                    const tier = progressBarSettings.tiers.find(t => t.id === ms.id);
+                    let iconDisplay = '🎁';
+                    
+                    if (tier) {
+                      if (tier.iconType === 'custom' && tier.iconCustomSvg) {
+                        iconDisplay = tier.iconCustomSvg;
+                      } else if (tier.iconPreset) {
+                        const preset = MILESTONE_ICON_PRESETS.find(p => p.value === tier.iconPreset);
+                        if (preset && preset.svg) {
+                          iconDisplay = preset.svg;
+                        } else {
+                          iconDisplay = preset?.label?.split(' ')[0] || '🎁';
+                        }
+                      }
+                    }
 
                     return (
                       <div
@@ -3565,9 +4013,15 @@ export default function CartDrawerAdmin() {
                                   if (firstProd && firstProd.image && (firstProd.image.startsWith('http') || firstProd.image.startsWith('//'))) {
                                     return <img src={firstProd.image} alt="Reward" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isCompleted ? 1 : 0.5 }} />;
                                   }
-                                  return firstProd?.image || icon;
+                                  return firstProd?.image || (
+                                    typeof iconDisplay === 'string' && iconDisplay.startsWith('<svg') ? 
+                                      <div dangerouslySetInnerHTML={{ __html: iconDisplay }} style={{ width: '20px', height: '20px', color: isCompleted ? '#fff' : '#94a3b8' }} /> : 
+                                      iconDisplay
+                                  );
                                 }
-                                return icon;
+                                return typeof iconDisplay === 'string' && iconDisplay.startsWith('<svg') ? 
+                                  <div dangerouslySetInnerHTML={{ __html: iconDisplay }} style={{ width: '20px', height: '20px', color: isCompleted ? '#fff' : '#94a3b8' }} /> : 
+                                  iconDisplay;
                               })()}
 
                               {isCompleted && (
@@ -3597,7 +4051,8 @@ export default function CartDrawerAdmin() {
 
                         {/* Floating Tooltip Label */}
                         {(() => {
-                          const isNext = !isCompleted && (idx === 0 || ((progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity) >= previewMilestones[idx - 1].target));
+                          const currentCheckVal = currentProgressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
+                          const isNext = !isCompleted && (idx === 0 || (currentCheckVal >= previewMilestones[idx - 1].target));
                           return (
                             <div style={{
                               position: 'absolute',
@@ -3627,7 +4082,7 @@ export default function CartDrawerAdmin() {
                                   <span style={{ color: '#0f172a' }}>{ms.rewardText}</span>
                                 </>
                               ) : (
-                                <span>{progressMode === 'amount' ? `₹${ms.target}` : `${ms.target}`}</span>
+                                <span>{ms.label}</span>
                               )}
                             </div>
                           );
@@ -3639,7 +4094,7 @@ export default function CartDrawerAdmin() {
 
                 {/* Unlocked Products Preview (Integrated) */}
                 {(() => {
-                  const currentVal = progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity;
+                  const currentVal = currentProgressMode === 'amount' ? actualCartValue : actualCartQuantity;
                   const reachedWithProducts = previewMilestones.filter(ms => currentVal >= ms.target && ms.associatedProducts.length > 0);
 
                   if (reachedWithProducts.length === 0) return null;
@@ -3813,12 +4268,22 @@ export default function CartDrawerAdmin() {
                                 padding: '2px'
                               }}>
                                 <button
-                                  onClick={() => handleUpdateQuantity(idx, -1)}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const actualIdx = normalizedMockItems.findIndex(mi => mi.id === item.id || mi.productId === item.productId);
+                                    if (actualIdx !== -1) handleUpdateQuantity(actualIdx, -1);
+                                  }}
                                   style={{ width: '28px', height: '28px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', color: '#64748b' }}
                                 >−</button>
                                 <span style={{ width: '24px', textAlign: 'center', fontSize: '13px', fontWeight: '700', color: '#1e293b' }}>{item.quantity}</span>
                                 <button
-                                  onClick={() => handleUpdateQuantity(idx, 1)}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const actualIdx = normalizedMockItems.findIndex(mi => mi.id === item.id || mi.productId === item.productId);
+                                    if (actualIdx !== -1) handleUpdateQuantity(actualIdx, 1);
+                                  }}
                                   style={{ width: '28px', height: '28px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px', color: '#64748b' }}
                                 >+</button>
                               </div>
@@ -4002,58 +4467,60 @@ export default function CartDrawerAdmin() {
           </div>
 
           {/* Sticky Footer */}
-          <div style={{
-            padding: '20px',
-            backgroundColor: '#ffffff',
-            borderTop: '1px solid #f1f5f9',
-            boxShadow: '0 -4px 6px -1px rgba(0, 0, 0, 0.05)',
-            flexShrink: 0,
-            borderBottomLeftRadius: '12px',
-            borderBottomRightRadius: '12px',
-          }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '14px', color: '#64748b', fontWeight: '500' }}>Subtotal</span>
-                <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '700' }}>₹{totalWithRewards.toFixed(0)}</span>
-              </div>
-
-              {appliedCouponIds.length > 0 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#10b981' }}>
-                  <span style={{ fontSize: '14px', fontWeight: '500' }}>Discounts</span>
-                  <span style={{ fontSize: '14px', fontWeight: '700' }}>-₹{previewTotalDiscount.toFixed(0)}</span>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
-                <span style={{ fontSize: '16px', color: '#0f172a', fontWeight: '800' }}>Total</span>
-                <span style={{ fontSize: '18px', color: '#0f172a', fontWeight: '900' }}>₹{previewFinalTotal.toFixed(0)}</span>
-              </div>
-            </div>
-
-            <button style={{
-              width: '100%',
-              padding: '16px',
-              backgroundColor: '#111827',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: '12px',
-              fontSize: '15px',
-              fontWeight: '700',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
-              transition: 'all 0.2s ease'
+          {!showEmpty && (
+            <div style={{
+              padding: '20px',
+              backgroundColor: '#ffffff',
+              borderTop: '1px solid #f1f5f9',
+              boxShadow: '0 -4px 6px -1px rgba(0, 0, 0, 0.05)',
+              flexShrink: 0,
+              borderBottomLeftRadius: '12px',
+              borderBottomRightRadius: '12px',
             }}>
-              Checkout Now
-              <span style={{ fontSize: '18px' }}>→</span>
-            </button>
-            <p style={{ margin: '12px 0 0 0', textAlign: 'center', fontSize: '11px', color: '#94a3b8', fontWeight: '500' }}>
-              Shipping and taxes calculated at checkout
-            </p>
-          </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '14px', color: '#64748b', fontWeight: '500' }}>Subtotal</span>
+                  <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '700' }}>₹{totalWithRewards.toFixed(0)}</span>
+                </div>
+
+                {appliedCouponIds.length > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#10b981' }}>
+                    <span style={{ fontSize: '14px', fontWeight: '500' }}>Discounts</span>
+                    <span style={{ fontSize: '14px', fontWeight: '700' }}>-₹{previewTotalDiscount.toFixed(0)}</span>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                  <span style={{ fontSize: '16px', color: '#0f172a', fontWeight: '800' }}>Total</span>
+                  <span style={{ fontSize: '18px', color: '#0f172a', fontWeight: '900' }}>₹{previewFinalTotal.toFixed(0)}</span>
+                </div>
+              </div>
+
+              <button style={{
+                width: '100%',
+                padding: '16px',
+                backgroundColor: '#111827',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '12px',
+                fontSize: '15px',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                transition: 'all 0.2s ease'
+              }}>
+                {checkoutName}
+                <span style={{ fontSize: '18px' }}>→</span>
+              </button>
+              <p style={{ margin: '12px 0 0 0', textAlign: 'center', fontSize: '11px', color: '#94a3b8', fontWeight: '500' }}>
+                {checkoutFooterText}
+              </p>
+            </div>
+          )}
         </div>
       </div>
     );

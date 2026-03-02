@@ -1,7 +1,6 @@
 // app/routes/api.cart-settings.jsx
 import { authenticate } from "../shopify.server";
 import * as cartService from "../services/cartSettings.server";
-import { getTierData } from "../services/fakeApi.server";
 
 /**
  * GET /api/cart-settings
@@ -9,23 +8,6 @@ import { getTierData } from "../services/fakeApi.server";
  */
 export async function loader({ request }) {
   const settings = cartService.getCartSettings();
-
-  // Inject fake tier for "fake api first" requirement
-  try {
-    const fakeTier = await getTierData();
-    if (settings.progressBar && Array.isArray(settings.progressBar.tiers)) {
-      // Prepend the fake tier if it doesn't already exist
-      if (!settings.progressBar.tiers.some(t => t.id === fakeTier.id)) {
-        settings.progressBar.tiers = [fakeTier, ...settings.progressBar.tiers];
-        // Set mode to quantity if the fake tier is based on a small number (common for quantity)
-        if (fakeTier.minValue < 20) {
-          settings.progressBar.mode = 'quantity';
-        }
-      }
-    }
-  } catch (err) {
-    console.error("Failed to inject fake tier:", err);
-  }
 
   const coupons = cartService.getCoupons();
   const couponSelections = cartService.getCouponSelections();

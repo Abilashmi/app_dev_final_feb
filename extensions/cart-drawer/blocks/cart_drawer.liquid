@@ -41,8 +41,8 @@
 
 /* ========== ANIMATIONS ========== */
 @keyframes cc-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0%, 100% { background-position: 0% 0; }
+  50% { background-position: 100% 0; }
 }
 @keyframes cc-pulse-ring {
   0% { box-shadow: 0 0 0 0 var(--cc-fg-color66, rgba(37,99,235,0.4)); }
@@ -116,6 +116,14 @@
 @media (max-width: 480px) {
   #cc-drawer { width: 100vw; }
 }
+
+/* ========== SUPPRESS THEME CART UI ========== */
+/* Hides Dawn's add-to-cart popup and any theme cart-drawer element
+   so only our custom drawer appears. */
+cart-notification,
+cart-drawer,
+.cart-notification,
+.cart-notification-wrapper { display: none !important; }
 </style>
 
 <script>
@@ -124,7 +132,7 @@
 console.log("[CartDrawer] Custom Cart Loaded");
 
 const SHOP = "{{ shop.permanent_domain }}";
-const API_BASE = "https://cameron-shadows-eggs-fruits.trycloudflare.com/cartdrawer";
+const API_BASE = "/apps/cart-app/";
 const CONFIG_API = API_BASE + "/save_cart_drawer.php?shopdomain=" + SHOP;
 const COUPON_API = API_BASE + "/save_coupon.php?shopdomain=" + SHOP;
 
@@ -134,25 +142,44 @@ let appliedCouponCodes = [];
 
 /* =================== LOAD CONFIG =================== */
 
-async function loadConfig(){
+async function loadConfig() {
   try {
+
+    const fetchOptions = {
+      method: "GET",
+      headers: {
+        "Accept": "application/json",
+        "ngrok-skip-browser-warning": "true"
+      }
+    };
+
     const [configRes, couponRes] = await Promise.all([
-      fetch(CONFIG_API),
-      fetch(COUPON_API).catch(() => null)
+      fetch(CONFIG_API, fetchOptions),
+      fetch(COUPON_API, fetchOptions).catch(() => null)
     ]);
+
+    if (!configRes || !configRes.ok) {
+      throw new Error("Config API request failed");
+    }
 
     const configJson = await configRes.json();
 
-    if(configJson.status === "success" && configJson.data){
+    if (configJson.status === "success" && configJson.data) {
+
       const d = configJson.data;
-      // Parse cartStatus
-      const cartActive = d.cartStatus == 1 || d.cart_status == 1 || d.cartstatus == 'active';
+
+      const cartActive =
+        d.cartStatus == 1 ||
+        d.cart_status == 1 ||
+        d.cartstatus === "active";
+
       console.log("[CartDrawer] Config fetched:", d);
       console.log("[CartDrawer] Cart active status:", cartActive);
-      if(!cartActive) { 
-        console.warn("[CartDrawer] Cart is NOT active. Showing nothing.");
-        CONFIG = null; 
-        return; 
+
+      if (!cartActive) {
+        console.warn("[CartDrawer] Cart NOT active");
+        CONFIG = null;
+        return;
       }
 
       CONFIG = {
@@ -161,19 +188,29 @@ async function loadConfig(){
         coupon: parseCouponData(d),
         upsell: parseUpsellData(d)
       };
+
+      // Enrich upsell products with title/price/image from Shopify AJAX API
+      await enrichUpsellProducts(CONFIG.upsell);
     }
 
-    // Load coupons
-    if(couponRes){
+    // Coupons
+    if (couponRes && couponRes.ok) {
       try {
         const couponJson = await couponRes.json();
-        if(couponJson.status === "success" && Array.isArray(couponJson.data)){
+
+        if (
+          couponJson.status === "success" &&
+          Array.isArray(couponJson.data)
+        ) {
           COUPONS = couponJson.data;
         }
-      } catch(e){ console.warn("[CartDrawer] Coupon parse error", e); }
+
+      } catch (e) {
+        console.warn("[CartDrawer] Coupon JSON parse error", e);
+      }
     }
 
-  } catch(e){
+  } catch (e) {
     console.error("[CartDrawer] Config load error:", e);
   }
 }
@@ -191,21 +228,27 @@ function isEnabled(val) {
 function parseProgressData(d){
   const data = parseJSON(d.progress_data || d.progressData);
   const enabled = isEnabled(d.progress_status) || isEnabled(d.progressStatus) || isEnabled(data.enabled);
+  // Use the explicitly saved mode field first (matches what admin saves via handleSaveAll)
+  const mode = data.mode || (data.rewardsCalculation?.[0] === 'cartQuantity' ? 'quantity' : 'amount');
   return {
     enabled,
+    mode,
     showOnEmpty: data.showOnEmpty !== false,
-    barBackgroundColor: data.barBackgroundColor || '#e2e8f0',
-    barForegroundColor: data.barForegroundColor || '#2563eb',
+    barBackgroundColor: (data.barBackgroundColor === '#ffffff' || !data.barBackgroundColor) ? '#e2e8f0' : data.barBackgroundColor,
+    barForegroundColor: data.barForegroundColor || data.fill_color || '#2563eb',
     borderRadius: data.borderRadius || 8,
     completionText: data.completionText || '🎉 All Rewards Unlocked!',
     maxTarget: data.maxTarget || 1000,
-    mode: data.rewardsCalculation?.[0] === 'cartQuantity' ? 'quantity' : 'amount',
     tiers: (data.tiers || []).map(t => ({
       id: t.id,
-      target: t.minValue || 0,
+      // Use minQuantity in quantity mode, minValue in amount mode — matches admin preview
+      target: mode === 'quantity' ? (t.minQuantity || 1) : (t.minValue || 0),
       rewardText: t.description || 'Reward',
       products: t.products || [],
-      rewardType: t.rewardType || 'product'
+      rewardType: t.rewardType || 'product',
+      iconType: t.iconType || 'preset',
+      iconPreset: t.iconPreset || 'gift',
+      iconCustomSvg: t.iconCustomSvg || ''
     })).sort((a,b) => a.target - b.target)
   };
 }
@@ -251,6 +294,47 @@ function parseUpsellData(d){
   };
 }
 
+/* =================== UPSELL PRODUCT ENRICHMENT =================== */
+
+async function enrichUpsellProducts(upsell) {
+  // Check if any upsell product is missing details (only has id)
+  const needsEnrichment = (upsell.manualRules || []).some(rule =>
+    (rule.upsellProductDetails || []).some(d => !d.title || !d.price)
+  );
+  if (!needsEnrichment) return;
+
+  try {
+    const res = await originalFetch('/products.json?limit=250');
+    const data = await res.json();
+    // Build lookup map: numeric product ID → product object
+    const productMap = {};
+    for (const p of (data.products || [])) {
+      productMap[String(p.id)] = p;
+    }
+
+    for (const rule of (upsell.manualRules || [])) {
+      rule.upsellProductDetails = (rule.upsellProductDetails || []).map(detail => {
+        const numId = String(detail.id || '').replace('gid://shopify/Product/', '');
+        const sp = productMap[numId];
+        if (sp) {
+          return {
+            ...detail,
+            title: sp.title,
+            price: sp.variants?.[0]?.price || sp.price_min || '',
+            image: sp.images?.[0]?.src || sp.featured_image || null,
+            handle: sp.handle,
+            variantId: sp.variants?.[0]?.id
+          };
+        }
+        return detail;
+      });
+    }
+    console.log('[CartDrawer] Upsell products enriched from /products.json');
+  } catch(e) {
+    console.warn('[CartDrawer] Product enrichment failed:', e);
+  }
+}
+
 /* =================== OPEN DRAWER =================== */
 
 async function openDrawer(){
@@ -273,39 +357,99 @@ function closeDrawer(){
   }
 }
 
-/* =================== FETCH & XHR INTERCEPT =================== */
+/* =================== DEBOUNCED OPEN =================== */
+// Single debounce prevents duplicate opens when multiple triggers fire at once.
+let _ccOpenTimer = null;
+function scheduleOpenDrawer(delay){
+  if(_ccOpenTimer) clearTimeout(_ccOpenTimer);
+  _ccOpenTimer = setTimeout(function(){ _ccOpenTimer = null; openDrawer(); }, delay || 350);
+}
 
+/* =================== CART ACTION INTERCEPTS =================== */
+
+// 1. Fetch intercept — catches AJAX add-to-cart calls
 const originalFetch = window.fetch;
 window.fetch = async function(...args){
   const response = await originalFetch.apply(this, args);
   try {
-    const url = args[0];
-    if(typeof url === "string" && url.includes("/cart/add")){
-      console.log("[CartDrawer] Fetch cart/add detected");
-      setTimeout(() => openDrawer(), 300);
+    const url = typeof args[0] === 'string' ? args[0]
+              : (args[0] instanceof Request ? args[0].url : '');
+    if(url.includes('/cart/add')){
+      console.log('[CartDrawer] Fetch /cart/add detected');
+      scheduleOpenDrawer(350);
     }
   } catch(e){}
   return response;
 };
 
-const originalOpen = XMLHttpRequest.prototype.open;
+// 2. XHR intercept — catches themes that use XMLHttpRequest
+const originalXHROpen = XMLHttpRequest.prototype.open;
 XMLHttpRequest.prototype.open = function(method, url){
-  if(url && url.includes("/cart/add")){
-    this.addEventListener("load", function(){
-      console.log("[CartDrawer] XHR cart/add detected");
-      setTimeout(() => openDrawer(), 300);
+  if(url && url.includes('/cart/add')){
+    this.addEventListener('load', function(){
+      console.log('[CartDrawer] XHR /cart/add detected');
+      scheduleOpenDrawer(350);
     });
   }
-  return originalOpen.apply(this, arguments);
+  return originalXHROpen.apply(this, arguments);
 };
 
-document.addEventListener("submit", function(e){
+// 3. Form submit intercept — catches non-AJAX form submissions
+document.addEventListener('submit', function(e){
   const form = e.target;
-  if(form && form.action && form.action.includes("/cart/add")){
-    console.log("[CartDrawer] Form submit cart/add detected");
-    setTimeout(() => openDrawer(), 500);
+  if(form && form.action && form.action.includes('/cart/add')){
+    console.log('[CartDrawer] Form submit /cart/add detected');
+    scheduleOpenDrawer(500);
   }
 });
+
+// 4. Common Shopify theme custom events
+// Covers Dawn, Debut, Brooklyn, Impulse, Turbo, and most 3rd-party themes
+[
+  'cart:item-added',
+  'cart:updated',
+  'cart:add',
+  'cart:refresh',
+  'on:cart:add',
+  'shopify:cart:added',
+  'theme:cart:open',
+  'cart:open'
+].forEach(function(evt){
+  document.addEventListener(evt, function(){ scheduleOpenDrawer(300); });
+  window.addEventListener(evt, function(){ scheduleOpenDrawer(300); });
+});
+
+// 5. Click delegation — fires after any add-to-cart button click
+// Uses capture so it fires before theme JS can stop propagation
+document.addEventListener('click', function(e){
+  if(e.target.closest('[name="add"],[data-add-to-cart],[data-action="add-to-cart"],.btn-add-to-cart,.add-to-cart,.product-form__submit')){
+    scheduleOpenDrawer(600);
+  }
+}, true);
+
+// 6. Shopify section rendering events (used when themes reload sections via AJAX)
+document.addEventListener('shopify:section:load', function(){
+  if(new URL(location.href).searchParams.get('added')) scheduleOpenDrawer(100);
+});
+
+// 7. MutationObserver — watches cart count badge as a last-resort fallback.
+// Fires when count increases, meaning an item was just added.
+function ccWatchCartCount(){
+  const el = document.querySelector(
+    '[data-cart-count],[data-cart-item-count],.cart-count,.cart__item-count,.CartCount,#cart-icon-bubble'
+  );
+  if(!el || el._ccWatching) return;
+  el._ccWatching = true;
+  let lastCount = parseInt(el.textContent || el.getAttribute('data-cart-count') || 0);
+  new MutationObserver(function(){
+    const now = parseInt(el.textContent || el.getAttribute('data-cart-count') || 0);
+    if(now > lastCount){ scheduleOpenDrawer(200); }
+    lastCount = now;
+  }).observe(el, { childList: true, subtree: true, characterData: true, attributes: true });
+}
+ccWatchCartCount();
+document.addEventListener('DOMContentLoaded', ccWatchCartCount);
+window.addEventListener('load', ccWatchCartCount);
 
 /* =================== CART ACTIONS =================== */
 
@@ -358,22 +502,35 @@ function ccScrollContainer(containerId, direction){
 function getProgressInfo(cartTotal, cartQty, progress){
   const mode = progress.mode;
   const currentVal = mode === 'quantity' ? cartQty : cartTotal;
-  const maxTarget = progress.maxTarget || 1000;
   const tiers = progress.tiers || [];
+
+  // Derive maxTarget from highest tier target — matches admin preview behavior
+  const maxTarget = tiers.length > 0
+    ? Math.max(...tiers.map(t => t.target))
+    : (progress.maxTarget || 1000);
 
   const completed = tiers.filter(t => currentVal >= t.target);
   const upcoming = tiers.find(t => t.target > currentVal);
   const nextAmount = upcoming ? upcoming.target - currentVal : 0;
-  const percentage = Math.min(100, (currentVal / maxTarget) * 100);
+  const percentage = Math.min(100, maxTarget > 0 ? (currentVal / maxTarget) * 100 : 0);
 
   return { currentVal, maxTarget, completed, upcoming, nextAmount, percentage, mode, tiers };
 }
 
-function getMilestoneIcon(rewardText, isCompleted){
-  const text = (rewardText || '').toLowerCase();
-  if(text.includes('ship')) return isCompleted ? '🚚' : '🚛';
-  if(text.includes('discount') || text.includes('%')) return isCompleted ? '🏷️' : '🎫';
-  return isCompleted ? '🎁' : '🔒';
+const CC_ICON_PRESETS = {
+  gift:     '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M20 6h-2.18c.11-.31.18-.65.18-1a2.996 2.996 0 0 0-5.5-1.65l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76l1-1.36 1 1.36L15.38 12 17 10.83 14.92 8H20v6z"/></svg>',
+  shipping: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M18 18.5a1.5 1.5 0 0 1-1.5-1.5 1.5 1.5 0 0 1 1.5-1.5 1.5 1.5 0 0 1 1.5 1.5 1.5 1.5 0 0 1-1.5 1.5m1.5-9 1.96 2.5H17V9.5m-11 9A1.5 1.5 0 0 1 4.5 17 1.5 1.5 0 0 1 6 15.5 1.5 1.5 0 0 1 7.5 17 1.5 1.5 0 0 1 6 18.5M20 8h-3V4H3c-1.11 0-2 .89-2 2v11h2a3 3 0 0 0 3 3 3 3 0 0 0 3-3h6a3 3 0 0 0 3 3 3 3 0 0 0 3-3h2v-5l-3-4Z"/></svg>',
+  discount: '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/></svg>',
+  star:     '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M12 17.27 18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>',
+  trophy:   '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.9 2-2V5c0-1.11-.89-2-2-2zm0 5h-2V5h2v3zM4 5h2v3H4V5zm7 10.93c-3.95-.49-7-3.85-7-7.93h14c0 4.08-3.05 7.44-7 7.93z"/><path d="M16 19H8v2h8z"/></svg>',
+  heart:    '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="m12 21.35-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>',
+  diamond:  '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M19 3H5L2 9l10 12L22 9l-3-6zM9.62 8l1.5-3h1.76l1.5 3H9.62zM11 10v6.68L5.44 10H11zm2 0h5.56L13 16.68V10zM19.26 8h-2.65l-1.5-3h2.65l1.5 3zM6.24 5h2.65l-1.5 3H4.74l1.5-3z"/></svg>',
+  lock:     '<svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>'
+};
+
+function getMilestoneIconHtml(tier){
+  if(tier.iconType === 'custom' && tier.iconCustomSvg) return tier.iconCustomSvg;
+  return CC_ICON_PRESETS[tier.iconPreset] || CC_ICON_PRESETS.gift;
 }
 
 /* =================== RENDER =================== */
@@ -385,10 +542,12 @@ async function renderDrawer(){
   const isEmpty = cart.items.length === 0;
 
   const root = document.getElementById("cc-root");
-  root.innerHTML = '';
-
-  const overlay = document.createElement("div");
-  overlay.id = "cc-overlay";
+  let overlay = document.getElementById("cc-overlay");
+  const isFirstOpen = !overlay;
+  if(isFirstOpen){
+    overlay = document.createElement("div");
+    overlay.id = "cc-overlay";
+  }
 
   let html = `<div id="cc-backdrop"></div><div id="cc-drawer">`;
 
@@ -408,6 +567,7 @@ async function renderDrawer(){
   const progress = CONFIG.progress;
   if(progress.enabled && (progress.showOnEmpty || !isEmpty)){
     const pInfo = getProgressInfo(cartTotal, cartQty, progress);
+    
     const fgColor = progress.barForegroundColor || '#2563eb';
 
     html += `<div style="padding:24px 16px;background:#fff;border-radius:16px;box-shadow:0 4px 20px -5px rgba(0,0,0,0.05);margin-bottom:20px;position:relative;border:1px solid #f1f5f9;">`;
@@ -434,50 +594,42 @@ async function renderDrawer(){
     }
     html += `</div>`;
 
-    // Progress Track
-    html += `<div style="position:relative;height:40px;margin-bottom:8px;padding:0 10px;">`;
+// BULLETPROOF PROGRESS BAR - Direct inline styles, no classes
+const barPercent = Math.max(0, Math.min(100, pInfo.percentage || 0));
+console.log("[PROGRESS] barPercent:", barPercent, "fgColor:", fgColor, "cartQty:", cartQty);
 
-    // Background line
-    html += `<div style="position:absolute;top:50%;left:12px;right:12px;height:8px;margin-top:-4px;background:#f1f5f9;border-radius:99px;box-shadow:inset 0 1px 2px rgba(0,0,0,0.06);"></div>`;
+html += `<div style="width:calc(100% - 24px);margin:16px 12px;padding:20px;background:#fff;border-radius:16px;box-shadow:0 4px 20px -5px rgba(0,0,0,0.05);border:1px solid #f1f5f9;">
+  <div style="background:${progress.barBackgroundColor};height:8px;border-radius:99px;overflow:hidden;margin-bottom:20px;box-shadow:inset 0 1px 3px rgba(0,0,0,0.1);">
+    <div style="width:${barPercent}%;height:8px;background:${fgColor};border-radius:99px;transition:width 0.5s ease;box-shadow:0 2px 8px ${fgColor}66;"></div>
+  </div>
+  <div style="position:relative;height:${(pInfo.tiers.length * 50)}px;width:100%;">`;
 
-    // Foreground fill
-    html += `<div style="position:absolute;top:50%;left:12px;height:8px;margin-top:-4px;width:calc(${pInfo.percentage}% - 24px);max-width:calc(100% - 24px);background:linear-gradient(90deg,${fgColor},#60a5fa,${fgColor});background-size:200% 100%;animation:cc-shimmer 3s infinite linear;border-radius:99px;transition:width 1s cubic-bezier(.4,0,.2,1);box-shadow:0 0 15px ${fgColor}66;z-index:1;"></div>`;
-
-    // Milestone Nodes
     pInfo.tiers.forEach((ms, idx) => {
       const isCompleted = pInfo.currentVal >= ms.target;
       const prevTarget = idx > 0 ? pInfo.tiers[idx-1].target : 0;
       const isNext = !isCompleted && pInfo.currentVal >= prevTarget;
-      const percent = Math.min(100, Math.max(0, (ms.target / pInfo.maxTarget) * 100));
-      const icon = getMilestoneIcon(ms.rewardText, isCompleted);
+      const percent = Math.min(97, Math.max(3, (ms.target / pInfo.maxTarget) * 100));
+      const iconHtml = getMilestoneIconHtml(ms);
       const nodeSize = (isCompleted || isNext) ? 40 : 32;
-      const fontSize = (isCompleted || isNext) ? 18 : 14;
+      const iconSize = (isCompleted || isNext) ? 20 : 16;
 
-      html += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:2;display:flex;flex-direction:column;align-items:center;">`;
-
-      // Node circle
-      html += `<div style="width:${nodeSize}px;height:${nodeSize}px;border-radius:12px;background:${isCompleted ? fgColor : '#fff'};border:2px solid ${isCompleted ? fgColor : (isNext ? fgColor : '#cbd5e1')};display:flex;align-items:center;justify-content:center;font-size:${fontSize}px;box-shadow:${isCompleted ? `0 4px 12px ${fgColor}66` : '0 2px 5px rgba(0,0,0,0.05)'};color:${isCompleted ? '#fff' : '#94a3b8'};${isNext ? 'animation:cc-pulse-ring 2s infinite;--cc-fg-color66:'+fgColor+'66;' : ''}position:relative;overflow:hidden;transition:all .3s ease;">`;
-      html += `<span>${icon}</span>`;
+      html += `<div style="position:absolute;left:${percent}%;top:${idx * 50}px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;z-index:${5 + idx};">
+        <div style="width:${nodeSize}px;height:${nodeSize}px;border-radius:12px;background:${isCompleted ? fgColor : '#fff'};border:2px solid ${isCompleted ? fgColor : (isNext ? fgColor : '#cbd5e1')};display:flex;align-items:center;justify-content:center;box-shadow:${isCompleted ? `0 4px 12px ${fgColor}66` : '0 2px 5px rgba(0,0,0,0.05)'};color:${isCompleted ? '#fff' : '#94a3b8'};${isNext ? 'animation:cc-pulse-ring 2s infinite;--cc-fg-color66:'+fgColor+'66;' : ''}transition:all 0.3s ease;position:relative;">
+          <span style="width:${iconSize}px;height:${iconSize}px;display:flex;align-items:center;justify-content:center;">${iconHtml}</span>`;
       if(isCompleted){
-        html += `<div style="position:absolute;inset:0;background:${fgColor}40;display:flex;align-items:center;justify-content:center;z-index:1;">
-          <div style="width:18px;height:18px;background:#10b981;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;">✓</div>
-        </div>`;
+        html += `<div style="position:absolute;inset:0;background:${fgColor}40;display:flex;align-items:center;justify-content:center;border-radius:12px;"><div style="width:18px;height:18px;background:#10b981;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;font-weight:bold;">✓</div></div>`;
       }
-      html += `</div>`;
-
-      // Tooltip label
-      const tooltipBottom = isCompleted ? '-48px' : '-32px';
-      html += `<div style="position:absolute;bottom:${tooltipBottom};left:50%;transform:translateX(-50%);white-space:nowrap;font-size:${isCompleted ? 10 : 11}px;font-weight:700;color:${isCompleted ? '#10b981' : '#64748b'};background:#fff;padding:4px 8px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.08);border:1px solid ${isCompleted ? '#d1fae5' : '#f1f5f9'};opacity:${(isCompleted||isNext)?1:0.7};pointer-events:none;z-index:10;display:flex;flex-direction:column;align-items:center;transition:all .3s ease;">`;
+      html += `</div>
+        <div style="margin-top:8px;white-space:nowrap;font-size:${isCompleted ? 10 : 11}px;font-weight:700;color:${isCompleted ? '#10b981' : '#64748b'};background:#fff;padding:4px 8px;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.08);border:1px solid ${isCompleted ? '#d1fae5' : '#f1f5f9'};opacity:${(isCompleted||isNext)?1:0.7};">`;
       if(isCompleted){
-        html += `<span style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;opacity:.8;">Reached</span><span style="color:#0f172a;">${ms.rewardText}</span>`;
+        html += `<span style="font-size:9px;text-transform:uppercase;letter-spacing:.05em;">Reached</span><span style="color:#0f172a;display:block;">${ms.rewardText}</span>`;
       } else {
         html += `<span>${pInfo.mode === 'amount' ? '₹'+ms.target : ms.target}</span>`;
       }
       html += `</div></div>`;
     });
 
-    html += `</div>`; // end progress track
-    html += `</div>`; // end progress container
+html += `</div></div></div>`;
   }
 
   /* ---- EMPTY STATE ---- */
@@ -623,14 +775,19 @@ async function renderDrawer(){
   html += `</div>`; // end drawer
 
   overlay.innerHTML = html;
-  root.appendChild(overlay);
 
-  // Trigger open animation
-  requestAnimationFrame(() => {
+  if(isFirstOpen){
+    root.appendChild(overlay);
+    // Trigger slide-in animation only on first open
     requestAnimationFrame(() => {
-      overlay.classList.add("active");
+      requestAnimationFrame(() => {
+        overlay.classList.add("active");
+      });
     });
-  });
+  } else {
+    // Already open — keep active, no animation flash
+    overlay.classList.add("active");
+  }
 
   // Backdrop click to close
   document.getElementById("cc-backdrop").addEventListener("click", closeDrawer);
@@ -722,16 +879,14 @@ function renderCouponSection(couponConfig, cartTotal){
       : 'display:flex;flex-direction:column;gap:12px;overflow-y:auto;';
   }
 
-  const showCouponNav = couponsToShow.length >= 2;
-
   let html = `
     <div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -1 : 999};">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <p style="margin:0;font-size:14px;font-weight:700;color:#1e293b;">Available Offers</p>
-        ${showCouponNav ? `<div style="display:flex;gap:6px;">
+        <div style="display:flex;gap:6px;">
           <button class="cc-nav-btn" onclick="ccScrollContainer('cc-coupon-list','left')" title="Scroll left">←</button>
           <button class="cc-nav-btn" onclick="ccScrollContainer('cc-coupon-list','right')" title="Scroll right">→</button>
-        </div>` : ''}
+        </div>
       </div>
       <div id="cc-coupon-list" class="cc-hide-scrollbar" style="${gridStyle}">
   `;
@@ -740,46 +895,46 @@ function renderCouponSection(couponConfig, cartTotal){
     const isApplied = appliedCouponCodes.includes(coupon.code);
 
     if(style === 'style-1'){
-      // Style 1: Horizontal banner with left accent
+      // Style 1: White card with colored left accent bar, grey icon box, dark text, outlined button
       html += `
-        <div style="min-width:240px;padding:12px 16px;background:${coupon.backgroundColor};border-radius:${coupon.borderRadius}px;border:${isApplied ? '1px solid '+coupon.backgroundColor : '1px solid #e2e8f0'};box-shadow:${isApplied ? '0 2px 8px '+coupon.backgroundColor+'30' : '0 2px 4px rgba(0,0,0,0.02)'};display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:all 0.2s ease;">
-          <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:#1e293b;"></div>
-          <div style="width:46px;height:46px;border-radius:8px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:22px;color:${coupon.textColor};flex-shrink:0;">${coupon.iconUrl}</div>
+        <div style="min-width:240px;padding:12px 16px;background:#fff;border-radius:8px;border:${isApplied ? '1px solid '+coupon.backgroundColor : '1px solid #e2e8f0'};box-shadow:${isApplied ? '0 2px 8px '+coupon.backgroundColor+'30' : '0 2px 4px rgba(0,0,0,0.02)'};display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:all 0.2s ease;">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${coupon.backgroundColor};"></div>
+          <div style="width:46px;height:46px;border-radius:8px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">${coupon.iconUrl}</div>
           <div style="flex:1;min-width:0;">
-            <p style="margin:0 0 2px 0;font-size:15px;font-weight:700;color:${coupon.textColor};">${escapeHtml(coupon.code)}</p>
-            <p style="margin:0;font-size:13px;color:${coupon.textColor};opacity:0.9;">${escapeHtml(coupon.label)}</p>
+            <p style="margin:0 0 2px 0;font-size:15px;font-weight:700;color:#1e293b;">${escapeHtml(coupon.code)}</p>
+            <p style="margin:0;font-size:13px;color:#64748b;">${escapeHtml(coupon.label)}</p>
           </div>
-          <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 14px;background:${coupon.buttonBackgroundColor};color:${coupon.buttonTextColor};border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;">${isApplied ? 'Applied' : escapeHtml(coupon.buttonText)}</button>
+          <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 14px;background:${isApplied ? coupon.backgroundColor : 'transparent'};color:${isApplied ? '#fff' : '#475569'};border:${isApplied ? '1px solid '+coupon.backgroundColor : '1px solid #cbd5e1'};border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;">${isApplied ? 'Applied' : 'Apply'}</button>
         </div>
       `;
     } else if(style === 'style-2'){
-      // Style 2: Centered card
+      // Style 2: White card, filled colored icon box, dark text, black Apply Coupon button
       html += `
-        <div style="min-width:180px;padding:16px;background:${coupon.backgroundColor};border-radius:${coupon.borderRadius}px;border:${isApplied ? '2px solid '+coupon.backgroundColor : '1px solid #e2e8f0'};box-shadow:0 4px 12px rgba(0,0,0,0.08);display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;position:relative;">
-          <div style="width:56px;height:56px;border-radius:16px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;font-size:28px;color:${coupon.textColor};box-shadow:0 4px 10px rgba(0,0,0,0.1);">${coupon.iconUrl}</div>
+        <div style="min-width:180px;padding:16px;background:#fff;border-radius:16px;border:${isApplied ? '2px solid '+coupon.backgroundColor : '1px solid #e2e8f0'};box-shadow:0 4px 12px rgba(0,0,0,0.08);display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;position:relative;">
+          <div style="width:56px;height:56px;border-radius:16px;background:${coupon.backgroundColor};display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;box-shadow:0 4px 10px ${coupon.backgroundColor}60;">${coupon.iconUrl}</div>
           <div>
-            <p style="margin:0 0 2px 0;font-size:15px;font-weight:800;color:${coupon.textColor};">${escapeHtml(coupon.code)}</p>
-            <p style="margin:0;font-size:11px;color:${coupon.textColor};opacity:0.9;">${escapeHtml(coupon.description)}</p>
+            <p style="margin:0 0 2px 0;font-size:15px;font-weight:800;color:#1e293b;">${escapeHtml(coupon.code)}</p>
+            <p style="margin:0;font-size:11px;color:#64748b;">${escapeHtml(coupon.description)}</p>
           </div>
-          <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="width:100%;padding:8px;margin-top:4px;background:${coupon.buttonBackgroundColor};color:${coupon.buttonTextColor};border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">${isApplied ? '✓ Applied' : escapeHtml(coupon.buttonText)}</button>
+          <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="width:100%;padding:8px;margin-top:4px;background:${isApplied ? '#10b981' : '#1e293b'};color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">${isApplied ? '✓ Applied' : 'Apply Coupon'}</button>
         </div>
       `;
     } else {
-      // Style 3: Bold header + dashed code box
+      // Style 3: Colored header + white body with dashed code box + text-link apply button
       html += `
-        <div style="min-width:280px;padding:0;background:${coupon.backgroundColor};border-radius:${coupon.borderRadius}px;border:1px solid #e2e8f0;box-shadow:0 2px 6px rgba(0,0,0,0.04);display:flex;flex-direction:column;overflow:hidden;">
-          <div style="background:rgba(255,255,255,0.1);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;color:${coupon.textColor};border-bottom:1px solid rgba(255,255,255,0.1);">
+        <div style="min-width:280px;padding:0;background:#fff;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 2px 6px rgba(0,0,0,0.04);display:flex;flex-direction:column;overflow:hidden;">
+          <div style="background:${coupon.backgroundColor};padding:12px 16px;display:flex;align-items:center;justify-content:space-between;color:${coupon.textColor};">
             <div style="display:flex;align-items:center;gap:8px;">
               <span style="font-size:18px;">${coupon.iconUrl}</span>
               <span style="font-size:14px;font-weight:700;">${escapeHtml(coupon.label)}</span>
             </div>
             <div style="background:rgba(255,255,255,0.2);padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;">${coupon.discountValue}% OFF</div>
           </div>
-          <div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#fff;">
+          <div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
             <div style="flex:1;border:1px dashed #cbd5e1;border-radius:6px;padding:6px 10px;background:#f8fafc;">
               <p style="margin:0;font-size:13px;font-weight:700;color:#334155;font-family:monospace;">${escapeHtml(coupon.code)}</p>
             </div>
-            <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:${isApplied ? '#10b981' : coupon.buttonBackgroundColor};color:${isApplied ? '#fff' : coupon.buttonTextColor};border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;padding:6px 12px;">${isApplied ? 'REMOVE' : escapeHtml(coupon.buttonText)}</button>
+            <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${isApplied ? '#10b981' : '#2563eb'};font-size:12px;font-weight:700;cursor:pointer;padding:4px;">${isApplied ? 'REMOVE' : 'APPLY'}</button>
           </div>
         </div>
       `;
@@ -879,9 +1034,11 @@ function renderUpsellSection(cart, upsellConfig){
     const detail = (matchedUpsellDetails || []).find(d => String(d.id).replace('gid://shopify/Product/', '') === productId) || {};
     const title = detail.title || 'Product';
     const priceText = detail.price ? "₹" + parseFloat(detail.price).toFixed(0) : "";
-    const imageHtml = (detail.image && detail.image !== "📦") 
-      ? `<img src="${detail.image}" style="width:100%;height:100%;object-fit:cover;">`
+    const imageHtml = (detail.image && detail.image !== '📦' && detail.image !== null)
+      ? `<img src="${detail.image}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">`
       : `<span style="font-size:24px;color:#94a3b8;">📦</span>`;
+    // Use enriched variantId if available, otherwise fall back to numeric product ID
+    const addToCartId = detail.variantId || productId;
 
     html += `
       <div class="cc-upsell-card" data-product-id="${productId}" style="
@@ -897,9 +1054,9 @@ function renderUpsellSection(cart, upsellConfig){
           <p style="margin:0 0 4px 0;font-size:11px;font-weight:700;color:#0f172a;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.2;height:2.4em;">
             ${escapeHtml(title)}
           </p>
-          <div style="display:flex;flex-direction:${dir === 'row' ? 'column' : 'row'};align-items:center;justify-content:${dir === 'row' ? 'center' : 'space-between'};gap:4px;width:100%;">
+          <div style="display:flex;flex-direction:${dir === 'row' ? 'column' : 'row'};align-items:center;justify-content:center;gap:4px;width:100%;">
             <span style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
-            <button class="cc-add-btn" style="width:${dir === 'row' ? '100%' : 'auto'};margin-top:${dir === 'row' ? '4px' : '0'};" onclick="ccAddToCart('${productId}')">${escapeHtml(upsellConfig.buttonText)}</button>
+            <button class="cc-add-btn" style="width:${dir === 'row' ? '100%' : 'auto'};margin-top:${dir === 'row' ? '4px' : '0'};" onclick="ccAddToCart('${addToCartId}')">${escapeHtml(upsellConfig.buttonText)}</button>
           </div>
         </div>
       </div>
@@ -940,6 +1097,38 @@ window.ccScrollContainer = function(containerId, direction){
 };
 
 window.testCart = openDrawer;
+
+/* =================== EAGER CONFIG LOAD =================== */
+// Load config immediately on page load so CONFIG is ready the moment
+// the user clicks Add to Cart. Without this, the first click always
+// finds CONFIG = null and the drawer never opens.
+loadConfig();
+
+/* =================== SUPPRESS THEME CART =================== */
+
+// 1. Override Shopify.onItemAdded — most themes call this after a successful
+//    cart add. We still call the original so header cart count stays accurate,
+//    but we redirect any drawer/notification open to ours.
+window.Shopify = window.Shopify || {};
+const _ccOrigOnItemAdded = window.Shopify.onItemAdded;
+window.Shopify.onItemAdded = function(lineItem) {
+  if(typeof _ccOrigOnItemAdded === 'function') _ccOrigOnItemAdded.call(this, lineItem);
+  scheduleOpenDrawer(300);
+};
+
+// 2. Patch cart-notification and cart-drawer custom elements (Dawn + others).
+//    We replace open/show so they open our drawer instead of theirs.
+['cart-notification', 'cart-drawer'].forEach(function(tag) {
+  customElements.whenDefined(tag).then(function() {
+    const Proto = customElements.get(tag) && customElements.get(tag).prototype;
+    if(!Proto) return;
+    ['open', 'show', 'reveal'].forEach(function(method) {
+      if(typeof Proto[method] === 'function') {
+        Proto[method] = function() { scheduleOpenDrawer(300); };
+      }
+    });
+  });
+});
 
 })();
 </script>

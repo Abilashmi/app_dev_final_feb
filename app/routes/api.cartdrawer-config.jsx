@@ -2,7 +2,9 @@ import { authenticate } from "../shopify.server";
 import { getStoredCoupons } from "./api.create_coupon-sample";
 
 // ---------------- EXTERNAL API ----------------
-const EXTERNAL_CART_API = "https://cameron-shadows-eggs-fruits.trycloudflare.com/cartdrawer/save_cart_drawer.php";
+// Single source of truth for the external PHP backend URL.
+// Update this when the ngrok tunnel URL changes.
+const EXTERNAL_CART_API = "https://warriors-route-brands-qualify.trycloudflare.com/cartdrawer/save_cart_drawer.php";
 
 // ---------------- DEFAULTS ----------------
 const DEFAULT_SETTINGS = {
@@ -16,8 +18,19 @@ const DEFAULT_SETTINGS = {
         borderRadius: 8,
         completionText: "🎉 You've unlocked free shipping!",
         maxTarget: 1000,
+        placement: "top",
         tiers: [
-            { id: 1, minValue: 500, description: "Free Shipping", products: [], rewardType: 'product' }
+            { 
+                id: 1, 
+                minValue: 500, 
+                minQuantity: 3,
+                description: "Free Shipping", 
+                products: [], 
+                rewardType: 'product',
+                iconType: 'preset',
+                iconPreset: 'gift',
+                iconCustomSvg: ''
+            }
         ]
     },
     coupons: {
@@ -69,6 +82,15 @@ function transformFromDB(dbData) {
             ...DEFAULT_SETTINGS.progressBar,
             ...progressData,
             enabled: progressEnabled,
+            mode: progressData.mode || DEFAULT_SETTINGS.progressBar.mode,
+            placement: progressData.placement || DEFAULT_SETTINGS.progressBar.placement,
+            tiers: (progressData.tiers || DEFAULT_SETTINGS.progressBar.tiers).map(tier => ({
+                ...tier,
+                minQuantity: tier.minQuantity || 1,
+                iconType: tier.iconType || 'preset',
+                iconPreset: tier.iconPreset || 'gift',
+                iconCustomSvg: tier.iconCustomSvg || ''
+            }))
         },
         coupons: {
             ...DEFAULT_SETTINGS.coupons,
@@ -266,7 +288,7 @@ export async function action({ request }) {
         // Attempt to forward to external PHP endpoint (optional, non-blocking)
         try {
             const externalResponse = await fetch(
-                "https://cameron-shadows-eggs-fruits.trycloudflare.com/cartdrawer/save_cart_drawer.php",
+                EXTERNAL_CART_API,
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
