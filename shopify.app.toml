@@ -27,7 +27,7 @@ scopes = "read_discounts,write_discounts,write_products"
 redirect_urls = [ "https://example.com/api/auth" ]
 
 [app_proxy]
-url = "https://mining-icons-mothers-looksmart.trycloudflare.com/cartdrawer"
+url = "https://blueviolet-clam-512487.hostingersite.com"
 prefix = "apps"
 subpath = "cart-app"
 

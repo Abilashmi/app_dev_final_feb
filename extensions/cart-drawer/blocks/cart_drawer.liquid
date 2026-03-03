@@ -266,6 +266,36 @@
         const enabled = isEnabled(d.progress_status) || isEnabled(d.progressStatus) || isEnabled(data.enabled);
         // Use the explicitly saved mode field first (matches what admin saves via handleSaveAll)
         const mode = data.mode || (data.rewardsCalculation?.[0] === 'cartQuantity' ? 'quantity' : 'amount');
+
+        const rawTiers = Array.isArray(data.tiers) ? data.tiers : [];
+        const parsedTiers = rawTiers
+          .map((t) => {
+            // Robustly parse target: try multiple fields, coerce to number
+            let target;
+            if (mode === 'quantity') {
+              target = parseFloat(t.minQuantity) || parseFloat(t.target) || 1;
+            } else {
+              target = parseFloat(t.minValue) || parseFloat(t.target) || parseFloat(t.minQuantity) || 0;
+            }
+            return {
+              id: t.id,
+              target: target,
+              rewardText: t.description || 'Reward',
+              products: t.products || [],
+              rewardType: t.rewardType || 'product',
+              iconType: t.iconType || 'preset',
+              iconPreset: t.iconPreset || 'gift',
+              iconCustomSvg: t.iconCustomSvg || '',
+            };
+          })
+          .sort((a, b) => a.target - b.target);
+
+        // Derive maxTarget: highest tier target, then saved maxTarget, then 1000
+        const highestTier = parsedTiers.length > 0 ? Math.max(...parsedTiers.map((t) => t.target)) : 0;
+        const maxTarget = highestTier > 0 ? highestTier : parseFloat(data.maxTarget) || 1000;
+
+        console.log('[CartDrawer] parseProgressData — mode:', mode, 'tiers:', parsedTiers, 'maxTarget:', maxTarget);
+
         return {
           enabled,
           mode,
@@ -274,20 +304,8 @@
           barForegroundColor: data.barForegroundColor || data.fill_color || '#2563eb',
           borderRadius: data.borderRadius || 8,
           completionText: data.completionText || '🎉 All Rewards Unlocked!',
-          maxTarget: data.maxTarget || 1000,
-          tiers: (data.tiers || [])
-            .map((t) => ({
-              id: t.id,
-              // Use minQuantity in quantity mode, minValue in amount mode — matches admin preview
-              target: mode === 'quantity' ? t.minQuantity || 1 : t.minValue || 0,
-              rewardText: t.description || 'Reward',
-              products: t.products || [],
-              rewardType: t.rewardType || 'product',
-              iconType: t.iconType || 'preset',
-              iconPreset: t.iconPreset || 'gift',
-              iconCustomSvg: t.iconCustomSvg || '',
-            }))
-            .sort((a, b) => a.target - b.target),
+          maxTarget: maxTarget,
+          tiers: parsedTiers,
         };
       }
 
@@ -537,16 +555,27 @@
 
       /* =================== CART ACTIONS =================== */
 
+      // Debounce flag to prevent overlapping updates
+      let _ccUpdating = false;
+
       async function updateQuantity(key, quantity) {
+        if (_ccUpdating) return;
+        _ccUpdating = true;
         try {
+          // Optimistic UI: dim the item being changed
+          const itemEl = document.querySelector(`[data-item-key="${key}"]`);
+          if (itemEl) itemEl.style.opacity = '0.5';
+
           await originalFetch('/cart/change.js', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: key, quantity }),
           });
-          renderDrawer();
+          await renderDrawer();
         } catch (e) {
           console.error('[CartDrawer] Qty update error:', e);
+        } finally {
+          _ccUpdating = false;
         }
       }
 
@@ -645,16 +674,23 @@
 
       function getProgressInfo(cartTotal, cartQty, progress) {
         const mode = progress.mode;
-        const currentVal = mode === 'quantity' ? cartQty : cartTotal;
+        const currentVal = mode === 'quantity' ? cartQty || 0 : cartTotal || 0;
         const tiers = progress.tiers || [];
 
-        // Derive maxTarget from highest tier target — matches admin preview behavior
-        const maxTarget = tiers.length > 0 ? Math.max(...tiers.map((t) => t.target)) : progress.maxTarget || 1000;
+        // Use the maxTarget already computed by parseProgressData (which derives
+        // it from the highest tier). Guaranteed to be > 0.
+        const maxTarget = progress.maxTarget || 1000;
 
         const completed = tiers.filter((t) => currentVal >= t.target);
         const upcoming = tiers.find((t) => t.target > currentVal);
         const nextAmount = upcoming ? upcoming.target - currentVal : 0;
-        const percentage = Math.min(100, maxTarget > 0 ? (currentVal / maxTarget) * 100 : 0);
+
+        // Guard against NaN: ensure percentage is always a valid number
+        let percentage = maxTarget > 0 ? (currentVal / maxTarget) * 100 : 0;
+        if (isNaN(percentage) || !isFinite(percentage)) percentage = 0;
+        percentage = Math.min(100, Math.max(0, percentage));
+
+        console.log('[CartDrawer] getProgressInfo — val:', currentVal, 'max:', maxTarget, '%:', percentage.toFixed(1));
 
         return { currentVal, maxTarget, completed, upcoming, nextAmount, percentage, mode, tiers };
       }
@@ -703,15 +739,22 @@
         const root = document.getElementById('cc-root');
         let overlay = document.getElementById('cc-overlay');
         const isFirstOpen = !overlay;
+
+        // Save scroll position before re-render
+        let savedScroll = 0;
+        const existingBody = document.getElementById('cc-drawer-body');
+        if (existingBody) savedScroll = existingBody.scrollTop;
+
         if (isFirstOpen) {
           overlay = document.createElement('div');
           overlay.id = 'cc-overlay';
         }
 
-        let html = `<div id="cc-backdrop"></div><div id="cc-drawer">`;
+        // Build the drawer inner content (header + body + footer)
+        let drawerHtml = '';
 
         /* -------- HEADER -------- */
-        html += `
+        drawerHtml += `
     <div style="padding:16px 20px;border-bottom:1px solid #e5e7eb;background:#f9fafb;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
       <h3 style="margin:0;font-size:18px;font-weight:600;color:#000;">Your Cart</h3>
       <button onclick="document.querySelector('#cc-overlay').classList.remove('active');setTimeout(()=>{document.getElementById('cc-root').innerHTML=''},350);"
@@ -720,7 +763,7 @@
   `;
 
         /* -------- BODY -------- */
-        html += `<div style="flex:1;padding:16px 16px 40px 16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;">`;
+        drawerHtml += `<div id="cc-drawer-body" style="flex:1;padding:16px 16px 40px 16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;">`;
 
         /* ---- PROGRESS BAR ---- */
         const progress = CONFIG.progress;
@@ -729,14 +772,14 @@
 
           const fgColor = progress.barForegroundColor || '#2563eb';
 
-          html += `<div style="padding:24px 16px;background:#fff;border-radius:16px;box-shadow:0 4px 20px -5px rgba(0,0,0,0.05);margin-bottom:20px;position:relative;border:1px solid #f1f5f9;">`;
+          drawerHtml += `<div style="padding:24px 16px;background:#fff;border-radius:16px;box-shadow:0 4px 20px -5px rgba(0,0,0,0.05);margin-bottom:20px;position:relative;border:1px solid #f1f5f9;">`;
 
           // Header info
-          html += `<div style="text-align:center;margin-bottom:28px;">`;
+          drawerHtml += `<div style="text-align:center;margin-bottom:28px;">`;
           if (pInfo.upcoming) {
             const amountLeft =
               pInfo.mode === 'quantity' ? `${Math.round(pInfo.nextAmount)} items` : `₹${Math.round(pInfo.nextAmount)}`;
-            html += `
+            drawerHtml += `
         <p style="margin:0 0 4px 0;font-size:15px;font-weight:500;color:#64748b;">
           You're <span style="color:#0f172a;font-weight:700;">${amountLeft}</span> away
         </p>
@@ -745,23 +788,33 @@
         </p>
       `;
           } else {
-            html += `
+            drawerHtml += `
         <div style="color:#10b981;display:flex;align-items:center;justify-content:center;gap:8px;">
           <span style="font-size:20px;">🎉</span>
           <span style="font-size:15px;font-weight:700;">${progress.completionText}</span>
         </div>
       `;
           }
-          html += `</div>`;
+          drawerHtml += `</div>`;
 
-          html += `<div style="position:relative;width:calc(100% - 40px);height:8px;margin:24px 20px 48px 20px;background:${
+          // ---- PROGRESS TRACK with outline ----
+          drawerHtml += `<div style="position:relative;width:calc(100% - 40px);height:10px;margin:24px 20px 48px 20px;background:${
             progress.barBackgroundColor || '#e2e8f0'
-          };border-radius:99px;">`;
+          };border-radius:99px;border:1.5px solid ${fgColor}22;box-shadow:inset 0 1px 3px rgba(0,0,0,0.06);">`;
 
           // 1. The progress bar filler
-          html += `<div style="position:absolute;left:0;top:0;height:100%;width:${pInfo.percentage}%;background:${fgColor};border-radius:99px;transition:width 1s cubic-bezier(.4,0,.2,1);box-shadow:0 0 15px ${fgColor}66;z-index:1;"></div>`;
+          drawerHtml += `<div style="position:absolute;left:0;top:0;height:100%;width:${pInfo.percentage}%;background:linear-gradient(90deg, ${fgColor}, ${fgColor}dd);border-radius:99px;transition:width 1s cubic-bezier(.4,0,.2,1);box-shadow:0 0 12px ${fgColor}44;z-index:1;display:block !important;overflow:hidden;font-size:0;line-height:0;">&nbsp;</div>`;
 
-          // 2. The milestones
+          // 2. Tier segment markers — thin lines on the track showing where each level is
+          pInfo.tiers.forEach((ms) => {
+            const segPercent = Math.min(97, Math.max(3, (ms.target / pInfo.maxTarget) * 100));
+            const reached = pInfo.currentVal >= ms.target;
+            drawerHtml += `<div style="position:absolute;left:${segPercent}%;top:-3px;width:2px;height:calc(100% + 6px);background:${
+              reached ? fgColor : '#cbd5e180'
+            };border-radius:1px;z-index:0;display:block !important;">&nbsp;</div>`;
+          });
+
+          // 3. The milestone nodes
           pInfo.tiers.forEach((ms, idx) => {
             const isCompleted = pInfo.currentVal >= ms.target;
             const prevTarget = idx > 0 ? pInfo.tiers[idx - 1].target : 0;
@@ -772,43 +825,51 @@
             const nodeSize = isCompleted || isNext ? 40 : 32;
             const iconSize = isCompleted || isNext ? 20 : 16;
 
-            html += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:2;display:flex;flex-direction:column;align-items:center;">`;
+            drawerHtml += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:2;display:flex;flex-direction:column;align-items:center;">`;
 
-            // Node circle
-            html += `<div style="width:${nodeSize}px;height:${nodeSize}px;border-radius:12px;background:${
+            // Node circle — filled with fgColor when completed, white with outline when not
+            drawerHtml += `<div style="width:${nodeSize}px;height:${nodeSize}px;border-radius:12px;background:${
               isCompleted ? fgColor : '#fff'
-            };border:2px solid ${
-              isCompleted ? '#10b981' : isNext ? fgColor : '#cbd5e1'
+            };border:2.5px solid ${
+              isCompleted ? fgColor : isNext ? fgColor : '#cbd5e1'
             };display:flex;align-items:center;justify-content:center;box-shadow:${
-              isCompleted ? '0 4px 12px rgba(16,185,129,0.4)' : '0 2px 5px rgba(0,0,0,0.05)'
+              isCompleted
+                ? '0 4px 14px ' + fgColor + '55'
+                : isNext
+                ? '0 0 0 3px ' + fgColor + '22'
+                : '0 2px 5px rgba(0,0,0,0.05)'
             };color:${iconFill};${
               isNext ? 'animation:cc-pulse-ring 2s infinite;--cc-fg-color66:' + fgColor + '66;' : ''
             }position:relative;transition:all .3s ease;">`;
-            html += `<span style="width:${iconSize}px;height:${iconSize}px;display:flex;align-items:center;justify-content:center;pointer-events:none;">${iconHtml}</span>`;
-            html += `</div>`;
+            drawerHtml += `<span style="width:${iconSize}px;height:${iconSize}px;display:flex;align-items:center;justify-content:center;pointer-events:none;">${iconHtml}</span>`;
+            // Completed checkmark badge
+            if (isCompleted) {
+              drawerHtml += `<span style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;background:#10b981;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
+            }
+            drawerHtml += `</div>`;
 
-            // Tooltip label (Just text now, not button-like)
+            // Tooltip label
             const tooltipBottom = isCompleted ? '-48px' : '-32px';
-            html += `<div style="position:absolute;bottom:${tooltipBottom};left:50%;transform:translateX(-50%);white-space:nowrap;font-size:${
+            drawerHtml += `<div style="position:absolute;bottom:${tooltipBottom};left:50%;transform:translateX(-50%);white-space:nowrap;font-size:${
               isCompleted ? 12 : 11
-            }px;font-weight:700;color:${isCompleted ? '#10b981' : '#64748b'};opacity:${
+            }px;font-weight:700;color:${isCompleted ? fgColor : '#64748b'};opacity:${
               isCompleted || isNext ? 1 : 0.7
             };pointer-events:none;z-index:10;display:flex;flex-direction:column;align-items:center;transition:all .3s ease;">`;
             if (isCompleted) {
-              html += `<span style="color:#0f172a;">${ms.rewardText}</span>`;
+              drawerHtml += `<span style="color:${fgColor};">${ms.rewardText}</span>`;
             } else {
-              html += `<span>${pInfo.mode === 'amount' ? '₹' + Math.round(ms.target) : ms.target}</span>`;
+              drawerHtml += `<span>${pInfo.mode === 'amount' ? '₹' + Math.round(ms.target) : ms.target}</span>`;
             }
-            html += `</div></div>`;
+            drawerHtml += `</div></div>`;
           });
 
-          html += `</div>`; // end progress track
-          html += `</div>`; // end progress container
+          drawerHtml += `</div>`; // end progress track
+          drawerHtml += `</div>`; // end progress container
         }
 
         /* ---- EMPTY STATE ---- */
         if (isEmpty) {
-          html += `
+          drawerHtml += `
       <div style="padding:40px 0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px;">
         <div style="font-size:40px;">🛒</div>
         <p style="margin:0;font-size:16px;font-weight:600;color:#111;">Your cart is empty</p>
@@ -832,12 +893,12 @@
         if (upsell.enabled && upsell.position === 'top' && (upsell.showOnEmptyCart || !isEmpty)) {
           const upsellHtml = renderUpsellSection(cart, upsell);
           console.log('[CartDrawer] Top upsell HTML length:', upsellHtml.length);
-          html += upsellHtml;
+          drawerHtml += upsellHtml;
         }
 
         /* ---- CART ITEMS ---- */
         if (!isEmpty) {
-          html += `
+          drawerHtml += `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding:0 4px;">
         <p style="margin:0;font-size:15px;font-weight:800;color:#1e293b;letter-spacing:-0.01em;">Items included</p>
         <div style="background:#f1f5f9;padding:2px 8px;border-radius:6px;">
@@ -851,7 +912,7 @@
             const unitPrice = item.original_price / 100;
             const lineTotal = price;
 
-            html += `
+            drawerHtml += `
         <div style="display:flex;gap:12px;padding:12px;background:#fff;border-radius:16px;border:1px solid #f1f5f9;transition:all .3s ease;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);position:relative;">
           <div style="width:70px;height:70px;background:#fff;border-radius:12px;flex-shrink:0;border:1px solid #f1f5f9;overflow:hidden;display:flex;align-items:center;justify-content:center;">
             ${
@@ -900,7 +961,7 @@
           /* ---- COUPON SECTION ---- */
           const coupon = CONFIG.coupon;
           if (coupon.enabled && coupon.selectedActiveCoupons.length > 0) {
-            html += renderCouponSection(coupon, cartTotal);
+            drawerHtml += renderCouponSection(coupon, cartTotal);
           }
         }
 
@@ -909,10 +970,10 @@
         if (upsell.enabled && upsell.position === 'bottom' && (upsell.showOnEmptyCart || !isEmpty)) {
           const upsellHtml = renderUpsellSection(cart, upsell);
           console.log('[CartDrawer] Bottom upsell HTML length:', upsellHtml.length);
-          html += upsellHtml;
+          drawerHtml += upsellHtml;
         }
 
-        html += `</div>`; // end body
+        drawerHtml += `</div>`; // end body
 
         /* -------- FOOTER -------- */
         const subtotal = cartTotal;
@@ -947,7 +1008,7 @@
         });
         const finalTotal = Math.max(0, subtotal - totalDiscount);
 
-        html += `
+        drawerHtml += `
     <div style="padding:20px;background:#fff;border-top:1px solid #f1f5f9;box-shadow:0 -4px 6px -1px rgba(0,0,0,0.05);flex-shrink:0;">
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -957,7 +1018,7 @@
   `;
 
         if (totalDiscount > 0) {
-          html += `
+          drawerHtml += `
         <div style="display:flex;justify-content:space-between;align-items:center;color:#10b981;">
           <span style="font-size:14px;font-weight:500;">Discounts</span>
           <span style="font-size:14px;font-weight:700;">-₹${totalDiscount.toFixed(0)}</span>
@@ -965,7 +1026,7 @@
     `;
         }
 
-        html += `
+        drawerHtml += `
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:10px;border-top:1px solid #f1f5f9;">
           <span style="font-size:16px;color:#0f172a;font-weight:800;">Total</span>
           <span style="font-size:18px;color:#0f172a;font-weight:900;">₹${finalTotal.toFixed(0)}</span>
@@ -982,25 +1043,35 @@
     </div>
   `;
 
-        html += `</div>`; // end drawer
-
-        overlay.innerHTML = html;
-
+        // ---- SMOOTH DOM UPDATE ----
         if (isFirstOpen) {
+          // First open: build full overlay with backdrop + drawer
+          overlay.innerHTML = `<div id="cc-backdrop"></div><div id="cc-drawer">${drawerHtml}</div>`;
           root.appendChild(overlay);
-          // Trigger slide-in animation only on first open
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               overlay.classList.add('active');
             });
           });
+          document.getElementById('cc-backdrop').addEventListener('click', closeDrawer);
         } else {
-          // Already open — keep active, no animation flash
+          // Subsequent updates: only replace drawer inner content (no flash)
+          const drawer = document.getElementById('cc-drawer');
+          if (drawer) {
+            drawer.innerHTML = drawerHtml;
+          }
           overlay.classList.add('active');
-        }
 
-        // Backdrop click to close
-        document.getElementById('cc-backdrop').addEventListener('click', closeDrawer);
+          // Restore scroll position
+          const newBody = document.getElementById('cc-drawer-body');
+          if (newBody && savedScroll > 0) {
+            newBody.scrollTop = savedScroll;
+          }
+
+          // Re-attach backdrop listener
+          const backdrop = document.getElementById('cc-backdrop');
+          if (backdrop) backdrop.addEventListener('click', closeDrawer);
+        }
       }
 
       /* =================== COUPON SECTION RENDERER =================== */
@@ -1080,8 +1151,8 @@
             return {
               id,
               code: override.code || 'CODE',
-              label: override.label || 'Coupon',
-              description: override.description || 'Discount',
+              label: override.label || override.headingText || 'Coupon',
+              description: override.description || override.subtextText || 'Discount',
               discountType: 'percentage',
               discountValue: parseFloat(override.discountValue || 0),
               backgroundColor: override.backgroundColor || '#6366f1',

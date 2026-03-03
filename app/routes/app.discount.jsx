@@ -204,6 +204,7 @@ export default function AppDiscounts() {
 
   // ── Tabs ──
   const tabs = [
+
     { id: "all", content: `All (${counts.total})`, index: 0 },
     { id: "active", content: `Active (${counts.active})`, index: 1 },
     { id: "scheduled", content: `Scheduled (${counts.scheduled})`, index: 2 },

@@ -4,7 +4,7 @@ import { getStoredCoupons } from "./api.create_coupon-sample";
 // ---------------- EXTERNAL API ----------------
 // Single source of truth for the external PHP backend URL.
 // Update this when the ngrok tunnel URL changes.
-const EXTERNAL_CART_API = "https://mining-icons-mothers-looksmart.trycloudflare.com/cartdrawer/save_cart_drawer.php";
+const EXTERNAL_CART_API = "https://blueviolet-clam-512487.hostingersite.com/save_cart_drawer.php";
 
 // ---------------- DEFAULTS ----------------
 const DEFAULT_SETTINGS = {

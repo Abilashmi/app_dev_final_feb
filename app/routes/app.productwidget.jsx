@@ -669,18 +669,18 @@ function ProductCard({ product, template, interactionType, isSelected, isRequire
 // --- COUPONS SECTION ---
 
 function CouponsSection({ config, onSave, saving }) {
-        // Save coupon history to file
-        const saveCouponHistory = (couponId, code, headingText, subtextText) => {
-            const fs = window.require ? window.require('fs') : null;
-            if (!fs) return;
-            const historyPath = 'c:/app_dev/cart-app/coupon-history.json';
-            let history = [];
-            try {
-                history = JSON.parse(fs.readFileSync(historyPath, 'utf8'));
-            } catch (e) {}
-            history.push({ couponId, code, headingText, subtextText, timestamp: Date.now() });
-            fs.writeFileSync(historyPath, JSON.stringify(history, null, 2));
-        };
+    // Save coupon history to file
+    const saveCouponHistory = (couponId, code, headingText, subtextText) => {
+        const fs = window.require ? window.require('fs') : null;
+        if (!fs) return;
+        const historyPath = 'c:/app_dev/cart-app/coupon-history.json';
+        let history = [];
+        try {
+            history = JSON.parse(fs.readFileSync(historyPath, 'utf8'));
+        } catch (e) { }
+        history.push({ couponId, code, headingText, subtextText, timestamp: Date.now() });
+        fs.writeFileSync(historyPath, JSON.stringify(history, null, 2));
+    };
     const shopify = useAppBridge();
     const [activeTemplate, setActiveTemplate] = useState(config?.activeTemplate || "template1");
     const [templates, setTemplates] = useState(config?.templates || FAKE_COUPON_CONFIG.templates);

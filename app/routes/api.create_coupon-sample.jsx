@@ -3,7 +3,7 @@
 // Configuration
 // ===============================
 
-const PHP_ENDPOINT = "https://mining-icons-mothers-looksmart.trycloudflare.com/cartdrawer/save_coupon.php";
+const PHP_ENDPOINT = "https://blueviolet-clam-512487.hostingersite.com/save_coupon.php";
 
 
 // ===============================
@@ -84,7 +84,6 @@ export async function getStoredCoupons(shopDomain = "") {
     }
 }
 
-
 // ===============================
 // Coupon Preparation Logic
 // ===============================
@@ -98,7 +97,6 @@ export async function storeCoupon(couponData) {
         id: couponData.id || `sample_${Date.now()}`,
         createdAt: new Date().toISOString()
     };
-
     console.log("------------------------------------------");
     console.log("[COUPON PREPARED FOR SYNC]");
     console.log(JSON.stringify(newCoupon, null, 2));

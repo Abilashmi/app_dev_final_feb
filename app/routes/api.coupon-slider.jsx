@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 
-const EXTERNAL_API = "https://mining-icons-mothers-looksmart.trycloudflare.com/cartdrawer/save_coupon_slider_widget.php";
+const EXTERNAL_API = "https://blueviolet-clam-512487.hostingersite.com/save_coupon_slider_widget.php";
 
 const DATA_FILE = path.resolve("coupon-slider-data.json");
 
@@ -77,10 +77,21 @@ function transformFromDB(dbData) {
         if (typeof val === "object") return val;
         try { return JSON.parse(val); } catch { return {}; }
     };
+
+    // More robust array parsing to handle potential truncation
     const parseJSONArray = (val) => {
         if (!val) return [];
         if (Array.isArray(val)) return val;
-        try { return JSON.parse(val); } catch { return []; }
+        if (typeof val !== "string") return [];
+
+        try {
+            return JSON.parse(val);
+        } catch {
+            // If it's a truncated JSON string (e.g. ["gid://...","g), try to extract what we can
+            const matches = val.match(/gid:\/\/shopify\/DiscountCodeNode\/\d+/g);
+            if (matches) return matches;
+            return [];
+        }
     };
 
     const temp1Style = parseJSON(dbData.temp1DefaultStyle);
@@ -95,34 +106,25 @@ function transformFromDB(dbData) {
     const temp2CouponCondition = parseJSONArray(dbData.temp2CouponCondition);
     const temp3CouponCondition = parseJSONArray(dbData.temp3CouponCondition);
 
-    const selectedCoupons = parseJSONArray(dbData.selectedTemplateCoupon);
-
     const activeTemplate = dbData.selectedTemplate || "template1";
 
-    // Build templates object
+    // Build templates object with DEEP merging of defaults
     const templates = {
         template1: {
-            name: "Classic Banner",
-            headingText: DEFAULT_DATA.templates.template1.headingText,
-            subtextText: DEFAULT_DATA.templates.template1.subtextText,
+            ...DEFAULT_DATA.templates.template1,
             ...temp1Style,
         },
         template2: {
-            name: "Minimal Card",
-            headingText: DEFAULT_DATA.templates.template2.headingText,
-            subtextText: DEFAULT_DATA.templates.template2.subtextText,
+            ...DEFAULT_DATA.templates.template2,
             ...temp2Style,
         },
         template3: {
-            name: "Bold & Vibrant",
-            headingText: DEFAULT_DATA.templates.template3.headingText,
-            subtextText: DEFAULT_DATA.templates.template3.subtextText,
+            ...DEFAULT_DATA.templates.template3,
             ...temp3Style,
         },
     };
 
     // Build couponOverrides by merging style overrides and conditions
-    // Pick the coupon styles & conditions for the active template
     const couponStyleMap = {
         template1: temp1CouponStyle,
         template2: temp2CouponStyle,
@@ -137,12 +139,30 @@ function transformFromDB(dbData) {
     const activeCouponStyles = couponStyleMap[activeTemplate] || {};
     const activeCouponConditions = couponConditionMap[activeTemplate] || [];
 
+    // Consolidate Selected Coupons:
+    // Some fields might be truncated in the DB (like selectedTemplateCoupon).
+    // We merge IDs from:
+    // 1. selectedTemplateCoupon (primary list)
+    // 2. IDs present in active template's style overrides
+    // 3. IDs present in active template's conditions
+    const idsFromSelected = parseJSONArray(dbData.selectedTemplateCoupon);
+    const idsFromStyles = Object.keys(activeCouponStyles);
+    const idsFromConditions = activeCouponConditions.map(c => c.couponId).filter(Boolean);
+
+    // Combine and deduplicate
+    const selectedCoupons = [...new Set([...idsFromSelected, ...idsFromStyles, ...idsFromConditions])];
+
     const couponOverrides = {};
     for (const couponId of selectedCoupons) {
         const styleOv = activeCouponStyles[couponId] || {};
         const conditionEntry = activeCouponConditions.find(c => c.couponId === couponId) || {};
 
         const override = { ...styleOv };
+
+        // Map headingText -> label and subtextText -> description for the liquid block
+        if (styleOv.headingText) override.label = styleOv.headingText;
+        if (styleOv.subtextText) override.description = styleOv.subtextText;
+
         if (conditionEntry.displayCondition) override.displayCondition = conditionEntry.displayCondition;
         if (conditionEntry.productHandles?.length) override.productHandles = conditionEntry.productHandles;
         if (conditionEntry.collectionHandles?.length) override.collectionHandles = conditionEntry.collectionHandles;
@@ -189,6 +209,29 @@ export async function loader({ request }) {
 
         if (extBody.status === "success" && extBody.data) {
             const config = transformFromDB(extBody.data);
+
+            // AUTO-SYNC LOGIC:
+            // If the database data was essentially empty or missing core styles, 
+            // trigger an async POST to initialize it with defaults.
+            const dbStyles = extBody.data.temp1DefaultStyle;
+            if (!dbStyles || (typeof dbStyles === "string" && dbStyles === "[]") || (typeof dbStyles === "object" && Object.keys(dbStyles).length === 0)) {
+                console.log("Database missing defaults, triggering auto-sync...");
+                // We don't await this to keep the loader fast, or we can await it if we want certainty
+                (async () => {
+                    try {
+                        const dbPayload = transformForDB(config, shopDomain);
+                        await fetch(EXTERNAL_API, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(dbPayload),
+                        });
+                        console.log("Auto-sync completed for", shopDomain);
+                    } catch (err) {
+                        console.error("Auto-sync failed:", err.message);
+                    }
+                })();
+            }
+
             return new Response(JSON.stringify({ success: true, config }), {
                 headers: { "Content-Type": "application/json" },
             });
@@ -210,75 +253,99 @@ export async function loader({ request }) {
 
 const STYLE_KEYS = ["bgColor", "textColor", "accentColor", "buttonColor", "buttonTextColor", "borderRadius", "fontSize", "padding"];
 const CONDITION_KEYS = ["displayCondition", "productHandles", "collectionHandles", "displayTags"];
+
 function transformForDB(data, shopDomain) {
     const templates = data.templates || {};
     const overrides = data.couponOverrides || {};
     const selectedCoupons = data.selectedActiveCoupons || [];
 
-    // Build per-template DB object
-    function buildTemplate(tplKey) {
+    // Helper to build the style object for a template
+    function buildStyle(tplKey) {
         const tpl = templates[tplKey] || {};
-        // Get default styles for this template
         const defaultTpl = (DEFAULT_DATA.templates && DEFAULT_DATA.templates[tplKey]) || {};
-
-        // Merge default styles with user styles (user styles take precedence)
-        const mergedStyles = {};
+        const merged = {};
         for (const k of STYLE_KEYS) {
-            mergedStyles[k] = tpl[k] !== undefined ? tpl[k] : defaultTpl[k] !== undefined ? defaultTpl[k] : "";
+            merged[k] = tpl[k] !== undefined ? tpl[k] : defaultTpl[k] !== undefined ? defaultTpl[k] : "";
         }
+        return merged;
+    }
 
-        // Only include coupons & overrides if this is the active template
+    // Helper to build coupon styles & conditions for a template
+    function buildCouponData(tplKey) {
+        // We only include coupon data if this is the active template
+        // OR if the user expects all template configurations to be persisted.
+        // Assuming we want to persist what's currently in the config.
         const isActive = data.activeTemplate === tplKey;
-        const tplCoupons = isActive ? selectedCoupons : [];
-
-        // Build couponConditions and couponStyles from overrides for selected coupons
         const couponConditions = [];
         const couponStyles = {};
 
-        for (const couponId of tplCoupons) {
-            const ov = overrides[couponId] || {};
+        // If it's active, we use the selectedCoupons
+        // NOTE: The current data structure seems to store overrides globally, 
+        // but the DB has per-template coupon style/condition fields.
+        if (isActive) {
+            for (const couponId of selectedCoupons) {
+                const ov = overrides[couponId] || {};
 
-            // Conditions
-            const condition = {
-                couponId,
-                displayCondition: ov.displayCondition || "all",
-            };
-            if (ov.productHandles?.length) condition.productHandles = ov.productHandles;
-            if (ov.collectionHandles?.length) condition.collectionHandles = ov.collectionHandles;
-            if (ov.displayTags?.length) condition.displayTags = ov.displayTags;
-            couponConditions.push(condition);
+                // Build condition
+                const condition = {
+                    couponId,
+                    displayCondition: ov.displayCondition || "all",
+                };
+                if (ov.productHandles?.length) condition.productHandles = ov.productHandles;
+                if (ov.collectionHandles?.length) condition.collectionHandles = ov.collectionHandles;
+                if (ov.displayTags?.length) condition.displayTags = ov.displayTags;
+                couponConditions.push(condition);
 
-            // Style overrides (only non-condition, non-style-key overrides = text overrides + color overrides)
-            const styleOv = {};
-            for (const [k, v] of Object.entries(ov)) {
-                if (!CONDITION_KEYS.includes(k)) {
-                    styleOv[k] = v;
+                // Build style override (including the label/description we mapped earlier)
+                const styleOv = {};
+                for (const [k, v] of Object.entries(ov)) {
+                    if (!CONDITION_KEYS.includes(k) && !["label", "description"].includes(k)) {
+                        styleOv[k] = v;
+                    }
                 }
-            }
-            if (Object.keys(styleOv).length > 0) {
-                couponStyles[couponId] = styleOv;
+                // Explicitly send back headingText and subtextText if they exist in the override
+                if (ov.label) styleOv.headingText = ov.label;
+                if (ov.description) styleOv.subtextText = ov.description;
+                if (ov.headingText) styleOv.headingText = ov.headingText;
+                if (ov.subtextText) styleOv.subtextText = ov.subtextText;
+
+                if (Object.keys(styleOv).length > 0) {
+                    couponStyles[couponId] = styleOv;
+                }
             }
         }
 
-        return {
-            name: tpl.name || defaultTpl.name || "",
-            headingText: tpl.headingText || defaultTpl.headingText || "",
-            subtextText: tpl.subtextText || defaultTpl.subtextText || "",
-            styles: JSON.stringify(mergedStyles),
-            couponConditions: JSON.stringify(couponConditions),
-            selectedCoupons: JSON.stringify(tplCoupons),
-            couponStyles: JSON.stringify(couponStyles),
-        };
+        return { couponConditions, couponStyles };
     }
 
+    const t1Data = buildCouponData("template1");
+    const t2Data = buildCouponData("template2");
+    const t3Data = buildCouponData("template3");
+
+    // Align with the DB fields shown in user's JSON
     return {
         id: "",
         shopDomain: shopDomain || "",
-        template1: buildTemplate("template1"),
-        template2: buildTemplate("template2"),
-        template3: buildTemplate("template3"),
-        selectedTemplate: data.activeTemplate || "",
-        selectedCouponsGlobal: JSON.stringify(selectedCoupons),
+        selectedTemplate: data.activeTemplate || "template1",
+        selectedTemplateCoupon: JSON.stringify(selectedCoupons),
+
+        // Styles
+        temp1DefaultStyle: buildStyle("template1"),
+        temp2DefaultStyle: buildStyle("template2"),
+        temp3DefaultStyle: buildStyle("template3"),
+
+        // Coupon Styles (Overrides)
+        temp1CouponStyle: t1Data.couponStyles,
+        temp2CouponStyle: t2Data.couponStyles,
+        temp3CouponStyle: t3Data.couponStyles,
+
+        // Coupon Conditions
+        temp1CouponCondition: t1Data.couponConditions,
+        temp2CouponCondition: t2Data.couponConditions,
+        temp3CouponCondition: t3Data.couponConditions,
+
+        // Explicitly include counts or other fields if required by PHP
+        status: "success"
     };
 }
 

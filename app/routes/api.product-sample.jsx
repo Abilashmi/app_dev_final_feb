@@ -250,7 +250,7 @@ export async function action({ request }) {
 
             try {
                 await fetch(
-                    "https://mining-icons-mothers-looksmart.trycloudflare.com/cartdrawer/save_fbt_widget.php",
+                    "https://blueviolet-clam-512487.hostingersite.com/save_fbt_widget.php",
                     {
                         method: "POST",
                         headers: {
