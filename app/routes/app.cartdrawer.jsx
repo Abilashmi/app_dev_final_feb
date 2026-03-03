@@ -3714,8 +3714,9 @@ export default function CartDrawerAdmin() {
         </div>
         <div style={{
           display: currentLayout === 'grid' ? 'grid' : 'flex',
-          gridTemplateColumns: currentLayout === 'grid' ? 'repeat(2, 1fr)' : 'none',
-          flexDirection: currentLayout === 'carousel' ? (currentDir === 'horizontal' ? 'row' : 'column') : (currentDir === 'vertical' ? 'column' : 'row'),
+          gridTemplateColumns: currentLayout === 'grid' ? (currentDir === 'vertical' ? 'repeat(1, 1fr)' : 'repeat(2, 1fr)') : 'none',
+          justifyItems: currentLayout === 'grid' && currentDir === 'vertical' ? 'start' : 'stretch',
+          flexDirection: currentLayout === 'carousel' ? (currentDir === 'horizontal' ? 'row' : 'column') : 'column',
           gap: '12px',
           overflowX: currentDir === 'horizontal' && currentLayout === 'carousel' ? 'auto' : 'hidden',
           overflowY: currentDir === 'vertical' && currentLayout === 'carousel' ? 'auto' : 'hidden',
@@ -3729,32 +3730,45 @@ export default function CartDrawerAdmin() {
             if (!product) return null;
             const hasImage = product.image && (typeof product.image === 'string') && (product.image.startsWith('http') || product.image.startsWith('//'));
 
+            const isGrid = currentLayout === 'grid';
+            const isCarousel = currentLayout === 'carousel';
+            const isHorizontal = currentDir === 'horizontal';
+            const isVertical = currentDir === 'vertical';
+
             return (
               <div key={product.id} style={{
-                minWidth: currentLayout === 'carousel' && currentDir === 'horizontal' ? '120px' : 'auto',
                 width: '100%',
                 backgroundColor: '#fff',
-                borderRadius: '10px',
+                borderRadius: '20px',
                 border: '1px solid #f1f5f9',
-                padding: '10px',
+                padding: '16px',
                 display: 'flex',
-                flexDirection: currentDir === 'vertical' ? 'row' : 'column',
-                alignItems: currentDir === 'vertical' ? 'center' : 'stretch',
-                gap: '12px',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                // LAYOUT controls card internal structure
+                flexDirection: isGrid ? 'column' : 'row',
+                alignItems: isGrid ? 'flex-start' : 'center',
+                textAlign: isGrid ? 'left' : 'left',
+                gap: '16px',
+                boxShadow: '0 4px 15px rgba(0,0,0,0.05)',
                 transition: 'all 0.2s ease',
-                flexShrink: 0
+                flexShrink: 0,
+                // GRID and CAROUSEL Horizontal specific
+                maxWidth: isGrid ? (isVertical ? 'calc(50% - 6px)' : 'none') : (isCarousel && isHorizontal ? '320px' : 'none'),
+                minWidth: isCarousel && isHorizontal ? '320px' : 'auto',
+                margin: '0'
               }}>
                 <div style={{
-                  width: currentDir === 'vertical' ? '50px' : '100%',
-                  height: currentDir === 'vertical' ? '50px' : '80px',
+                  // GRID: 1:1 Square | CAROUSEL: Larger Square
+                  width: isGrid ? '100%' : '80px',
+                  height: isGrid ? 'auto' : '80px',
+                  aspectRatio: '1 / 1',
                   backgroundColor: '#f8fafc',
-                  borderRadius: '8px',
+                  borderRadius: '12px',
                   overflow: 'hidden',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  flexShrink: 0
+                  flexShrink: 0,
+                  marginBottom: isGrid ? '8px' : '0'
                 }}>
                   {hasImage ? (
                     <img src={product.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -3767,63 +3781,58 @@ export default function CartDrawerAdmin() {
                   flex: 1,
                   minWidth: 0,
                   display: 'flex',
-                  flexDirection: currentDir === 'vertical' ? 'row' : 'column',
-                  alignItems: currentDir === 'vertical' ? 'center' : 'stretch',
-                  justifyContent: 'space-between',
-                  gap: '8px'
+                  flexDirection: isGrid ? 'column' : 'row',
+                  alignItems: 'center',
+                  justifyContent: isGrid ? 'flex-start' : 'space-between',
+                  gap: '8px',
+                  width: '100%'
                 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 0, width: '100%', textAlign: 'left' }}>
                     <p style={{
-                      margin: '0 0 2px 0',
-                      fontSize: '11px',
+                      margin: '0 0 4px 0',
+                      fontSize: '14px',
                       fontWeight: '700',
-                      color: '#1e293b',
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                      lineHeight: '1.2',
-                      height: '2.4em'
+                      color: '#0f172a',
+                      lineHeight: '1.3',
+                      wordBreak: 'break-word'
                     }}>
                       {product.title}
                     </p>
-                    <span style={{ fontSize: '11px', fontWeight: '800', color: '#10b981' }}>₹{product.price}</span>
+                    <span style={{ fontSize: '15px', fontWeight: '800', color: '#10b981' }}>₹{product.price}</span>
                   </div>
 
                   <button
                     onClick={() => handleAddToCart(product)}
                     style={{
-                      width: currentDir === 'vertical' ? 'auto' : '100%',
-                      padding: currentDir === 'vertical' ? '6px 16px' : '6px 12px',
-                      fontSize: '10px',
-                      fontWeight: '700',
-                      backgroundColor: '#000',
+                      width: isGrid ? '100%' : 'auto',
+                      padding: '10px 24px',
+                      fontSize: '12px',
+                      fontWeight: '800',
+                      background: '#000',
                       color: '#fff',
                       border: 'none',
-                      borderRadius: '20px',
+                      borderRadius: '30px',
                       cursor: 'pointer',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.05em'
-                    }}
-                  >
-                    Add
+                      letterSpacing: '0.5px'
+                    }}>
+                    ADD
                   </button>
                 </div>
               </div>
             );
           }) : (
             <div style={{
-              width: '100%',
-              padding: '24px 16px',
-              backgroundColor: '#fff',
-              borderRadius: '12px',
-              border: '1px dashed #cbd5e1',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               textAlign: 'center',
-              gap: '8px'
+              gap: '8px',
+              width: '100%',
+              padding: '24px 16px',
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              border: '1px dashed #cbd5e1',
             }}>
               <p style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: '#334155' }}>
                 UPSell Preview
