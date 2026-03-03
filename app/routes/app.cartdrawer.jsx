@@ -795,7 +795,8 @@ export default function CartDrawerAdmin() {
     },
     buttonText: 'Add to cart',
     position: 'bottom',
-    direction: 'block',
+    direction: 'vertical',
+    layout: 'carousel', // 'carousel' or 'grid'
     showOnEmptyCart: true,
   });
   const [initialUpsellConfig, setInitialUpsellConfig] = useState(null);
@@ -915,13 +916,20 @@ export default function CartDrawerAdmin() {
 
           // 4. Update Upsell - Merge with defaults
           if (settings.upsell) {
+            const normalizedUpsell = {
+              ...settings.upsell,
+              direction: settings.upsell?.direction === 'block' ? 'vertical' :
+                settings.upsell?.direction === 'row' ? 'horizontal' :
+                  (settings.upsell?.direction || 'vertical')
+            };
+
             const mergedUpsell = {
               enabled: false,
               useAI: true,
               showOnEmptyCart: true,
               limit: 3,
               position: 'bottom',
-              ...settings.upsell
+              ...normalizedUpsell
             };
             setUpsellConfig(mergedUpsell);
             setUpsellRulesConfig(mergedUpsell);
@@ -1726,7 +1734,8 @@ export default function CartDrawerAdmin() {
     }
   };
 
-  const isUpsellConfigDirty = initialUpsellConfig && JSON.stringify(upsellConfig) !== JSON.stringify(initialUpsellConfig);
+  const isUpsellDirty = (initialUpsellConfig && JSON.stringify(upsellConfig) !== JSON.stringify(initialUpsellConfig)) ||
+    (initialManualUpsellRules && JSON.stringify(manualUpsellRules) !== JSON.stringify(initialManualUpsellRules));
 
   const handleSaveUpsellRules = async () => {
     const error = getUpsellValidationError();
@@ -1739,11 +1748,13 @@ export default function CartDrawerAdmin() {
     // Now only using sample API as requested
     console.log('[Upsell] Saving exclusively to sample API');
     setInitialUpsellConfig(upsellConfig);
+    setInitialManualUpsellRules(JSON.parse(JSON.stringify(manualUpsellRules)));
     await handleSaveAll();
   };
 
   const handleCancelUpsellRules = () => {
     setUpsellConfig(initialUpsellConfig);
+    setManualUpsellRules(JSON.parse(JSON.stringify(initialManualUpsellRules)));
     setSaveToastMessage('Changes discarded');
   };
 
@@ -3228,7 +3239,7 @@ export default function CartDrawerAdmin() {
                   <BlockStack gap="100">
                     <Text variant="headingLg" as="h1">Upsells</Text>
                   </BlockStack>
-                  {isUpsellConfigDirty ? (
+                  {isUpsellDirty ? (
                     <Badge tone="attention">Unsaved Changes</Badge>
                   ) : (
                     <Badge tone={upsellConfig.enabled ? 'success' : 'subdued'}>
@@ -3386,11 +3397,26 @@ export default function CartDrawerAdmin() {
                       <ChoiceList
                         title=""
                         choices={[
-                          { label: 'Block', value: 'block' },
-                          { label: 'Row', value: 'row' },
+                          { label: 'Vertical', value: 'vertical' },
+                          { label: 'Horizontal', value: 'horizontal' },
                         ]}
-                        selected={[upsellConfig.direction || 'block']}
+                        selected={[upsellConfig.direction || 'vertical']}
                         onChange={(val) => setUpsellConfig({ ...upsellConfig, direction: val[0] })}
+                      />
+                    </div>
+                  </BlockStack>
+
+                  <BlockStack gap="200">
+                    <Text variant="bodyMd" fontWeight="bold">Layout</Text>
+                    <div style={{ padding: '4px' }}>
+                      <ChoiceList
+                        title=""
+                        choices={[
+                          { label: 'Carousel (Scrollable)', value: 'carousel' },
+                          { label: 'Grid (2 Columns)', value: 'grid' },
+                        ]}
+                        selected={[upsellConfig.layout || 'carousel']}
+                        onChange={(val) => setUpsellConfig({ ...upsellConfig, layout: val[0] })}
                       />
                     </div>
                   </BlockStack>
@@ -3654,7 +3680,8 @@ export default function CartDrawerAdmin() {
     const currentEnabled = isEnabled(featureStates.upsellEnabled);
     const currentUseAI = upsellConfig.useAI !== undefined ? upsellConfig.useAI : true;
     const currentPos = upsellConfig.position || 'bottom';
-    const currentDir = upsellConfig.direction || 'block';
+    const currentDir = upsellConfig.direction || 'vertical';
+    const currentLayout = upsellConfig.layout || 'carousel';
 
     const upsellSectionJSX = currentEnabled && (upsellConfig.showOnEmptyCart || !showEmpty) && (
       <div style={{
@@ -3678,12 +3705,21 @@ export default function CartDrawerAdmin() {
           }}>
             {upsellConfig.upsellTitle?.text || 'Recommended for you'}
           </p>
+          {((currentDir === 'horizontal' && currentLayout === 'carousel') || (currentDir === 'vertical' && currentLayout === 'carousel')) && upsellProductsToShow.length > 2 && (
+            <div style={{ display: 'flex', gap: '4px' }}>
+              <button style={{ border: '1px solid #e2e8f0', background: '#fff', borderRadius: '4px', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '12px' }}>←</button>
+              <button style={{ border: '1px solid #e2e8f0', background: '#fff', borderRadius: '4px', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: '12px' }}>→</button>
+            </div>
+          )}
         </div>
         <div style={{
-          display: 'flex',
-          flexDirection: currentDir === 'row' ? 'row' : 'column',
+          display: currentLayout === 'grid' ? 'grid' : 'flex',
+          gridTemplateColumns: currentLayout === 'grid' ? 'repeat(2, 1fr)' : 'none',
+          flexDirection: currentLayout === 'carousel' ? (currentDir === 'horizontal' ? 'row' : 'column') : (currentDir === 'vertical' ? 'column' : 'row'),
           gap: '12px',
-          overflowX: currentDir === 'row' ? 'auto' : 'hidden',
+          overflowX: currentDir === 'horizontal' && currentLayout === 'carousel' ? 'auto' : 'hidden',
+          overflowY: currentDir === 'vertical' && currentLayout === 'carousel' ? 'auto' : 'hidden',
+          maxHeight: currentDir === 'vertical' && currentLayout === 'carousel' ? '300px' : 'none',
           paddingBottom: '4px',
           scrollbarWidth: 'none',
           msOverflowStyle: 'none'
@@ -3695,24 +3731,23 @@ export default function CartDrawerAdmin() {
 
             return (
               <div key={product.id} style={{
-                minWidth: currentDir === 'row' ? '140px' : '100%',
-                width: currentDir === 'row' ? '140px' : '100%',
+                minWidth: currentLayout === 'carousel' && currentDir === 'horizontal' ? '120px' : 'auto',
+                width: '100%',
                 backgroundColor: '#fff',
-                borderRadius: '12px',
+                borderRadius: '10px',
                 border: '1px solid #f1f5f9',
-                padding: '8px',
+                padding: '10px',
                 display: 'flex',
-                flexDirection: currentDir === 'row' ? 'column' : 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                transition: 'transform 0.2s ease',
+                flexDirection: currentDir === 'vertical' ? 'row' : 'column',
+                alignItems: currentDir === 'vertical' ? 'center' : 'stretch',
+                gap: '12px',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                transition: 'all 0.2s ease',
                 flexShrink: 0
               }}>
                 <div style={{
-                  width: currentDir === 'row' ? '100%' : '60px',
-                  height: currentDir === 'row' ? '80px' : '60px',
+                  width: currentDir === 'vertical' ? '50px' : '100%',
+                  height: currentDir === 'vertical' ? '50px' : '80px',
                   backgroundColor: '#f8fafc',
                   borderRadius: '8px',
                   overflow: 'hidden',
@@ -3724,70 +3759,55 @@ export default function CartDrawerAdmin() {
                   {hasImage ? (
                     <img src={product.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
-                    <span style={{ fontSize: '24px' }}>{product.image || '📦'}</span>
+                    <span style={{ fontSize: '20px' }}>{product.image || '📦'}</span>
                   )}
                 </div>
 
                 <div style={{
                   flex: 1,
                   minWidth: 0,
-                  textAlign: currentDir === 'row' ? 'center' : 'left',
-                  width: '100%',
                   display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between'
+                  flexDirection: currentDir === 'vertical' ? 'row' : 'column',
+                  alignItems: currentDir === 'vertical' ? 'center' : 'stretch',
+                  justifyContent: 'space-between',
+                  gap: '8px'
                 }}>
-                  <p style={{
-                    margin: '0 0 4px 0',
-                    fontSize: '11px',
-                    fontWeight: '700',
-                    color: '#0f172a',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    lineHeight: '1.2',
-                    height: '2.4em'
-                  }}>
-                    {product.title}
-                  </p>
-
-                  {upsellConfig.showReviews && (
-                    <div style={{ display: 'flex', justifyContent: currentDir === 'row' ? 'center' : 'flex-start', gap: '2px', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '10px', color: '#f59e0b' }}>★★★★★</span>
-                      <span style={{ fontSize: '9px', color: '#94a3b8' }}>(12)</span>
-                    </div>
-                  )}
-
-                  <div style={{
-                    display: 'flex',
-                    flexDirection: currentDir === 'row' ? 'column' : 'row',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '4px',
-                    width: '100%'
-                  }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{
+                      margin: '0 0 2px 0',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      color: '#1e293b',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      lineHeight: '1.2',
+                      height: '2.4em'
+                    }}>
+                      {product.title}
+                    </p>
                     <span style={{ fontSize: '11px', fontWeight: '800', color: '#10b981' }}>₹{product.price}</span>
-                    <button
-                      onClick={() => handleAddToCart(product)}
-                      style={{
-                        width: currentDir === 'row' ? '100%' : 'auto',
-                        padding: '6px 12px',
-                        fontSize: '11px',
-                        fontWeight: '800',
-                        backgroundColor: '#000',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '20px',
-                        cursor: 'pointer',
-                        marginTop: currentDir === 'row' ? '4px' : '0',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.02em'
-                      }}
-                    >
-                      {upsellConfig.buttonText || 'Add to cart'}
-                    </button>
                   </div>
+
+                  <button
+                    onClick={() => handleAddToCart(product)}
+                    style={{
+                      width: currentDir === 'vertical' ? 'auto' : '100%',
+                      padding: currentDir === 'vertical' ? '6px 16px' : '6px 12px',
+                      fontSize: '10px',
+                      fontWeight: '700',
+                      backgroundColor: '#000',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '20px',
+                      cursor: 'pointer',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}
+                  >
+                    Add
+                  </button>
                 </div>
               </div>
             );
@@ -3847,7 +3867,7 @@ export default function CartDrawerAdmin() {
           </div>
 
           {/* Body */}
-          <div style={{ flex: 1, overflowY: 'hidden', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* Progress Bar Feature - Integrated Milestones */}
             {isEnabled(featureStates.progressBarEnabled) && (!showEmpty || isEnabled(progressBarSettings.showOnEmpty)) && (
               <div style={{
@@ -3924,7 +3944,6 @@ export default function CartDrawerAdmin() {
                   {(() => {
                     const currentVal = currentProgressMode === 'amount' ? actualCartValue : actualCartQuantity;
                     const percentage = currentVal > 0 && maxTargetSetting > 0 ? Math.min(100, (currentVal / maxTargetSetting) * 100) : 0;
-                    console.log('[Progress Fill] Mode:', currentProgressMode, 'Current:', currentVal, 'Max Target:', maxTargetSetting, 'Progress %:', percentage);
 
                     return (
                       <div style={{
@@ -3986,9 +4005,9 @@ export default function CartDrawerAdmin() {
                         onClick={() => handleMilestoneProductClick(ms.associatedProducts, ms.rewardText)}
                       >
                         {/* Node Circle */}
-                        {/* Node Circle */}
                         {(() => {
-                          const isNext = !isCompleted && (idx === 0 || ((progressMode === 'amount' ? cartData.cartValue : cartData.totalQuantity) >= previewMilestones[idx - 1].target));
+                          const currentVal = currentProgressMode === 'amount' ? actualCartValue : actualCartQuantity;
+                          const isNext = !isCompleted && (idx === 0 || (currentVal >= previewMilestones[idx - 1].target));
                           return (
                             <div style={{
                               width: isCompleted || isNext ? '40px' : '32px',
@@ -4534,13 +4553,13 @@ export default function CartDrawerAdmin() {
     <Toast content={saveToastMessage} onDismiss={() => setShowSaveToast(false)} />
   ) : null;
 
-  const contextualSaveBarMarkup = isUpsellConfigDirty ? (
+  const contextualSaveBarMarkup = isUpsellDirty && selectedTab === 'upsell' ? (
     <ContextualSaveBar
       message="Unsaved changes in Upsell flow"
       saveAction={{
         label: 'Save',
         onAction: handleSaveUpsellRules,
-        loading: upsellSaving,
+        loading: isSaving,
       }}
       discardAction={{
         label: 'Discard',
