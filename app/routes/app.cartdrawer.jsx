@@ -759,11 +759,13 @@ export default function CartDrawerAdmin() {
   const [couponPosition, setCouponPosition] = useState('top'); // 'top' or 'bottom'
   const [couponLayout, setCouponLayout] = useState('grid'); // 'grid' or 'carousel'
   const [couponAlignment, setCouponAlignment] = useState('horizontal'); // 'horizontal' or 'vertical'
+  const [couponShowOnEmpty, setCouponShowOnEmpty] = useState(true);
   const [initialCouponSettings, setInitialCouponSettings] = useState({
     style: COUPON_STYLES.STYLE_2,
     position: 'top',
     layout: 'grid',
-    alignment: 'horizontal'
+    alignment: 'horizontal',
+    showOnEmpty: true
   });
 
   // ==========================================
@@ -2780,6 +2782,12 @@ export default function CartDrawerAdmin() {
                     <Text variant="headingMd" as="h2">Display Settings</Text>
                     <Text tone="subdued" as="p">Configure how coupons appear in your cart</Text>
 
+                    <Checkbox
+                      label="Show when cart is empty"
+                      checked={couponShowOnEmpty}
+                      onChange={(value) => setCouponShowOnEmpty(value)}
+                    />
+
                     {/* Position in Cart */}
                     <BlockStack gap="200">
                       <Text variant="bodyMd" fontWeight="semibold">Position in Cart</Text>
@@ -3248,6 +3256,11 @@ export default function CartDrawerAdmin() {
                   )}
                 </InlineStack>
                 <Divider />
+                <Checkbox
+                  label="Show when cart is empty"
+                  checked={upsellConfig.showOnEmptyCart}
+                  onChange={(checked) => setUpsellConfig({ ...upsellConfig, showOnEmptyCart: checked })}
+                />
                 <Checkbox
                   label="Use AI recommended upsells"
                   checked={upsellConfig.useAI}
@@ -4334,160 +4347,161 @@ export default function CartDrawerAdmin() {
                     </div>
                   );
                 })}
-                {/* Coupon Feature - Product Widget Style */}
-                {isEnabled(featureStates.couponSliderEnabled) && (
-                  (() => {
-                    // Determine which coupons to show - ONLY show if explicitly selected
-                    if (selectedActiveCoupons.length === 0) return null;
-
-                    const couponsToShow = selectedActiveCoupons
-                      .map(id => {
-                        const apiCoupon = activeCouponsFromAPI.find(c => c.id === id) || allCoupons.find(c => (c.internal_id || c.id) === id) || { id };
-                        const override = couponOverrides[id] || {};
-                        return {
-                          ...apiCoupon,
-                          ...override,
-                          code: override.code || apiCoupon.code || 'CODE',
-                          label: override.label || apiCoupon.title || apiCoupon.label || 'Coupon',
-                          enabled: true
-                        };
-                      });
-
-                    return (
-                      <div style={{
-                        padding: '16px',
-                        order: couponPosition === 'top' ? -1 : 999,
-                        backgroundColor: '#fff',
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                          <Text as="h3" variant="headingSm" fontWeight="bold">
-                            Available Offers
-                          </Text>
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button
-                              onClick={() => handleScrollCoupons('left')}
-                              style={{ width: '32px', height: '32px', borderRadius: '50%', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
-                            >
-                              ←
-                            </button>
-                            <button
-                              onClick={() => handleScrollCoupons('right')}
-                              style={{ width: '32px', height: '32px', borderRadius: '50%', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
-                            >
-                              →
-                            </button>
-                          </div>
-                        </div>
-
-                        <div ref={couponSliderRef} style={{
-                          display: couponLayout === 'grid' ? 'grid' : 'flex',
-                          gridTemplateColumns: couponLayout === 'grid' ? (couponAlignment === 'horizontal' ? 'repeat(2, 1fr)' : '1fr') : undefined,
-                          flexDirection: couponLayout === 'carousel' ? (couponAlignment === 'horizontal' ? 'row' : 'column') : undefined,
-                          gap: '12px',
-                          paddingBottom: '4px',
-                          scrollBehavior: 'smooth',
-                          overflowX: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? 'auto' : 'hidden',
-                          overflowY: couponLayout === 'carousel' && couponAlignment === 'vertical' ? 'auto' : 'hidden',
-                        }}>
-                          {couponsToShow.map((coupon, idx) => {
-                            const displayCoupon = editingCoupon && editingCoupon.id === coupon.id ? editingCoupon : coupon;
-                            const isApplied = appliedCouponIds.includes(coupon.id);
-
-                            if (selectedCouponStyle === COUPON_STYLES.STYLE_1) {
-                              return (
-                                <div key={coupon.id} style={{
-                                  minWidth: '240px',
-                                  padding: '12px 16px',
-                                  backgroundColor: '#fff',
-                                  borderRadius: '8px',
-                                  border: `1px solid ${isApplied ? displayCoupon.backgroundColor : '#e2e8f0'}`,
-                                  boxShadow: isApplied ? `0 2px 8px ${displayCoupon.backgroundColor}30` : '0 2px 4px rgba(0,0,0,0.02)',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '12px',
-                                  position: 'relative',
-                                  overflow: 'hidden',
-                                  transition: 'all 0.2s ease'
-                                }}>
-                                  <div style={{
-                                    position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px',
-                                    backgroundColor: displayCoupon.backgroundColor || '#1e293b'
-                                  }}></div>
-                                  <div style={{
-                                    width: '46px',
-                                    height: '46px',
-                                    borderRadius: '8px',
-                                    backgroundColor: '#e2e8f0',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    fontSize: '22px',
-                                    flexShrink: 0
-                                  }}>
-                                    {displayCoupon.iconUrl || '🎟️'}
-                                  </div>
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                    <p style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>{displayCoupon.code}</p>
-                                    <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>{displayCoupon.label}</p>
-                                  </div>
-                                  <button
-                                    onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
-                                    style={{
-                                      padding: '6px 14px',
-                                      backgroundColor: isApplied ? displayCoupon.backgroundColor : 'transparent',
-                                      color: isApplied ? '#fff' : '#475569',
-                                      border: isApplied ? `1px solid ${displayCoupon.backgroundColor}` : '1px solid #cbd5e1',
-                                      borderRadius: '6px',
-                                      fontSize: '13px',
-                                      fontWeight: '600',
-                                      cursor: 'pointer',
-                                      whiteSpace: 'nowrap',
-                                      transition: 'all 0.2s ease',
-                                    }}
-                                  >
-                                    {isApplied ? 'Applied' : 'Apply'}
-                                  </button>
-                                </div>
-                              );
-                            }
-
-                            if (selectedCouponStyle === COUPON_STYLES.STYLE_2) {
-                              return (
-                                <div key={coupon.id} style={{ minWidth: '180px', padding: '16px', backgroundColor: '#fff', borderRadius: '16px', border: isApplied ? `2px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', position: 'relative' }}>
-                                  <div style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: displayCoupon.backgroundColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', color: '#fff', boxShadow: `0 4px 10px ${displayCoupon.backgroundColor}60` }}>{displayCoupon.iconUrl || '🎁'}</div>
-                                  <div>
-                                    <p style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>{displayCoupon.code}</p>
-                                    <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>{displayCoupon.description}</p>
-                                  </div>
-                                  <button onClick={() => handleCopyCouponCode(coupon.code, coupon.id)} style={{ width: '100%', padding: '8px', marginTop: '4px', backgroundColor: isApplied ? '#10b981' : '#1e293b', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>{isApplied ? '✓ Applied' : 'Apply Coupon'}</button>
-                                </div>
-                              );
-                            }
-
-                            return (
-                              <div key={coupon.id} style={{ minWidth: '280px', padding: '0', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                                <div style={{ backgroundColor: displayCoupon.backgroundColor, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: displayCoupon.textColor }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{ fontSize: '18px' }}>{displayCoupon.iconUrl || '⚡'}</span>
-                                    <span style={{ fontSize: '14px', fontWeight: '700' }}>{displayCoupon.label}</span>
-                                  </div>
-                                  <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '600' }}>{displayCoupon.discountValue}% OFF</div>
-                                </div>
-                                <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                                  <div style={{ flex: 1, border: '1px dashed #cbd5e1', borderRadius: '6px', padding: '6px 10px', backgroundColor: '#f8fafc' }}>
-                                    <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#334155', fontFamily: 'monospace' }}>{displayCoupon.code}</p>
-                                  </div>
-                                  <button onClick={() => handleCopyCouponCode(coupon.code, coupon.id)} style={{ border: 'none', background: 'none', color: isApplied ? '#10b981' : '#2563eb', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: '4px' }}>{isApplied ? 'REMOVE' : 'APPLY'}</button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()
-                )}
               </>
+            )}
+
+            {/* Coupon Feature - Product Widget Style */}
+            {isEnabled(featureStates.couponSliderEnabled) && (!showEmpty || couponShowOnEmpty) && (
+              (() => {
+                // Determine which coupons to show - ONLY show if explicitly selected
+                if (selectedActiveCoupons.length === 0) return null;
+
+                const couponsToShow = selectedActiveCoupons
+                  .map(id => {
+                    const apiCoupon = activeCouponsFromAPI.find(c => c.id === id) || allCoupons.find(c => (c.internal_id || c.id) === id) || { id };
+                    const override = couponOverrides[id] || {};
+                    return {
+                      ...apiCoupon,
+                      ...override,
+                      code: override.code || apiCoupon.code || 'CODE',
+                      label: override.label || apiCoupon.title || apiCoupon.label || 'Coupon',
+                      enabled: true
+                    };
+                  });
+
+                return (
+                  <div style={{
+                    padding: '16px',
+                    order: couponPosition === 'top' ? -1 : 999,
+                    backgroundColor: '#fff',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <Text as="h3" variant="headingSm" fontWeight="bold">
+                        Available Offers
+                      </Text>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          onClick={() => handleScrollCoupons('left')}
+                          style={{ width: '32px', height: '32px', borderRadius: '50%', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                        >
+                          ←
+                        </button>
+                        <button
+                          onClick={() => handleScrollCoupons('right')}
+                          style={{ width: '32px', height: '32px', borderRadius: '50%', border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', transition: 'all 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                        >
+                          →
+                        </button>
+                      </div>
+                    </div>
+
+                    <div ref={couponSliderRef} style={{
+                      display: couponLayout === 'grid' ? 'grid' : 'flex',
+                      gridTemplateColumns: couponLayout === 'grid' ? (couponAlignment === 'horizontal' ? 'repeat(2, 1fr)' : '1fr') : undefined,
+                      flexDirection: couponLayout === 'carousel' ? (couponAlignment === 'horizontal' ? 'row' : 'column') : undefined,
+                      gap: '12px',
+                      paddingBottom: '4px',
+                      scrollBehavior: 'smooth',
+                      overflowX: couponLayout === 'carousel' && couponAlignment === 'horizontal' ? 'auto' : 'hidden',
+                      overflowY: couponLayout === 'carousel' && couponAlignment === 'vertical' ? 'auto' : 'hidden',
+                    }}>
+                      {couponsToShow.map((coupon, idx) => {
+                        const displayCoupon = editingCoupon && editingCoupon.id === coupon.id ? editingCoupon : coupon;
+                        const isApplied = appliedCouponIds.includes(coupon.id);
+
+                        if (selectedCouponStyle === COUPON_STYLES.STYLE_1) {
+                          return (
+                            <div key={coupon.id} style={{
+                              minWidth: '240px',
+                              padding: '12px 16px',
+                              backgroundColor: '#fff',
+                              borderRadius: '8px',
+                              border: `1px solid ${isApplied ? displayCoupon.backgroundColor : '#e2e8f0'}`,
+                              boxShadow: isApplied ? `0 2px 8px ${displayCoupon.backgroundColor}30` : '0 2px 4px rgba(0,0,0,0.02)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              position: 'relative',
+                              overflow: 'hidden',
+                              transition: 'all 0.2s ease'
+                            }}>
+                              <div style={{
+                                position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px',
+                                backgroundColor: displayCoupon.backgroundColor || '#1e293b'
+                              }}></div>
+                              <div style={{
+                                width: '46px',
+                                height: '46px',
+                                borderRadius: '8px',
+                                backgroundColor: '#e2e8f0',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '22px',
+                                flexShrink: 0
+                              }}>
+                                {displayCoupon.iconUrl || '🎟️'}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>{displayCoupon.code}</p>
+                                <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>{displayCoupon.label}</p>
+                              </div>
+                              <button
+                                onClick={() => handleCopyCouponCode(coupon.code, coupon.id)}
+                                style={{
+                                  padding: '6px 14px',
+                                  backgroundColor: isApplied ? displayCoupon.backgroundColor : 'transparent',
+                                  color: isApplied ? '#fff' : '#475569',
+                                  border: isApplied ? `1px solid ${displayCoupon.backgroundColor}` : '1px solid #cbd5e1',
+                                  borderRadius: '6px',
+                                  fontSize: '13px',
+                                  fontWeight: '600',
+                                  cursor: 'pointer',
+                                  whiteSpace: 'nowrap',
+                                  transition: 'all 0.2s ease',
+                                }}
+                              >
+                                {isApplied ? 'Applied' : 'Apply'}
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        if (selectedCouponStyle === COUPON_STYLES.STYLE_2) {
+                          return (
+                            <div key={coupon.id} style={{ minWidth: '180px', padding: '16px', backgroundColor: '#fff', borderRadius: '16px', border: isApplied ? `2px solid ${displayCoupon.backgroundColor}` : '1px solid #e2e8f0', boxShadow: '0 4px 12px rgba(0,0,0,0.08)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px', position: 'relative' }}>
+                              <div style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: displayCoupon.backgroundColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', color: '#fff', boxShadow: `0 4px 10px ${displayCoupon.backgroundColor}60` }}>{displayCoupon.iconUrl || '🎁'}</div>
+                              <div>
+                                <p style={{ margin: '0 0 2px 0', fontSize: '15px', fontWeight: '800', color: '#1e293b' }}>{displayCoupon.code}</p>
+                                <p style={{ margin: 0, fontSize: '11px', color: '#64748b' }}>{displayCoupon.description}</p>
+                              </div>
+                              <button onClick={() => handleCopyCouponCode(coupon.code, coupon.id)} style={{ width: '100%', padding: '8px', marginTop: '4px', backgroundColor: isApplied ? '#10b981' : '#1e293b', color: '#fff', border: 'none', borderRadius: '10px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>{isApplied ? '✓ Applied' : 'Apply Coupon'}</button>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div key={coupon.id} style={{ minWidth: '280px', padding: '0', backgroundColor: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 2px 6px rgba(0,0,0,0.04)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                            <div style={{ backgroundColor: displayCoupon.backgroundColor, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: displayCoupon.textColor }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '18px' }}>{displayCoupon.iconUrl || '⚡'}</span>
+                                <span style={{ fontSize: '14px', fontWeight: '700' }}>{displayCoupon.label}</span>
+                              </div>
+                              <div style={{ backgroundColor: 'rgba(255,255,255,0.2)', padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '600' }}>{displayCoupon.discountValue}% OFF</div>
+                            </div>
+                            <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                              <div style={{ flex: 1, border: '1px dashed #cbd5e1', borderRadius: '6px', padding: '6px 10px', backgroundColor: '#f8fafc' }}>
+                                <p style={{ margin: 0, fontSize: '13px', fontWeight: '700', color: '#334155', fontFamily: 'monospace' }}>{displayCoupon.code}</p>
+                              </div>
+                              <button onClick={() => handleCopyCouponCode(coupon.code, coupon.id)} style={{ border: 'none', background: 'none', color: isApplied ? '#10b981' : '#2563eb', fontSize: '12px', fontWeight: '700', cursor: 'pointer', padding: '4px' }}>{isApplied ? 'REMOVE' : 'APPLY'}</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()
             )}
 
             {/* Upsell Position: BOTTOM */}
@@ -4550,7 +4564,7 @@ export default function CartDrawerAdmin() {
             </div>
           )}
         </div>
-      </div>
+      </div >
     );
   };
 
