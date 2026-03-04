@@ -42,9 +42,31 @@
     }
   },
   "selectedActiveCoupons": [
+    "gid://shopify/DiscountCodeNode/1289947217987",
+    "gid://shopify/DiscountCodeNode/1289409790019",
     "gid://shopify/DiscountCodeNode/1289947381827"
   ],
   "couponOverrides": {
+    "gid://shopify/DiscountCodeNode/1289947217987": {
+      "displayCondition": "product_handle",
+      "productHandles": [
+        "green-snowboard"
+      ],
+      "headingText": "hi",
+      "subtextText": "sdsreg6klp.lo,mjnhbg",
+      "bgColor": "#287bcf",
+      "textColor": "#ebf2ff",
+      "buttonColor": "#28322f",
+      "accentColor": "#eafff8",
+      "buttonTextColor": "#ffe3e3",
+      "borderRadius": 17,
+      "fontSize": 13,
+      "padding": 22
+    },
+    "gid://shopify/DiscountCodeNode/1289409790019": {
+      "headingText": "9Y39OK68",
+      "subtextText": "9Y39OK68"
+    },
     "gid://shopify/DiscountCodeNode/1289947381827": {
       "headingText": "velwo",
       "subtextText": "velwo"

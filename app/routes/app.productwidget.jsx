@@ -711,20 +711,23 @@ function CouponsSection({ config, onSave, saving }) {
     const [tagInput, setTagInput] = useState("");
 
     // --- Accordion open/close state (per-coupon) ---
-    const [openSections, setOpenSections] = useState({});
+    // NO LONGER USED: Replacing accordions with focused editor
+    // const [openSections, setOpenSections] = useState({});
+    const [currentlyEditingCouponId, setCurrentlyEditingCouponId] = useState(null);
+    const [openSections, setOpenSections] = useState([]); // All sections closed by default
 
-    const toggleSection = (section, couponId) => {
-        setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
-        // When toggling a coupon accordion open, set it as active preview
-        if (couponId && !openSections[section]) {
-            setActivePreviewCouponId(couponId);
-        }
+    const toggleSection = (sectionId) => {
+        setOpenSections(prev =>
+            prev.includes(sectionId)
+                ? prev.filter(s => s !== sectionId)
+                : [...prev, sectionId]
+        );
     };
 
     // Helper: get the effective template for a specific coupon
     const getCouponTemplate = (couponId) => {
         const override = couponOverrides[couponId] || {};
-        const coupon = activeCouponsFromAPI.find(c => c.id === couponId);
+        const coupon = activeCouponsFromAPI.find(c => String(c.id) === String(couponId));
         const heading = override.headingText !== undefined
             ? override.headingText
             : (coupon ? (coupon.code || coupon.label) : baseTemplate?.headingText);
@@ -806,14 +809,20 @@ function CouponsSection({ config, onSave, saving }) {
         }
     }, [showCouponPickerModal, selectedActiveCoupons.length, activeCouponsFromAPI.length, isLoadingActiveCoupons]);
 
-    // Set default preview to first selected coupon if not set
+    // Set default preview and editor coupon if not set
     useEffect(() => {
-        if (selectedActiveCoupons.length > 0 && !activePreviewCouponId) {
-            setActivePreviewCouponId(selectedActiveCoupons[0]);
-        } else if (selectedActiveCoupons.length === 0) {
+        if (selectedActiveCoupons.length > 0) {
+            if (!activePreviewCouponId) {
+                setActivePreviewCouponId(selectedActiveCoupons[0]);
+            }
+            if (!currentlyEditingCouponId) {
+                setCurrentlyEditingCouponId(selectedActiveCoupons[0]);
+            }
+        } else {
             setActivePreviewCouponId(null);
+            setCurrentlyEditingCouponId(null);
         }
-    }, [selectedActiveCoupons, activePreviewCouponId]);
+    }, [selectedActiveCoupons, activePreviewCouponId, currentlyEditingCouponId]);
 
     // Handlers for coupon picker modal
     const handleOpenCouponPicker = () => {
@@ -839,6 +848,10 @@ function CouponsSection({ config, onSave, saving }) {
 
     const handleCouponPickerAdd = () => {
         setSelectedActiveCoupons([...tempSelectedCouponIds]);
+        if (tempSelectedCouponIds.length > 0 && !currentlyEditingCouponId) {
+            setCurrentlyEditingCouponId(tempSelectedCouponIds[0]);
+            setActivePreviewCouponId(tempSelectedCouponIds[0]);
+        }
         setShowCouponPickerModal(false);
     };
 
@@ -1068,262 +1081,354 @@ function CouponsSection({ config, onSave, saving }) {
                 </BlockStack>
             </Card>
 
-            {/* Two Column Layout: Preview Left, Customization Right */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px" }}>
-                {/* LEFT: Preview */}
+            {/* Two Column Layout: Fixed Preview (420px), Adaptable Customization (Stable 550px height) */}
+            <div style={{ display: "grid", gridTemplateColumns: "420px 1fr", gap: "24px", alignItems: "start" }}>
+                {/* LEFT: Fixed Size Preview */}
                 <Card>
-                    <BlockStack gap="300">
-                        <Text as="h3" variant="headingMd">Preview</Text>
+                    <div style={{ width: "420px", height: "550px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                        <BlockStack gap="300" align="center">
+                            <Text as="h3" variant="headingMd">Preview</Text>
 
-                        <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-                            {/* Left Arrow */}
-                            {selectedActiveCoupons.length > 1 && (
-                                <Button
-                                    icon={ChevronLeftIcon}
-                                    onClick={() => {
-                                        const idx = selectedActiveCoupons.indexOf(activePreviewCouponId);
-                                        const prev = idx > 0 ? selectedActiveCoupons[idx - 1] : selectedActiveCoupons[selectedActiveCoupons.length - 1];
-                                        setActivePreviewCouponId(prev);
-                                    }}
-                                />
-                            )}
-
-                            {/* Main Preview Area */}
-                            <div style={{ flex: 1 }}>
-                                {/* Template 1: Left Accent Bar — clean card with colored left border */}
-                                {activeTemplate === "template1" && (
-                                    <div style={{
-                                        borderRadius: `${currentTemplate.borderRadius}px`,
-                                        background: currentTemplate.bgColor,
-                                        borderLeft: `5px solid ${currentTemplate.accentColor}`,
-                                        padding: `${currentTemplate.padding + 10}px ${currentTemplate.padding + 14}px`,
-                                        minHeight: "140px",
-                                        display: "flex", alignItems: "center", gap: "20px",
-                                        width: "100%",
-                                        boxShadow: "0 2px 12px rgba(0,0,0,0.06)"
-                                    }}>
-                                        {/* Text */}
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{
-                                                fontSize: `${currentTemplate.fontSize + 4}px`,
-                                                fontWeight: "800", color: currentTemplate.textColor,
-                                                lineHeight: 1.2, marginBottom: "6px"
-                                            }}>
-                                                {displayHeading}
-                                            </div>
-                                            <div style={{
-                                                fontSize: `${currentTemplate.fontSize - 1}px`,
-                                                color: currentTemplate.textColor, opacity: 0.55,
-                                                lineHeight: 1.5
-                                            }}>
-                                                {displaySubtext}
-                                            </div>
-                                        </div>
-                                        {/* Button */}
-                                        <div style={{
-                                            padding: "10px 24px",
-                                            background: currentTemplate.buttonColor,
-                                            borderRadius: `${currentTemplate.borderRadius}px`,
-                                            color: currentTemplate.buttonTextColor,
-                                            fontWeight: "700", fontSize: "13px",
-                                            cursor: "pointer", whiteSpace: "nowrap",
-                                            flexShrink: 0
-                                        }}>
-                                            Copy Code
-                                        </div>
+                            <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+                                {/* Left Arrow */}
+                                {selectedActiveCoupons.length > 1 && (
+                                    <div
+                                        onClick={() => {
+                                            const idx = selectedActiveCoupons.indexOf(activePreviewCouponId);
+                                            const prev = idx > 0 ? selectedActiveCoupons[idx - 1] : selectedActiveCoupons[selectedActiveCoupons.length - 1];
+                                            setActivePreviewCouponId(prev);
+                                        }}
+                                        style={{
+                                            cursor: "pointer",
+                                            padding: "8px",
+                                            borderRadius: "50%",
+                                            background: "#fff",
+                                            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            zIndex: 10,
+                                            transition: "transform 0.2s ease",
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.1)"}
+                                        onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+                                    >
+                                        <Icon source={ChevronLeftIcon} tone="base" />
                                     </div>
                                 )}
 
-                                {/* Template 2: Voucher Ticket — realistic coupon with cutout notches */}
-                                {activeTemplate === "template2" && (
-                                    <div style={{
-                                        position: "relative",
-                                        width: "100%",
-                                        background: currentTemplate.bgColor,
-                                        borderRadius: `${currentTemplate.borderRadius}px`,
-                                        boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-                                        overflow: "hidden",
-                                        display: "flex", flexDirection: "row",
-                                        minHeight: "160px"
-                                    }}>
-                                        {/* Left notch cutout */}
+                                {/* Main Preview Area (Scrollable for long content) */}
+                                <div style={{
+                                    flex: 1,
+                                    maxHeight: "480px",
+                                    overflowY: "auto",
+                                    paddingRight: "8px",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    justifyContent: "center"
+                                }}>
+                                    {/* Template 1: Left Accent Bar — clean card with colored left border */}
+                                    {activeTemplate === "template1" && (
                                         <div style={{
-                                            position: "absolute", left: "-10px", top: "50%",
-                                            transform: "translateY(-50%)",
-                                            width: "20px", height: "20px", borderRadius: "50%",
-                                            background: "#f1f1f1", zIndex: 2
-                                        }} />
-                                        {/* Right notch cutout */}
-                                        <div style={{
-                                            position: "absolute", right: "-10px", top: "50%",
-                                            transform: "translateY(-50%)",
-                                            width: "20px", height: "20px", borderRadius: "50%",
-                                            background: "#f1f1f1", zIndex: 2
-                                        }} />
-
-                                        {/* Left: Code section */}
-                                        <div style={{
-                                            width: "35%", display: "flex", flexDirection: "column",
-                                            alignItems: "center", justifyContent: "center",
-                                            padding: "20px",
-                                            background: `${currentTemplate.accentColor}08`
+                                            borderRadius: `${currentTemplate.borderRadius}px`,
+                                            background: currentTemplate.bgColor,
+                                            borderLeft: `5px solid ${currentTemplate.accentColor}`,
+                                            padding: `${currentTemplate.padding + 10}px ${currentTemplate.padding + 14}px`,
+                                            minHeight: "140px",
+                                            display: "flex", alignItems: "center", gap: "20px",
+                                            width: "100%",
+                                            boxShadow: "0 2px 12px rgba(0,0,0,0.06)"
                                         }}>
-                                            <div style={{
-                                                fontSize: "10px", fontWeight: "700",
-                                                color: currentTemplate.accentColor,
-                                                textTransform: "uppercase", letterSpacing: "2px",
-                                                marginBottom: "8px"
-                                            }}>
-                                                Your Code
+                                            {/* Text */}
+                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                <div style={{
+                                                    fontSize: `${currentTemplate.fontSize + 4}px`,
+                                                    fontWeight: "800", color: currentTemplate.textColor,
+                                                    lineHeight: 1.2, marginBottom: "6px",
+                                                    overflowWrap: "break-word", wordBreak: "break-word"
+                                                }}>
+                                                    {displayHeading}
+                                                </div>
+                                                <div style={{
+                                                    fontSize: `${currentTemplate.fontSize - 1}px`,
+                                                    color: currentTemplate.textColor, opacity: 0.55,
+                                                    lineHeight: 1.5,
+                                                    overflowWrap: "break-word", wordBreak: "break-word"
+                                                }}>
+                                                    {displaySubtext}
+                                                </div>
                                             </div>
+                                            {/* Button */}
                                             <div style={{
-                                                fontSize: "18px", fontWeight: "900",
-                                                color: currentTemplate.accentColor,
-                                                fontFamily: "monospace", letterSpacing: "2px"
-                                            }}>
-                                                {previewCoupon?.code || "CODE"}
-                                            </div>
-                                            <div style={{
-                                                width: "30px", height: "2px", borderRadius: "1px",
-                                                background: currentTemplate.accentColor,
-                                                marginTop: "10px", opacity: 0.3
-                                            }} />
-                                        </div>
-
-                                        {/* Dashed tear line */}
-                                        <div style={{
-                                            width: "0px",
-                                            borderLeft: `2px dashed ${currentTemplate.accentColor}25`,
-                                            margin: "16px 0"
-                                        }} />
-
-                                        {/* Right: Details */}
-                                        <div style={{
-                                            flex: 1, padding: `${currentTemplate.padding + 8}px ${currentTemplate.padding + 14}px`,
-                                            display: "flex", flexDirection: "column",
-                                            justifyContent: "center"
-                                        }}>
-                                            <div style={{
-                                                fontSize: `${currentTemplate.fontSize + 3}px`,
-                                                fontWeight: "800", color: currentTemplate.textColor,
-                                                lineHeight: 1.2, marginBottom: "6px"
-                                            }}>
-                                                {displayHeading}
-                                            </div>
-                                            <div style={{
-                                                fontSize: `${currentTemplate.fontSize - 1}px`,
-                                                color: currentTemplate.textColor, opacity: 0.5,
-                                                lineHeight: 1.5, marginBottom: "14px"
-                                            }}>
-                                                {displaySubtext}
-                                            </div>
-                                            <div style={{
-                                                padding: "9px 24px",
+                                                padding: "10px 24px",
                                                 background: currentTemplate.buttonColor,
                                                 borderRadius: `${currentTemplate.borderRadius}px`,
                                                 color: currentTemplate.buttonTextColor,
-                                                fontWeight: "700", fontSize: "12px",
-                                                cursor: "pointer", alignSelf: "flex-start"
+                                                fontWeight: "700", fontSize: "13px",
+                                                cursor: "pointer", whiteSpace: "nowrap",
+                                                flexShrink: 0
                                             }}>
-                                                Redeem Now
+                                                Copy Code
                                             </div>
                                         </div>
-                                    </div>
-                                )}
+                                    )}
 
-                                {/* Template 3: Inline Bar — single-row horizontal bar */}
-                                {activeTemplate === "template3" && (
-                                    <div style={{
-                                        borderRadius: `${currentTemplate.borderRadius}px`,
-                                        background: currentTemplate.bgColor,
-                                        padding: `${currentTemplate.padding + 6}px ${currentTemplate.padding + 12}px`,
-                                        display: "flex", alignItems: "center", gap: "16px",
-                                        width: "100%",
-                                        boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
-                                        border: `1px solid ${currentTemplate.accentColor}15`
-                                    }}>
-                                        {/* Icon */}
+                                    {/* Template 2: Voucher Ticket — realistic coupon with cutout notches */}
+                                    {activeTemplate === "template2" && (
                                         <div style={{
-                                            width: "42px", height: "42px", borderRadius: "10px",
-                                            background: `${currentTemplate.accentColor}12`,
-                                            display: "flex", alignItems: "center", justifyContent: "center",
-                                            flexShrink: 0
-                                        }}>
-                                            <span style={{ fontSize: "20px" }}>🏷️</span>
-                                        </div>
-                                        {/* Text */}
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{
-                                                fontSize: `${currentTemplate.fontSize + 1}px`,
-                                                fontWeight: "700", color: currentTemplate.textColor,
-                                                lineHeight: 1.3,
-                                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap"
-                                            }}>
-                                                {displayHeading}
-                                            </div>
-                                            <div style={{
-                                                fontSize: `${currentTemplate.fontSize - 2}px`,
-                                                color: currentTemplate.textColor, opacity: 0.5,
-                                                marginTop: "2px"
-                                            }}>
-                                                {displaySubtext}
-                                            </div>
-                                        </div>
-                                        {/* Code pill */}
-                                        <div style={{
-                                            padding: "6px 14px", borderRadius: "6px",
-                                            border: `1.5px dashed ${currentTemplate.accentColor}55`,
-                                            color: currentTemplate.accentColor,
-                                            fontSize: "12px", fontWeight: "700",
-                                            fontFamily: "monospace", letterSpacing: "1.5px",
-                                            flexShrink: 0
-                                        }}>
-                                            {previewCoupon?.code || "CODE"}
-                                        </div>
-                                        {/* Button */}
-                                        <div style={{
-                                            padding: "8px 20px",
-                                            background: currentTemplate.buttonColor,
+                                            position: "relative",
+                                            width: "100%",
+                                            background: currentTemplate.bgColor,
                                             borderRadius: `${currentTemplate.borderRadius}px`,
-                                            color: currentTemplate.buttonTextColor,
-                                            fontWeight: "700", fontSize: "12px",
-                                            cursor: "pointer", whiteSpace: "nowrap",
-                                            flexShrink: 0
+                                            boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+                                            overflow: "hidden",
+                                            display: "flex", flexDirection: "row",
+                                            minHeight: "160px"
                                         }}>
-                                            Apply
+                                            {/* Left notch cutout */}
+                                            <div style={{
+                                                position: "absolute", left: "-10px", top: "50%",
+                                                transform: "translateY(-50%)",
+                                                width: "20px", height: "20px", borderRadius: "50%",
+                                                background: "#f1f1f1", zIndex: 2
+                                            }} />
+                                            {/* Right notch cutout */}
+                                            <div style={{
+                                                position: "absolute", right: "-10px", top: "50%",
+                                                transform: "translateY(-50%)",
+                                                width: "20px", height: "20px", borderRadius: "50%",
+                                                background: "#f1f1f1", zIndex: 2
+                                            }} />
+
+                                            {/* Left: Code section */}
+                                            <div style={{
+                                                width: "35%", display: "flex", flexDirection: "column",
+                                                alignItems: "center", justifyContent: "center",
+                                                padding: "20px",
+                                                background: `${currentTemplate.accentColor}08`
+                                            }}>
+                                                <div style={{
+                                                    fontSize: "10px", fontWeight: "700",
+                                                    color: currentTemplate.accentColor,
+                                                    textTransform: "uppercase", letterSpacing: "2px",
+                                                    marginBottom: "8px"
+                                                }}>
+                                                    Your Code
+                                                </div>
+                                                <div style={{
+                                                    fontSize: "18px", fontWeight: "900",
+                                                    color: currentTemplate.accentColor,
+                                                    fontFamily: "monospace", letterSpacing: "2px",
+                                                    wordBreak: "break-all", overflowWrap: "anywhere",
+                                                    textAlign: "center"
+                                                }}>
+                                                    {previewCoupon?.code || "CODE"}
+                                                </div>
+                                                <div style={{
+                                                    width: "30px", height: "2px", borderRadius: "1px",
+                                                    background: currentTemplate.accentColor,
+                                                    marginTop: "10px", opacity: 0.3
+                                                }} />
+                                            </div>
+
+                                            {/* Dashed tear line */}
+                                            <div style={{
+                                                width: "0px",
+                                                borderLeft: `2px dashed ${currentTemplate.accentColor}25`,
+                                                margin: "16px 0"
+                                            }} />
+
+                                            {/* Right: Details */}
+                                            <div style={{
+                                                flex: 1, padding: `${currentTemplate.padding + 8}px ${currentTemplate.padding + 14}px`,
+                                                display: "flex", flexDirection: "column",
+                                                justifyContent: "center", minWidth: 0
+                                            }}>
+                                                <div style={{
+                                                    fontSize: `${currentTemplate.fontSize + 3}px`,
+                                                    fontWeight: "800", color: currentTemplate.textColor,
+                                                    lineHeight: 1.2, marginBottom: "6px",
+                                                    overflowWrap: "break-word", wordBreak: "break-word"
+                                                }}>
+                                                    {displayHeading}
+                                                </div>
+                                                <div style={{
+                                                    fontSize: `${currentTemplate.fontSize - 1}px`,
+                                                    color: currentTemplate.textColor, opacity: 0.5,
+                                                    lineHeight: 1.5, marginBottom: "14px",
+                                                    overflowWrap: "break-word", wordBreak: "break-word"
+                                                }}>
+                                                    {displaySubtext}
+                                                </div>
+                                                <div style={{
+                                                    padding: "9px 24px",
+                                                    background: currentTemplate.buttonColor,
+                                                    borderRadius: `${currentTemplate.borderRadius}px`,
+                                                    color: currentTemplate.buttonTextColor,
+                                                    fontWeight: "700", fontSize: "12px",
+                                                    cursor: "pointer", alignSelf: "flex-start"
+                                                }}>
+                                                    Redeem Now
+                                                </div>
+                                            </div>
                                         </div>
+                                    )}
+
+                                    {/* Template 3: Inline Bar — single-row horizontal bar */}
+                                    {activeTemplate === "template3" && (
+                                        <div style={{
+                                            borderRadius: `${currentTemplate.borderRadius}px`,
+                                            background: currentTemplate.bgColor,
+                                            padding: `${currentTemplate.padding + 6}px ${currentTemplate.padding + 12}px`,
+                                            width: "100%",
+                                            boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+                                            border: `1px solid ${currentTemplate.accentColor}15`
+                                        }}>
+                                            {/* Top: Icon + Text */}
+                                            <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "12px" }}>
+                                                {/* Icon */}
+                                                <div style={{
+                                                    width: "42px", height: "42px", borderRadius: "10px",
+                                                    background: `${currentTemplate.accentColor}12`,
+                                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                                    flexShrink: 0
+                                                }}>
+                                                    <span style={{ fontSize: "20px" }}>🏷️</span>
+                                                </div>
+                                                {/* Text */}
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div style={{
+                                                        fontSize: `${currentTemplate.fontSize + 1}px`,
+                                                        fontWeight: "700", color: currentTemplate.textColor,
+                                                        lineHeight: 1.3, marginBottom: "4px",
+                                                        overflowWrap: "break-word", wordBreak: "break-word"
+                                                    }}>
+                                                        {displayHeading}
+                                                    </div>
+                                                    <div style={{
+                                                        fontSize: `${currentTemplate.fontSize - 2}px`,
+                                                        color: currentTemplate.textColor, opacity: 0.5,
+                                                        lineHeight: 1.4,
+                                                        overflowWrap: "break-word", wordBreak: "break-word"
+                                                    }}>
+                                                        {displaySubtext}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {/* Bottom: Code + Button */}
+                                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                                {/* Code pill */}
+                                                <div style={{
+                                                    padding: "6px 14px", borderRadius: "6px",
+                                                    border: `1.5px dashed ${currentTemplate.accentColor}55`,
+                                                    color: currentTemplate.accentColor,
+                                                    fontSize: "12px", fontWeight: "700",
+                                                    fontFamily: "monospace", letterSpacing: "1.5px",
+                                                    overflowWrap: "break-word", wordBreak: "break-all",
+                                                    flex: 1, minWidth: 0
+                                                }}>
+                                                    {previewCoupon?.code || "CODE"}
+                                                </div>
+                                                {/* Button */}
+                                                <div style={{
+                                                    padding: "8px 20px",
+                                                    background: currentTemplate.buttonColor,
+                                                    borderRadius: `${currentTemplate.borderRadius}px`,
+                                                    color: currentTemplate.buttonTextColor,
+                                                    fontWeight: "700", fontSize: "12px",
+                                                    cursor: "pointer", whiteSpace: "nowrap",
+                                                    flexShrink: 0
+                                                }}>
+                                                    Apply
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Right Arrow */}
+                                {selectedActiveCoupons.length > 1 && (
+                                    <div
+                                        onClick={() => {
+                                            const idx = selectedActiveCoupons.indexOf(activePreviewCouponId);
+                                            const next = idx < selectedActiveCoupons.length - 1 ? selectedActiveCoupons[idx + 1] : selectedActiveCoupons[0];
+                                            setActivePreviewCouponId(next);
+                                        }}
+                                        style={{
+                                            cursor: "pointer",
+                                            padding: "8px",
+                                            borderRadius: "50%",
+                                            background: "#fff",
+                                            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                                            display: "flex",
+                                            alignItems: "center",
+                                            justifyContent: "center",
+                                            zIndex: 10,
+                                            transition: "transform 0.2s ease",
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.1)"}
+                                        onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
+                                    >
+                                        <Icon source={ChevronRightIcon} tone="base" />
                                     </div>
                                 )}
                             </div>
 
-                            {/* Right Arrow */}
+                            {/* Dot Indicators */}
                             {selectedActiveCoupons.length > 1 && (
-                                <Button
-                                    icon={ChevronRightIcon}
-                                    onClick={() => {
-                                        const idx = selectedActiveCoupons.indexOf(activePreviewCouponId);
-                                        const next = idx < selectedActiveCoupons.length - 1 ? selectedActiveCoupons[idx + 1] : selectedActiveCoupons[0];
-                                        setActivePreviewCouponId(next);
-                                    }}
-                                />
+                                <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "8px" }}>
+                                    {selectedActiveCoupons.map((id) => (
+                                        <div
+                                            key={id}
+                                            onClick={() => setActivePreviewCouponId(id)}
+                                            style={{
+                                                width: activePreviewCouponId === id ? "20px" : "8px",
+                                                height: "8px",
+                                                borderRadius: "10px",
+                                                background: activePreviewCouponId === id ? "#2563eb" : "#d1d5db",
+                                                cursor: "pointer",
+                                                transition: "all 0.3s ease",
+                                            }}
+                                        />
+                                    ))}
+                                </div>
                             )}
-                        </div>
-                        <Box>
-                            <InlineStack align="center">
-                                <Badge tone="success">{currentTemplate.name}</Badge>
-                            </InlineStack>
-                        </Box>
-                    </BlockStack>
+                            <Box paddingBlockStart="200">
+                                <InlineStack align="center">
+                                    <Badge tone="success">{currentTemplate.name}</Badge>
+                                </InlineStack>
+                            </Box>
+                        </BlockStack>
+                    </div>
                 </Card>
 
                 {/* RIGHT: Customization */}
                 <Card>
-                    <div style={{ maxHeight: "480px", overflowY: "auto" }}>
+                    <div style={{ height: "550px", overflowY: "auto", position: "relative" }}>
                         <BlockStack gap="300">
                             <Text as="h3" variant="headingMd">Customize: {currentTemplate.name}</Text>
 
-                            {/* Select Coupons Button */}
-                            <BlockStack gap="200">
+                            {/* Header: Select & Switching (Restructured based on format) */}
+                            <BlockStack gap="400">
+                                {selectedActiveCoupons.length > 0 && (
+                                    <BlockStack gap="100">
+                                        <Text variant="bodySm" fontWeight="medium" tone="subdued">Customize Coupon</Text>
+                                        <Select
+                                            label="Customize Coupon"
+                                            labelHidden
+                                            options={selectedActiveCoupons.map(id => ({
+                                                label: activeCouponsFromAPI.find(c => String(c.id) === String(id))?.code || id,
+                                                value: id
+                                            }))}
+                                            value={currentlyEditingCouponId}
+                                            onChange={(v) => {
+                                                setCurrentlyEditingCouponId(v);
+                                                setActivePreviewCouponId(v);
+                                            }}
+                                        />
+                                    </BlockStack>
+                                )}
+
                                 <InlineStack gap="300" blockAlign="center">
                                     <Button onClick={handleOpenCouponPicker} variant="secondary">
                                         Select Coupons
@@ -1344,396 +1449,387 @@ function CouponsSection({ config, onSave, saving }) {
                                 </Banner>
                             )}
 
-                            {/* --- Per-Coupon Accordions --- */}
-                            {selectedActiveCoupons.map(couponId => {
-                                const coupon = activeCouponsFromAPI.find(c => c.id === couponId);
-                                if (!coupon) return null;
-                                const sectionKey = `coupon_${couponId}`;
-                                const isOpen = !!openSections[sectionKey];
-                                const isActivePreview = activePreviewCouponId === couponId;
-                                const couponTpl = getCouponTemplate(couponId);
+                            {/* --- Coupon Editor --- */}
+                            {selectedActiveCoupons.length > 0 && (
+                                <div style={{ border: "1px solid #e3e3e3", borderRadius: "12px", overflow: "hidden" }}>
 
-                                return (
-                                    <div
-                                        key={couponId}
-                                        style={{
-                                            border: isActivePreview ? "2px solid #2563eb" : "1px solid #e3e3e3",
-                                            borderRadius: "10px",
-                                            overflow: "hidden",
-                                            transition: "border-color 0.2s ease",
-                                        }}
-                                    >
-                                        {/* Coupon Accordion Header */}
-                                        <div
-                                            onClick={() => toggleSection(sectionKey, couponId)}
-                                            style={{
-                                                padding: "12px 16px",
-                                                cursor: "pointer",
-                                                background: isOpen ? "#f6f6f7" : "#fff",
-                                                display: "flex",
-                                                justifyContent: "space-between",
-                                                alignItems: "center",
-                                                userSelect: "none",
-                                                transition: "background 0.15s ease",
-                                            }}
-                                        >
-                                            <InlineStack gap="200" blockAlign="center">
-                                                <div style={{
-                                                    width: "28px", height: "28px", borderRadius: "6px",
-                                                    backgroundColor: "#dcfce7", display: "flex",
-                                                    alignItems: "center", justifyContent: "center", fontSize: "14px",
-                                                }}>
-                                                    {coupon.discountType === 'percentage' ? '🏷️' :
-                                                        coupon.discountType === 'free_shipping' ? '🚚' : '💰'}
-                                                </div>
-                                                <BlockStack gap="0">
-                                                    <Text variant="headingSm" as="h4">{coupon.code}</Text>
-                                                    <Text variant="bodySm" tone="subdued">
-                                                        {coupon.discountType === 'percentage'
-                                                            ? `${coupon.discountValue}% off`
-                                                            : coupon.discountType === 'free_shipping'
-                                                                ? 'Free Shipping'
-                                                                : `₹${coupon.discountValue} off`}
-                                                    </Text>
-                                                </BlockStack>
-                                                {isActivePreview && <Badge tone="info" size="small">Previewing</Badge>}
-                                            </InlineStack>
-                                            <InlineStack gap="200" blockAlign="center">
-                                                <div
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const newSelection = selectedActiveCoupons.filter(id => id !== couponId);
-                                                        setSelectedActiveCoupons(newSelection);
-                                                        if (activePreviewCouponId === couponId) {
-                                                            setActivePreviewCouponId(newSelection.length > 0 ? newSelection[0] : null);
-                                                        }
-                                                    }}
-                                                    style={{ padding: "4px", cursor: "pointer", opacity: 0.5, display: "flex" }}
-                                                    onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
-                                                    onMouseLeave={(e) => e.currentTarget.style.opacity = 0.5}
-                                                >
-                                                    <Icon source={XSmallIcon} />
-                                                </div>
-                                                <Icon source={isOpen ? ChevronUpIcon : ChevronDownIcon} />
-                                            </InlineStack>
-                                        </div>
+                                    {/* Editor Content */}
+                                    {currentlyEditingCouponId && (() => {
+                                        const couponId = currentlyEditingCouponId;
+                                        const coupon = activeCouponsFromAPI.find(c => String(c.id) === String(couponId));
+                                        if (!coupon) return null;
+                                        const couponTpl = getCouponTemplate(couponId);
 
-                                        {/* Coupon Accordion Body — all settings */}
-                                        <Collapsible open={isOpen} id={`accordion-${sectionKey}`}>
-                                            <div style={{ padding: "16px", borderTop: "1px solid #e3e3e3" }}>
+                                        return (
+                                            <div style={{ padding: "20px", background: "#fff" }}>
                                                 <BlockStack gap="400">
-
-                                                    {/* Display Condition */}
+                                                    {/* Display Condition Section */}
                                                     <BlockStack gap="200">
-                                                        <Text variant="headingSm" as="h4" fontWeight="semibold">
-                                                            <InlineStack gap="200" blockAlign="center">
-                                                                <Icon source={SettingsIcon} tone="base" />
-                                                                Display Condition
-                                                            </InlineStack>
-                                                        </Text>
-                                                        <Select
-                                                            label="Show this coupon on"
-                                                            options={[
-                                                                { label: "All pages", value: "all" },
-                                                                { label: "Specific product pages", value: "product_handle" },
-                                                                { label: "Specific collection pages", value: "collection_handle" },
-                                                                { label: "Products with specific tags", value: "tag" },
-                                                            ]}
-                                                            value={couponTpl.displayCondition}
-                                                            onChange={(v) => updateCouponOverride(couponId, "displayCondition", v)}
-                                                        />
-                                                        {couponTpl.displayCondition === "product_handle" && (
-                                                            <BlockStack gap="200">
-                                                                <InlineStack gap="200" blockAlign="end">
-                                                                    <div style={{ flex: 1 }}>
-                                                                        <TextField
-                                                                            label="Product Handle"
-                                                                            value={handleInput}
-                                                                            onChange={setHandleInput}
-                                                                            placeholder="e.g. classic-leather-bag"
-                                                                            onKeyPress={(e) => {
-                                                                                if (e.key === "Enter" && handleInput.trim()) {
-                                                                                    const current = couponTpl.productHandles || [];
-                                                                                    if (!current.includes(handleInput.trim())) {
-                                                                                        updateCouponOverride(couponId, "productHandles", [...current, handleInput.trim()]);
-                                                                                    }
-                                                                                    setHandleInput("");
-                                                                                }
-                                                                            }}
-                                                                        />
-                                                                    </div>
-                                                                    <Button
-                                                                        onClick={() => {
-                                                                            if (handleInput.trim()) {
-                                                                                const current = couponTpl.productHandles || [];
-                                                                                if (!current.includes(handleInput.trim())) {
-                                                                                    updateCouponOverride(couponId, "productHandles", [...current, handleInput.trim()]);
-                                                                                }
-                                                                                setHandleInput("");
-                                                                            }
-                                                                        }}
-                                                                        disabled={!handleInput.trim()}
-                                                                    >Add</Button>
-                                                                    <Button
-                                                                        variant="secondary"
-                                                                        onClick={async () => {
-                                                                            try {
-                                                                                const selected = await window.shopify.resourcePicker({
-                                                                                    type: "product",
-                                                                                    multiple: true,
-                                                                                    action: "select",
-                                                                                });
-                                                                                if (selected && selected.length > 0) {
-                                                                                    const current = couponTpl.productHandles || [];
-                                                                                    const newHandles = selected.map(p => p.handle).filter(h => !current.includes(h));
-                                                                                    if (newHandles.length > 0) {
-                                                                                        updateCouponOverride(couponId, "productHandles", [...current, ...newHandles]);
-                                                                                    }
-                                                                                }
-                                                                            } catch (e) { console.error("Product picker error:", e); }
-                                                                        }}
-                                                                    >Browse Products</Button>
+                                                        <div
+                                                            onClick={() => toggleSection("conditions")}
+                                                            style={{
+                                                                cursor: "pointer",
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                justifyContent: "space-between",
+                                                                width: "100%",
+                                                                padding: "8px 0"
+                                                            }}
+                                                        >
+                                                            <Text variant="headingSm" as="h4" fontWeight="semibold">
+                                                                <InlineStack gap="100" blockAlign="center">
+                                                                    <Icon source={SettingsIcon} tone="base" />
+                                                                    Display Condition
                                                                 </InlineStack>
-                                                                {(couponTpl.productHandles || []).length > 0 && (
-                                                                    <InlineStack gap="200" wrap>
-                                                                        {(couponTpl.productHandles || []).map(handle => (
-                                                                            <Tag key={handle} onRemove={() => {
-                                                                                updateCouponOverride(couponId, "productHandles",
-                                                                                    (couponTpl.productHandles || []).filter(h => h !== handle));
-                                                                            }}>
-                                                                                {handle}
-                                                                            </Tag>
-                                                                        ))}
-                                                                    </InlineStack>
-                                                                )}
-                                                            </BlockStack>
-                                                        )}
-                                                        {couponTpl.displayCondition === "collection_handle" && (
-                                                            <BlockStack gap="200">
-                                                                <InlineStack gap="200" blockAlign="end">
-                                                                    <div style={{ flex: 1 }}>
-                                                                        <TextField
-                                                                            label="Collection Handle"
-                                                                            value={collectionInput}
-                                                                            onChange={setCollectionInput}
-                                                                            placeholder="e.g. summer-sale"
-                                                                            onKeyPress={(e) => {
-                                                                                if (e.key === "Enter" && collectionInput.trim()) {
-                                                                                    const current = couponTpl.collectionHandles || [];
-                                                                                    if (!current.includes(collectionInput.trim())) {
-                                                                                        updateCouponOverride(couponId, "collectionHandles", [...current, collectionInput.trim()]);
-                                                                                    }
-                                                                                    setCollectionInput("");
-                                                                                }
-                                                                            }}
-                                                                        />
-                                                                    </div>
-                                                                    <Button
-                                                                        onClick={() => {
-                                                                            if (collectionInput.trim()) {
-                                                                                const current = couponTpl.collectionHandles || [];
-                                                                                if (!current.includes(collectionInput.trim())) {
-                                                                                    updateCouponOverride(couponId, "collectionHandles", [...current, collectionInput.trim()]);
-                                                                                }
-                                                                                setCollectionInput("");
-                                                                            }
-                                                                        }}
-                                                                        disabled={!collectionInput.trim()}
-                                                                    >Add</Button>
-                                                                    <Button
-                                                                        variant="secondary"
-                                                                        onClick={async () => {
-                                                                            try {
-                                                                                const selected = await window.shopify.resourcePicker({
-                                                                                    type: "collection",
-                                                                                    multiple: true,
-                                                                                    action: "select",
-                                                                                });
-                                                                                if (selected && selected.length > 0) {
-                                                                                    const current = couponTpl.collectionHandles || [];
-                                                                                    const newHandles = selected.map(c => c.handle).filter(h => !current.includes(h));
-                                                                                    if (newHandles.length > 0) {
-                                                                                        updateCouponOverride(couponId, "collectionHandles", [...current, ...newHandles]);
-                                                                                    }
-                                                                                }
-                                                                            } catch (e) { console.error("Collection picker error:", e); }
-                                                                        }}
-                                                                    >Browse Collections</Button>
-                                                                </InlineStack>
-                                                                {(couponTpl.collectionHandles || []).length > 0 && (
-                                                                    <InlineStack gap="200" wrap>
-                                                                        {(couponTpl.collectionHandles || []).map(handle => (
-                                                                            <Tag key={handle} onRemove={() => {
-                                                                                updateCouponOverride(couponId, "collectionHandles",
-                                                                                    (couponTpl.collectionHandles || []).filter(h => h !== handle));
-                                                                            }}>
-                                                                                {handle}
-                                                                            </Tag>
-                                                                        ))}
-                                                                    </InlineStack>
-                                                                )}
-                                                            </BlockStack>
-                                                        )}
-                                                        {couponTpl.displayCondition === "tag" && (
-                                                            <BlockStack gap="200">
-                                                                <InlineStack gap="200" blockAlign="end">
-                                                                    <div style={{ flex: 1 }}>
-                                                                        <TextField
-                                                                            label="Product Tag"
-                                                                            value={tagInput}
-                                                                            onChange={setTagInput}
-                                                                            placeholder="e.g. sale, new-arrival"
-                                                                            onKeyPress={(e) => {
-                                                                                if (e.key === "Enter" && tagInput.trim()) {
-                                                                                    const current = couponTpl.displayTags || [];
-                                                                                    if (!current.includes(tagInput.trim())) {
-                                                                                        updateCouponOverride(couponId, "displayTags", [...current, tagInput.trim()]);
-                                                                                    }
-                                                                                    setTagInput("");
-                                                                                }
-                                                                            }}
-                                                                        />
-                                                                    </div>
-                                                                    <Button
-                                                                        onClick={() => {
-                                                                            if (tagInput.trim()) {
-                                                                                const current = couponTpl.displayTags || [];
-                                                                                if (!current.includes(tagInput.trim())) {
-                                                                                    updateCouponOverride(couponId, "displayTags", [...current, tagInput.trim()]);
-                                                                                }
-                                                                                setTagInput("");
-                                                                            }
-                                                                        }}
-                                                                        disabled={!tagInput.trim()}
-                                                                    >Add</Button>
-                                                                </InlineStack>
-                                                                {(couponTpl.displayTags || []).length > 0 && (
-                                                                    <InlineStack gap="200" wrap>
-                                                                        {(couponTpl.displayTags || []).map(tag => (
-                                                                            <Tag key={tag} onRemove={() => {
-                                                                                updateCouponOverride(couponId, "displayTags",
-                                                                                    (couponTpl.displayTags || []).filter(t => t !== tag));
-                                                                            }}>
-                                                                                {tag}
-                                                                            </Tag>
-                                                                        ))}
-                                                                    </InlineStack>
-                                                                )}
-                                                            </BlockStack>
-                                                        )}
-                                                    </BlockStack>
-
-                                                    <Divider />
-
-                                                    {/* Text Content */}
-                                                    <BlockStack gap="200">
-                                                        <Text variant="headingSm" as="h4" fontWeight="semibold">
-                                                            <InlineStack gap="200" blockAlign="center">
-                                                                <Icon source={MagicIcon} tone="base" />
-                                                                Text Content
-                                                            </InlineStack>
-                                                        </Text>
-                                                        <TextField
-                                                            label="Heading Text"
-                                                            value={couponTpl.headingText}
-                                                            onChange={(v) => updateCouponOverride(couponId, "headingText", v)}
-                                                        />
-                                                        <TextField
-                                                            label="Subtext"
-                                                            value={couponTpl.subtextText}
-                                                            onChange={(v) => updateCouponOverride(couponId, "subtextText", v)}
-                                                        />
-                                                    </BlockStack>
-
-                                                    <Divider />
-
-                                                    {/* Colors */}
-                                                    <BlockStack gap="200">
-                                                        <Text variant="headingSm" as="h4" fontWeight="semibold">
-                                                            <InlineStack gap="200" blockAlign="center">
-                                                                <Icon source={ColorIcon} tone="base" />
-                                                                Colors
-                                                            </InlineStack>
-                                                        </Text>
-                                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                                                            <ColorPickerField
-                                                                label="Background"
-                                                                value={couponTpl.bgColor}
-                                                                onChange={(v) => updateCouponOverride(couponId, "bgColor", v)}
-                                                            />
-                                                            <ColorPickerField
-                                                                label="Text Color"
-                                                                value={couponTpl.textColor}
-                                                                onChange={(v) => updateCouponOverride(couponId, "textColor", v)}
-                                                            />
-                                                            <ColorPickerField
-                                                                label="Accent"
-                                                                value={couponTpl.accentColor}
-                                                                onChange={(v) => updateCouponOverride(couponId, "accentColor", v)}
-                                                            />
-                                                            <ColorPickerField
-                                                                label="Button Color"
-                                                                value={couponTpl.buttonColor}
-                                                                onChange={(v) => updateCouponOverride(couponId, "buttonColor", v)}
-                                                            />
-                                                            <ColorPickerField
-                                                                label="Button Text"
-                                                                value={couponTpl.buttonTextColor}
-                                                                onChange={(v) => updateCouponOverride(couponId, "buttonTextColor", v)}
-                                                            />
+                                                            </Text>
+                                                            <div style={{ marginLeft: "auto" }}>
+                                                                <Icon source={openSections.includes("conditions") ? ChevronUpIcon : ChevronDownIcon} tone="base" />
+                                                            </div>
                                                         </div>
+                                                        {openSections.includes("conditions") && (
+                                                            <div style={{ paddingBottom: "16px" }}>
+                                                                <BlockStack gap="200">
+                                                                    <Select
+                                                                        label="Show this coupon on"
+                                                                        options={[
+                                                                            { label: "All pages", value: "all" },
+                                                                            { label: "Specific product pages", value: "product_handle" },
+                                                                            { label: "Specific collection pages", value: "collection_handle" },
+                                                                            { label: "Products with specific tags", value: "tag" },
+                                                                        ]}
+                                                                        value={couponTpl.displayCondition}
+                                                                        onChange={(v) => updateCouponOverride(couponId, "displayCondition", v)}
+                                                                    />
+                                                                    {couponTpl.displayCondition === "product_handle" && (
+                                                                        <BlockStack gap="200">
+                                                                            <InlineStack gap="200" blockAlign="end">
+                                                                                <div style={{ flex: 1 }}>
+                                                                                    <TextField
+                                                                                        label="Product Handle"
+                                                                                        value={handleInput}
+                                                                                        onChange={setHandleInput}
+                                                                                        placeholder="e.g. classic-leather-bag"
+                                                                                        onKeyPress={(e) => {
+                                                                                            if (e.key === "Enter" && handleInput.trim()) {
+                                                                                                const current = couponTpl.productHandles || [];
+                                                                                                if (!current.includes(handleInput.trim())) {
+                                                                                                    updateCouponOverride(couponId, "productHandles", [...current, handleInput.trim()]);
+                                                                                                }
+                                                                                                setHandleInput("");
+                                                                                            }
+                                                                                        }}
+                                                                                    />
+                                                                                </div>
+                                                                                <Button
+                                                                                    onClick={() => {
+                                                                                        if (handleInput.trim()) {
+                                                                                            const current = couponTpl.productHandles || [];
+                                                                                            if (!current.includes(handleInput.trim())) {
+                                                                                                updateCouponOverride(couponId, "productHandles", [...current, handleInput.trim()]);
+                                                                                            }
+                                                                                            setHandleInput("");
+                                                                                        }
+                                                                                    }}
+                                                                                    disabled={!handleInput.trim()}
+                                                                                >Add</Button>
+                                                                                <Button
+                                                                                    variant="secondary"
+                                                                                    onClick={async () => {
+                                                                                        try {
+                                                                                            const selected = await window.shopify.resourcePicker({
+                                                                                                type: "product",
+                                                                                                multiple: true,
+                                                                                                action: "select",
+                                                                                            });
+                                                                                            if (selected && selected.length > 0) {
+                                                                                                const current = couponTpl.productHandles || [];
+                                                                                                const newHandles = selected.map(p => p.handle).filter(h => !current.includes(h));
+                                                                                                if (newHandles.length > 0) {
+                                                                                                    updateCouponOverride(couponId, "productHandles", [...current, ...newHandles]);
+                                                                                                }
+                                                                                            }
+                                                                                        } catch (e) { console.error("Product picker error:", e); }
+                                                                                    }}
+                                                                                >Browse Products</Button>
+                                                                            </InlineStack>
+                                                                            {(couponTpl.productHandles || []).length > 0 && (
+                                                                                <InlineStack gap="200" wrap>
+                                                                                    {(couponTpl.productHandles || []).map(handle => (
+                                                                                        <Tag key={handle} onRemove={() => {
+                                                                                            updateCouponOverride(couponId, "productHandles",
+                                                                                                (couponTpl.productHandles || []).filter(h => h !== handle));
+                                                                                        }}>
+                                                                                            {handle}
+                                                                                        </Tag>
+                                                                                    ))}
+                                                                                </InlineStack>
+                                                                            )}
+                                                                        </BlockStack>
+                                                                    )}
+                                                                    {couponTpl.displayCondition === "tag" && (
+                                                                        <BlockStack gap="200">
+                                                                            <InlineStack gap="200" blockAlign="end">
+                                                                                <div style={{ flex: 1 }}>
+                                                                                    <TextField
+                                                                                        label="Target Product Tags"
+                                                                                        value={tagInput}
+                                                                                        onChange={setTagInput}
+                                                                                        placeholder="e.g. VIP, summer"
+                                                                                        onKeyPress={(e) => {
+                                                                                            if (e.key === "Enter" && tagInput.trim()) {
+                                                                                                const current = couponTpl.tags || [];
+                                                                                                if (!current.includes(tagInput.trim())) {
+                                                                                                    updateCouponOverride(couponId, "tags", [...current, tagInput.trim()]);
+                                                                                                }
+                                                                                                setTagInput("");
+                                                                                            }
+                                                                                        }}
+                                                                                    />
+                                                                                </div>
+                                                                                <Button
+                                                                                    onClick={() => {
+                                                                                        if (tagInput.trim()) {
+                                                                                            const current = couponTpl.tags || [];
+                                                                                            if (!current.includes(tagInput.trim())) {
+                                                                                                updateCouponOverride(couponId, "tags", [...current, tagInput.trim()]);
+                                                                                            }
+                                                                                            setTagInput("");
+                                                                                        }
+                                                                                    }}
+                                                                                    disabled={!tagInput.trim()}
+                                                                                >Add</Button>
+                                                                            </InlineStack>
+                                                                            {(couponTpl.tags || []).length > 0 && (
+                                                                                <InlineStack gap="200" wrap>
+                                                                                    {(couponTpl.tags || []).map(tag => (
+                                                                                        <Tag key={tag} onRemove={() => {
+                                                                                            updateCouponOverride(couponId, "tags",
+                                                                                                (couponTpl.tags || []).filter(t => t !== tag));
+                                                                                        }}>
+                                                                                            {tag}
+                                                                                        </Tag>
+                                                                                    ))}
+                                                                                </InlineStack>
+                                                                            )}
+                                                                        </BlockStack>
+                                                                    )}
+                                                                    {couponTpl.displayCondition === "collection_handle" && (
+                                                                        <BlockStack gap="200">
+                                                                            <InlineStack gap="200" blockAlign="end">
+                                                                                <div style={{ flex: 1 }}>
+                                                                                    <TextField
+                                                                                        label="Collection Handle"
+                                                                                        value={collectionInput}
+                                                                                        onChange={setCollectionInput}
+                                                                                        placeholder="e.g. summer-sale"
+                                                                                        onKeyPress={(e) => {
+                                                                                            if (e.key === "Enter" && collectionInput.trim()) {
+                                                                                                const current = couponTpl.collectionHandles || [];
+                                                                                                if (!current.includes(collectionInput.trim())) {
+                                                                                                    updateCouponOverride(couponId, "collectionHandles", [...current, collectionInput.trim()]);
+                                                                                                }
+                                                                                                setCollectionInput("");
+                                                                                            }
+                                                                                        }}
+                                                                                    />
+                                                                                </div>
+                                                                                <Button
+                                                                                    onClick={() => {
+                                                                                        if (collectionInput.trim()) {
+                                                                                            const current = couponTpl.collectionHandles || [];
+                                                                                            if (!current.includes(collectionInput.trim())) {
+                                                                                                updateCouponOverride(couponId, "collectionHandles", [...current, collectionInput.trim()]);
+                                                                                            }
+                                                                                            setCollectionInput("");
+                                                                                        }
+                                                                                    }}
+                                                                                    disabled={!collectionInput.trim()}
+                                                                                >Add</Button>
+                                                                                <Button
+                                                                                    variant="secondary"
+                                                                                    onClick={async () => {
+                                                                                        try {
+                                                                                            const selected = await window.shopify.resourcePicker({
+                                                                                                type: "collection",
+                                                                                                multiple: true,
+                                                                                                action: "select"
+                                                                                            });
+                                                                                            if (selected && selected.length > 0) {
+                                                                                                const current = couponTpl.collectionHandles || [];
+                                                                                                const newHandles = selected.map(c => c.handle).filter(h => !current.includes(h));
+                                                                                                if (newHandles.length > 0) {
+                                                                                                    updateCouponOverride(couponId, "collectionHandles", [...current, ...newHandles]);
+                                                                                                }
+                                                                                            }
+                                                                                        } catch (e) { console.error("Collection picker error:", e); }
+                                                                                    }}
+                                                                                >Browse Collections</Button>
+                                                                            </InlineStack>
+                                                                            {(couponTpl.collectionHandles || []).length > 0 && (
+                                                                                <InlineStack gap="200" wrap>
+                                                                                    {(couponTpl.collectionHandles || []).map(handle => (
+                                                                                        <Tag key={handle} onRemove={() => {
+                                                                                            updateCouponOverride(couponId, "collectionHandles",
+                                                                                                (couponTpl.collectionHandles || []).filter(h => h !== handle));
+                                                                                        }}>
+                                                                                            {handle}
+                                                                                        </Tag>
+                                                                                    ))}
+                                                                                </InlineStack>
+                                                                            )}
+                                                                        </BlockStack>
+                                                                    )}
+                                                                </BlockStack>
+                                                            </div>
+                                                        )}
                                                     </BlockStack>
 
                                                     <Divider />
 
-                                                    {/* Styling */}
+                                                    {/* Text Content Section */}
                                                     <BlockStack gap="200">
-                                                        <Text variant="headingSm" as="h4" fontWeight="semibold">
-                                                            <InlineStack gap="200" blockAlign="center">
-                                                                <Icon source={SettingsIcon} tone="base" />
-                                                                Styling
-                                                            </InlineStack>
-                                                        </Text>
-                                                        <RangeSlider
-                                                            label={`Border Radius: ${couponTpl.borderRadius}px`}
-                                                            value={couponTpl.borderRadius}
-                                                            onChange={(v) => updateCouponOverride(couponId, "borderRadius", v)}
-                                                            min={0}
-                                                            max={24}
-                                                            output
-                                                        />
-                                                        <RangeSlider
-                                                            label={`Font Size: ${couponTpl.fontSize}px`}
-                                                            value={couponTpl.fontSize}
-                                                            onChange={(v) => updateCouponOverride(couponId, "fontSize", v)}
-                                                            min={12}
-                                                            max={24}
-                                                            output
-                                                        />
-                                                        <RangeSlider
-                                                            label={`Padding: ${couponTpl.padding}px`}
-                                                            value={couponTpl.padding}
-                                                            onChange={(v) => updateCouponOverride(couponId, "padding", v)}
-                                                            min={8}
-                                                            max={32}
-                                                            output
-                                                        />
+                                                        <div
+                                                            onClick={() => toggleSection("text")}
+                                                            style={{
+                                                                cursor: "pointer",
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                justifyContent: "space-between",
+                                                                width: "100%",
+                                                                padding: "8px 0"
+                                                            }}
+                                                        >
+                                                            <Text variant="headingSm" as="h4" fontWeight="semibold">
+                                                                <InlineStack gap="100" blockAlign="center">
+                                                                    <Icon source={MagicIcon} tone="base" />
+                                                                    Text Content
+                                                                </InlineStack>
+                                                            </Text>
+                                                            <div style={{ marginLeft: "auto" }}>
+                                                                <Icon source={openSections.includes("text") ? ChevronUpIcon : ChevronDownIcon} tone="base" />
+                                                            </div>
+                                                        </div>
+                                                        {openSections.includes("text") && (
+                                                            <div style={{ paddingBottom: "16px" }}>
+                                                                <BlockStack gap="200">
+                                                                    <TextField
+                                                                        label="Heading Text"
+                                                                        value={couponTpl.headingText}
+                                                                        onChange={(v) => updateCouponOverride(couponId, "headingText", v)}
+                                                                    />
+                                                                    <TextField
+                                                                        label="Subtext"
+                                                                        value={couponTpl.subtextText}
+                                                                        onChange={(v) => updateCouponOverride(couponId, "subtextText", v)}
+                                                                    />
+                                                                </BlockStack>
+                                                            </div>
+                                                        )}
                                                     </BlockStack>
 
+                                                    <Divider />
+
+                                                    {/* Design & Colors Section */}
+                                                    <BlockStack gap="200">
+                                                        <div
+                                                            onClick={() => toggleSection("design")}
+                                                            style={{
+                                                                cursor: "pointer",
+                                                                display: "flex",
+                                                                alignItems: "center",
+                                                                justifyContent: "space-between",
+                                                                width: "100%",
+                                                                padding: "8px 0"
+                                                            }}
+                                                        >
+                                                            <Text variant="headingSm" as="h4" fontWeight="semibold">
+                                                                <InlineStack gap="100" blockAlign="center">
+                                                                    <Icon source={ColorIcon} tone="base" />
+                                                                    Design & Colors
+                                                                </InlineStack>
+                                                            </Text>
+                                                            <div style={{ marginLeft: "auto" }}>
+                                                                <Icon source={openSections.includes("design") ? ChevronUpIcon : ChevronDownIcon} tone="base" />
+                                                            </div>
+                                                        </div>
+                                                        {openSections.includes("design") && (
+                                                            <div style={{ paddingBottom: "16px" }}>
+                                                                <BlockStack gap="400">
+                                                                    {/* Colors Grid */}
+                                                                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                                                                        <ColorPickerField
+                                                                            label="Background"
+                                                                            value={couponTpl.bgColor}
+                                                                            onChange={(v) => updateCouponOverride(couponId, "bgColor", v)}
+                                                                        />
+                                                                        <ColorPickerField
+                                                                            label="Text Color"
+                                                                            value={couponTpl.textColor}
+                                                                            onChange={(v) => updateCouponOverride(couponId, "textColor", v)}
+                                                                        />
+                                                                        <ColorPickerField
+                                                                            label="Accent"
+                                                                            value={couponTpl.accentColor}
+                                                                            onChange={(v) => updateCouponOverride(couponId, "accentColor", v)}
+                                                                        />
+                                                                        <ColorPickerField
+                                                                            label="Button Color"
+                                                                            value={couponTpl.buttonColor}
+                                                                            onChange={(v) => updateCouponOverride(couponId, "buttonColor", v)}
+                                                                        />
+                                                                        <ColorPickerField
+                                                                            label="Button Text"
+                                                                            value={couponTpl.buttonTextColor}
+                                                                            onChange={(v) => updateCouponOverride(couponId, "buttonTextColor", v)}
+                                                                        />
+                                                                    </div>
+
+                                                                    <Divider />
+
+                                                                    {/* Styling Sliders */}
+                                                                    <BlockStack gap="200">
+                                                                        <RangeSlider
+                                                                            label={`Border Radius: ${couponTpl.borderRadius}px`}
+                                                                            value={couponTpl.borderRadius}
+                                                                            onChange={(v) => updateCouponOverride(couponId, "borderRadius", v)}
+                                                                            min={0}
+                                                                            max={24}
+                                                                            output
+                                                                        />
+                                                                        <RangeSlider
+                                                                            label={`Font Size: ${couponTpl.fontSize}px`}
+                                                                            value={couponTpl.fontSize}
+                                                                            onChange={(v) => updateCouponOverride(couponId, "fontSize", v)}
+                                                                            min={12}
+                                                                            max={24}
+                                                                            output
+                                                                        />
+                                                                        <RangeSlider
+                                                                            label={`Padding: ${couponTpl.padding}px`}
+                                                                            value={couponTpl.padding}
+                                                                            onChange={(v) => updateCouponOverride(couponId, "padding", v)}
+                                                                            min={8}
+                                                                            max={32}
+                                                                            output
+                                                                        />
+                                                                    </BlockStack>
+                                                                </BlockStack>
+                                                            </div>
+                                                        )}
+                                                    </BlockStack>
                                                 </BlockStack>
                                             </div>
-                                        </Collapsible>
-                                    </div>
-                                );
-                            })}
-
+                                        );
+                                    })()}
+                                </div>
+                            )}
                         </BlockStack>
                     </div>
                 </Card>
             </div>
 
             <InlineStack align="end" gap="200">
-                <Button variant="primary" tone="critical" onClick={handleDiscard}>
+                <Button onClick={handleDiscard}>
                     Discard
                 </Button>
                 <Button variant="primary" onClick={handleSave} loading={saving}>
@@ -1844,7 +1940,7 @@ function CouponsSection({ config, onSave, saving }) {
                     )}
                 </Modal.Section>
             </Modal>
-        </BlockStack>
+        </BlockStack >
     );
 }
 
