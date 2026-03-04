@@ -91,10 +91,6 @@ export default function Index() {
 
   return (
     <s-page heading="Shopify app template">
-      <s-button slot="primary-action" onClick={generateProduct}>
-        Generate a product
-      </s-button>
-
       <s-section heading="Congrats on creating a new Shopify app 🎉">
         <s-paragraph>
           This embedded app template uses{" "}
@@ -129,12 +125,6 @@ export default function Index() {
           mutation in our API references.
         </s-paragraph>
         <s-stack direction="inline" gap="base">
-          <s-button
-            onClick={generateProduct}
-            {...(isLoading ? { loading: true } : {})}
-          >
-            Generate a product
-          </s-button>
           {fetcher.data?.product && (
             <s-button
               onClick={() => {

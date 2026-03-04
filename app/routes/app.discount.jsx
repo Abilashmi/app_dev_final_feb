@@ -17,39 +17,93 @@ import {
   RadioButton,
   InlineStack,
   Box,
+  InlineGrid,
+  Toast,
+  Frame,
 } from "@shopify/polaris";
-import { DiscountIcon, ExportIcon } from "@shopify/polaris-icons";
-import { useLoaderData, useNavigate } from "react-router-dom";
-import { useMemo, useState, useCallback } from "react";
+import {
+  ExportIcon,
+  DiscountIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  AlertCircleIcon
+} from "@shopify/polaris-icons";
+import { useLoaderData, useNavigate, useSubmit, useActionData, useNavigation } from "react-router";
+import { useMemo, useState, useCallback, useEffect } from "react";
+import { authenticate } from "../shopify.server";
 
-/* ---------------- LOADER ---------------- */
+/* ---------------- LOADER & ACTION ---------------- */
 export { loader } from "./api.shopify-coupons";
+
+export async function action({ request }) {
+  const { admin } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const ids = JSON.parse(formData.get("ids") || "[]");
+  const intent = formData.get("intent");
+
+  if (!ids.length) return { success: false, message: "No items selected" };
+
+  const errors = [];
+  let successCount = 0;
+
+  for (const id of ids) {
+    if (id.startsWith("sample-")) {
+      errors.push(`Cannot ${intent} sample discount: ${id}`);
+      continue;
+    }
+
+    const isCode = id.includes("DiscountCodeNode");
+
+    let mutation = "";
+    if (intent === "activate") {
+      mutation = isCode
+        ? `mutation ActivateCode($id: ID!) { discountCodeActivate(id: $id) { userErrors { message } } }`
+        : `mutation ActivateAuto($id: ID!) { discountAutomaticActivate(id: $id) { userErrors { message } } }`;
+    } else if (intent === "deactivate") {
+      mutation = isCode
+        ? `mutation DeactivateCode($id: ID!) { discountCodeDeactivate(id: $id) { userErrors { message } } }`
+        : `mutation DeactivateAuto($id: ID!) { discountAutomaticDeactivate(id: $id) { userErrors { message } } }`;
+    } else if (intent === "delete") {
+      mutation = isCode
+        ? `mutation DeleteCode($id: ID!) { discountCodeDelete(id: $id) { deletedCodeDiscountId userErrors { message } } }`
+        : `mutation DeleteAuto($id: ID!) { discountAutomaticDelete(id: $id) { deletedAutomaticDiscountId userErrors { message } } }`;
+    }
+
+    if (mutation) {
+      const response = await admin.graphql(mutation, { variables: { id } });
+      const resJson = await response.json();
+      const dataKey = Object.keys(resJson.data || {})[0];
+      const userErrors = resJson.data?.[dataKey]?.userErrors || [];
+
+      if (userErrors.length > 0) {
+        errors.push(...userErrors.map(e => e.message));
+      } else {
+        successCount++;
+      }
+    }
+  }
+
+  return {
+    success: successCount > 0,
+    message: successCount > 0
+      ? `Successfully ${intent}d ${successCount} discount${successCount !== 1 ? 's' : ''}`
+      : "Failed to perform action",
+    errors,
+    intent
+  };
+}
 
 /* ---------------- HELPERS ---------------- */
 
 function statusBadge(status) {
-  switch (status) {
-    case "ACTIVE":
-      return <Badge tone="success">Active</Badge>;
-    case "SCHEDULED":
-      return <Badge tone="attention">Scheduled</Badge>;
-    case "EXPIRED":
-      return (
-        <span style={{
-          backgroundColor: "#d5ebff",
-          color: "#004499",
-          padding: "2px 8px",
-          borderRadius: "12px",
-          fontSize: "12px",
-          fontWeight: "500",
-          display: "inline-block"
-        }}>
-          Expired
-        </span>
-      );
-    default:
-      return <Badge>Unknown</Badge>;
-  }
+  const badgeMap = {
+    ACTIVE: { tone: "success", label: "Active" },
+    SCHEDULED: { tone: "attention", label: "Scheduled" },
+    EXPIRED: { tone: "subdued", label: "Expired" },
+  };
+  const { tone, label } = badgeMap[status] || { tone: "default", label: status };
+
+  return <Badge tone={tone}>{label}</Badge>;
 }
 
 function discountTypeLabel(type) {
@@ -114,60 +168,6 @@ function buildCSV(coupons, format) {
   URL.revokeObjectURL(url);
 }
 
-/* ---------------- STAT CARD ---------------- */
-
-const STAT_STYLES = {
-  total: { bg: "#f4f6f8", iconBg: "#e4e5e7" },
-  active: { bg: "#e6f4ea", iconBg: "#bdf1d0" }, // Success Green theme
-  scheduled: { bg: "#fff4e5", iconBg: "#ffe3b2" }, // Attention Yellow theme
-  expired: { bg: "#d5ebff", iconBg: "#aed9ff" }, // Light Blue theme
-};
-
-function StatCard({ label, value, variant }) {
-  const s = STAT_STYLES[variant] || STAT_STYLES.total;
-  return (
-    <div
-      style={{
-        flex: 1,
-        minWidth: "140px",
-        padding: "16px 20px",
-        borderRadius: "12px",
-        background: s.bg,
-        display: "flex",
-        alignItems: "center",
-        gap: "14px",
-        transition: "transform 0.15s ease, box-shadow 0.15s ease",
-        cursor: "default",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-2px)";
-        e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.06)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "translateY(0)";
-        e.currentTarget.style.boxShadow = "none";
-      }}
-    >
-      <div
-        style={{
-          width: "40px",
-          height: "40px",
-          borderRadius: "10px",
-          background: s.iconBg,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Icon source={DiscountIcon} tone="base" />
-      </div>
-      <BlockStack gap="050">
-        <Text variant="bodySm" tone="subdued">{label}</Text>
-        <Text variant="headingLg" fontWeight="bold">{value}</Text>
-      </BlockStack>
-    </div>
-  );
-}
 
 /* ========================================== */
 /*              MAIN COMPONENT                */
@@ -175,8 +175,37 @@ function StatCard({ label, value, variant }) {
 
 export default function AppDiscounts() {
   const navigate = useNavigate();
+  const submit = useSubmit();
   const data = useLoaderData();
+  const actionData = useActionData();
+  const navigation = useNavigation();
+  const isLoading = navigation.state !== "idle";
+
   const coupons = data?.coupons || [];
+
+  // Toast state
+  const [showToast, setShowToast] = useState(false);
+  const [toastContent, setToastContent] = useState("");
+  const [isErrorToast, setIsErrorToast] = useState(false);
+
+  useEffect(() => {
+    if (actionData && !isLoading) {
+      setToastContent(actionData.message || (actionData.success ? "Success" : "Error"));
+      setIsErrorToast(!actionData.success);
+      setShowToast(true);
+      if (actionData.success) {
+        clearSelection();
+      }
+    }
+  }, [actionData, isLoading]);
+
+  const toastMarkup = showToast ? (
+    <Toast
+      content={toastContent}
+      error={isErrorToast}
+      onDismiss={() => setShowToast(false)}
+    />
+  ) : null;
 
   // ── IndexFilters mode ──
   const { mode, setMode } = useSetIndexFiltersMode();
@@ -355,10 +384,33 @@ export default function AppDiscounts() {
 
   // ── useIndexResourceState ──
   const resourceName = { singular: "coupon", plural: "coupons" };
-  const { selectedResources, allResourcesSelected, handleSelectionChange } =
+  const { selectedResources, allResourcesSelected, handleSelectionChange, clearSelection } =
     useIndexResourceState(filteredCoupons);
 
   // ── Determine if search/filter is active ──
+  // ── Bulk Actions ──
+  const promotedBulkActions = [
+    {
+      content: "Activate discounts",
+      loading: isLoading && navigation.formData?.get("intent") === "activate",
+      disabled: isLoading,
+      onAction: () => submit({ ids: JSON.stringify(selectedResources), intent: "activate" }, { method: "POST" }),
+    },
+    {
+      content: "Deactivate discounts",
+      loading: isLoading && navigation.formData?.get("intent") === "deactivate",
+      disabled: isLoading,
+      onAction: () => submit({ ids: JSON.stringify(selectedResources), intent: "deactivate" }, { method: "POST" }),
+    },
+    {
+      content: "Delete discounts",
+      destructive: true,
+      loading: isLoading && navigation.formData?.get("intent") === "delete",
+      disabled: isLoading,
+      onAction: () => submit({ ids: JSON.stringify(selectedResources), intent: "delete" }, { method: "POST" }),
+    },
+  ];
+
   const hasActiveSearch = queryValue.length > 0 || (typeFilter && typeFilter.length > 0) || (statusFilter && statusFilter.length > 0) || selected !== 0;
   const selectedCount = selectedResources.length;
 
@@ -399,29 +451,47 @@ export default function AppDiscounts() {
         }
       >
         <IndexTable.Cell>
-          <Text variant="bodyMd" fontWeight="bold" as="span">
-            {coupon.heading || coupon.code}
-          </Text>
+          <div style={{ padding: '12px 0' }}>
+            <Text variant="bodyMd" fontWeight="bold" as="span">
+              {coupon.heading || coupon.code}
+            </Text>
+          </div>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          <Text as="span" variant="bodyMd" tone="subdued">
-            {coupon.code}
-          </Text>
+          <div style={{ padding: '12px 0' }}>
+            <span style={{
+              fontSize: "14px",
+              fontWeight: "600",
+              color: "#334155",
+              letterSpacing: "0.2px"
+            }}>
+              {coupon.code}
+            </span>
+          </div>
         </IndexTable.Cell>
-        <IndexTable.Cell>{discountTypeLabel(coupon.type)}</IndexTable.Cell>
         <IndexTable.Cell>
-          <Text as="span" variant="bodyMd" fontWeight="semibold">
+          <Text variant="bodyMd" tone="subdued">{discountTypeLabel(coupon.type)}</Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text as="span" variant="bodyMd" fontWeight="bold">
             {formatDiscountValue(coupon)}
           </Text>
         </IndexTable.Cell>
         <IndexTable.Cell>{statusBadge(coupon.status)}</IndexTable.Cell>
         <IndexTable.Cell>
-          <Text as="span" numeric>
-            {coupon.used ?? 0}{coupon.limit ? ` / ${coupon.limit}` : ""}
-          </Text>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Text as="span" fontWeight="semibold" numeric>
+              {coupon.used ?? 0}
+            </Text>
+            <Text variant="bodySm" tone="subdued">/ {coupon.limit || "∞"}</Text>
+          </div>
         </IndexTable.Cell>
-        <IndexTable.Cell>{formatDate(coupon.starts_at)}</IndexTable.Cell>
-        <IndexTable.Cell>{formatDate(coupon.ends_at)}</IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text variant="bodyMd" tone="subdued">{formatDate(coupon.starts_at)}</Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text variant="bodyMd" tone="subdued">{formatDate(coupon.ends_at)}</Text>
+        </IndexTable.Cell>
       </IndexTable.Row>
     ),
   );
@@ -547,78 +617,94 @@ export default function AppDiscounts() {
   // ══════════════════════════════════════════
 
   return (
-    <Page
-      title="Coupons"
-      fullWidth
-      primaryAction={{
-        content: "Create Coupon",
-        onAction: () => navigate("/app/discounts/create"),
-      }}
-      secondaryActions={[
-        {
-          content: "Export",
-          icon: ExportIcon,
-          onAction: () => setExportModalOpen(true),
-        },
-      ]}
-    >
-      {exportModal}
+    <Frame>
+      <Page
+        title="Coupons"
+        fullWidth
+        primaryAction={{
+          content: "Create Coupon",
+          onAction: () => navigate("/app/discounts/create"),
+        }}
+        secondaryActions={[
+          {
+            content: "Export",
+            icon: ExportIcon,
+            onAction: () => setExportModalOpen(true),
+          },
+        ]}
+      >
+        {exportModal}
+        {toastMarkup}
 
-      <BlockStack gap="400">
-        {/* ── Summary Stats ── */}
-        <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-          <StatCard label="Total Coupons" value={counts.total} variant="total" />
-          <StatCard label="Active" value={counts.active} variant="active" />
-          <StatCard label="Scheduled" value={counts.scheduled} variant="scheduled" />
-          <StatCard label="Expired" value={counts.expired} variant="expired" />
-        </div>
+        <BlockStack gap="600">
+          <Card>
+            <Box
+              padding="600"
+              background="bg-surface-secondary"
+              borderRadius="300"
+              style={{
+                background: "linear-gradient(135deg, #ffffff 0%, #f9fafb 100%)",
+                border: "1px solid rgba(0,0,0,0.03)"
+              }}
+            >
+              <BlockStack gap="100">
+                <Text variant="headingXl" as="h1" fontWeight="bold">
+                  Coupon Engine
+                </Text>
+                <Text variant="bodyMd" tone="subdued">
+                  Manage, create, and view your store coupons in one place.
+                </Text>
+              </BlockStack>
+            </Box>
+          </Card>
 
-        {/* ── IndexFilters + IndexTable ── */}
-        <LegacyCard>
-          <IndexFilters
-            sortOptions={sortOptions}
-            sortSelected={sortSelected}
-            queryValue={queryValue}
-            queryPlaceholder="Searching in all"
-            onQueryChange={handleQueryChange}
-            onQueryClear={handleQueryClear}
-            onSort={setSortSelected}
-            cancelAction={{
-              onAction: onHandleCancel,
-              disabled: false,
-              loading: false,
-            }}
-            tabs={tabs}
-            selected={selected}
-            onSelect={setSelected}
-            filters={filters}
-            appliedFilters={appliedFilters}
-            onClearAll={handleFiltersClearAll}
-            mode={mode}
-            setMode={setMode}
-          />
-          <IndexTable
-            resourceName={resourceName}
-            itemCount={filteredCoupons.length}
-            selectedItemsCount={
-              allResourcesSelected ? "All" : selectedResources.length
-            }
-            onSelectionChange={handleSelectionChange}
-            headings={[
-              { title: "Title" },
-              { title: "Code" },
-              { title: "Type" },
-              { title: "Discount" },
-              { title: "Status" },
-              { title: "Used" },
-              { title: "Start date" },
-              { title: "End date" },
-            ]}
-          >
-            {rowMarkup}
-          </IndexTable>
-        </LegacyCard>
-      </BlockStack>
-    </Page>
+          <Card padding="0">
+            <IndexFilters
+              sortOptions={sortOptions}
+              sortSelected={sortSelected}
+              queryValue={queryValue}
+              queryPlaceholder="Search coupons..."
+              onQueryChange={handleQueryChange}
+              onQueryClear={handleQueryClear}
+              onSort={setSortSelected}
+              cancelAction={{
+                onAction: onHandleCancel,
+                disabled: false,
+                loading: false,
+              }}
+              tabs={tabs}
+              selected={selected}
+              onSelect={setSelected}
+              filters={filters}
+              appliedFilters={appliedFilters}
+              onClearAll={handleFiltersClearAll}
+              mode={mode}
+              setMode={setMode}
+            />
+            <IndexTable
+              resourceName={resourceName}
+              itemCount={filteredCoupons.length}
+              selectedItemsCount={
+                allResourcesSelected ? "All" : selectedResources.length
+              }
+              onSelectionChange={handleSelectionChange}
+              promotedBulkActions={promotedBulkActions}
+              headings={[
+                { title: "Title" },
+                { title: "Code" },
+                { title: "Type" },
+                { title: "Discount" },
+                { title: "Status" },
+                { title: "Used" },
+                { title: "Start date" },
+                { title: "End date" },
+              ]}
+            >
+              {rowMarkup}
+            </IndexTable>
+          </Card>
+        </BlockStack>
+      </Page>
+    </Frame>
   );
 }

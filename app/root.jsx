@@ -1,4 +1,10 @@
 import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
+import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
+
+export const links = () => [
+  { rel: "stylesheet", href: "https://unpkg.com/@shopify/polaris@13.9.5/build/esm/styles.css" },
+  { rel: "stylesheet", href: polarisStyles },
+];
 
 export default function App() {
   return (

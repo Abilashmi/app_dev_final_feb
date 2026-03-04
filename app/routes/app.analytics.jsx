@@ -1,5 +1,6 @@
-import React, { useState, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Outlet, useLoaderData, useRouteError, useNavigate } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   Page,
   Layout,
@@ -7,577 +8,628 @@ import {
   BlockStack,
   InlineStack,
   Text,
+  DatePicker,
+  Popover,
+  IndexTable,
+  Badge,
+  Box,
   Button,
+  Tabs,
+  ProgressBar,
+  Banner,
   Select,
   Divider,
-  Box,
+  Grid,
+  Thumbnail,
+  TextField,
   Icon,
-  Badge,
-  Tabs,
-  IndexTable,
-  Link,
-  Banner,
-  ProgressBar,
-  Checkbox,
-  List,
-  MediaCard,
-  Popover,
-  ActionList,
-  DatePicker,
 } from '@shopify/polaris';
+import { CalendarIcon, CheckCircleIcon, PlayIcon, ExternalIcon, ClockIcon, ArrowRightIcon } from '@shopify/polaris-icons';
 import {
-  CalendarIcon,
-  FilterIcon,
-  ArrowUpIcon,
-  ArrowDownIcon,
-  ViewIcon,
-  CheckCircleIcon,
-  ExternalIcon,
-  QuestionCircleIcon,
-  ChevronRightIcon,
-  EditIcon,
-  SearchIcon,
-} from '@shopify/polaris-icons';
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+  BarChart,
+  Bar,
+  ComposedChart,
+  Line
+} from 'recharts';
+import { authenticate } from "../shopify.server";
 
-// --- MOCK DATA FOR DYNAMIC FILTERING ---
-
-const FEATURE_DATA = {
-  all: {
-    revenue: "₹19,933.00",
-    orders: "18",
-    aov: "₹1,107.38",
-    conv: "2.3%",
-    revenueTrend: "53%",
-    ordersTrend: "50%",
-    aovTrend: "5%",
-    convTrend: "40%",
-    // Points for the graph (Spline)
-    graphPoints: [35, 10, 5, 15, 45, 40, 45, 55, 45, 30, 50, 40],
-    comparePoints: [25, 15, 10, 18, 25, 38, 35, 32, 28, 35, 25, 30]
-  },
-  coupon_slider: {
-    revenue: "₹4,200.00",
-    orders: "8",
-    aov: "₹525.00",
-    conv: "1.2%",
-    revenueTrend: "12%",
-    ordersTrend: "5%",
-    aovTrend: "2%",
-    convTrend: "8%",
-    graphPoints: [10, 20, 15, 25, 20, 30, 25, 35, 30, 40, 35, 45],
-    comparePoints: [5, 10, 8, 15, 12, 18, 15, 22, 18, 25, 20, 28]
-  },
-  product_widget: {
-    revenue: "₹8,450.00",
-    orders: "6",
-    aov: "₹1,408.33",
-    conv: "0.8%",
-    revenueTrend: "25%",
-    ordersTrend: "10%",
-    aovTrend: "15%",
-    convTrend: "5%",
-    graphPoints: [40, 35, 45, 30, 50, 45, 55, 40, 60, 50, 65, 55],
-    comparePoints: [30, 25, 35, 20, 38, 32, 42, 30, 48, 35, 52, 40]
-  },
-  cart_drawer: {
-    revenue: "₹12,300.00",
-    orders: "12",
-    aov: "₹1,025.00",
-    conv: "1.8%",
-    revenueTrend: "42%",
-    ordersTrend: "30%",
-    aovTrend: "10%",
-    convTrend: "15%",
-    graphPoints: [20, 30, 25, 40, 35, 50, 45, 60, 55, 70, 65, 80],
-    comparePoints: [15, 22, 18, 30, 25, 38, 32, 45, 40, 55, 48, 62]
-  }
+export const loader = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  return { shop: session.shop };
 };
 
-const FEATURES_LIST = [
-  { label: 'All Channels', value: 'all' },
-  { label: 'Coupon Slider', value: 'coupon_slider' },
-  { label: 'Product Widget', value: 'product_widget' },
-  { label: 'Cart Drawer', value: 'cart_drawer' },
+// More granular mock data for professional feel
+const FEATURE_DATA = [
+  { name: 'Feb 01', revenue: 240, clicks: 120, ctr: 5.2 },
+  { name: 'Feb 02', revenue: 380, clicks: 190, ctr: 6.8 },
+  { name: 'Feb 03', revenue: 300, clicks: 150, ctr: 5.9 },
+  { name: 'Feb 04', revenue: 520, clicks: 260, ctr: 8.4 },
+  { name: 'Feb 05', revenue: 460, clicks: 230, ctr: 7.2 },
+  { name: 'Feb 06', revenue: 820, clicks: 410, ctr: 12.5 },
+  { name: 'Feb 07', revenue: 740, clicks: 370, ctr: 11.2 },
 ];
 
-const DATE_RANGE_OPTIONS = [
-  { label: 'Today', value: 'today' },
-  { label: 'Yesterday', value: 'yesterday' },
-  { label: 'Last 7 days', value: '7d' },
+const PROGRESS_BAR_DATA = [
+  { name: 'Abandoned', value: 30 }, { name: 'Completed', value: 70 },
 ];
 
-const EVENTS_DATA = [
-  { id: '1', name: 'Widget Viewed', feature: 'Product Widget', count: '12,450', status: 'Tracking' },
-  { id: '2', name: 'Coupon Shown', feature: 'Coupon Slider', count: '8,200', status: 'Tracking' },
-  { id: '3', name: 'Coupon Applied', feature: 'Coupon Slider', count: '1,240', status: 'Converting' },
-  { id: '4', name: 'Coupon Removed', feature: 'Coupon Slider', count: '120', status: 'Converting' },
-  { id: '5', name: 'Product Widget Clicked', feature: 'Product Widget', count: '3,100', status: 'Tracking' },
-  { id: '6', name: 'Add to Cart via App', feature: 'All', count: '2,450', status: 'Converting' },
-];
-
-// --- COMPONENTS ---
-
-// Function to generate SVG path for spline (Catmull-Rom logic simplified)
-const getSplinePath = (data) => {
-  if (data.length < 2) return "";
-  const width = 500;
-  const height = 100;
-  const step = width / (data.length - 1);
-
-  let path = `M 0 ${height - data[0]}`;
-
-  for (let i = 0; i < data.length - 1; i++) {
-    const x1 = i * step;
-    const y1 = height - data[i];
-    const x2 = (i + 1) * step;
-    const y2 = height - data[i + 1];
-
-    const cp1x = x1 + (x2 - x1) / 2;
-    const cp1y = y1;
-    const cp2x = x1 + (x2 - x1) / 2;
-    const cp2y = y2;
-
-    path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`;
-  }
-  return path;
-};
-
-const HighFidelityGraph = ({ color = "#008060", points, comparePoints, compareEnabled }) => {
-  const mainPath = getSplinePath(points);
-  const comparePath = getSplinePath(comparePoints);
-
-  return (
-    <div style={{ width: '100%', height: '140px', position: 'relative', marginTop: '16px' }}>
-      <svg viewBox="0 0 500 110" preserveAspectRatio="none" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-        {/* Horizontal Grid Lines */}
-        {[0, 20, 40, 60, 80, 100].map(y => (
-          <line key={y} x1="0" y1={y} x2="500" y2={y} stroke="#f1f1f1" strokeWidth="1" />
-        ))}
-
-        {/* Comparison Line (Dashed) */}
-        {compareEnabled && (
-          <path
-            d={comparePath}
-            fill="none"
-            stroke="#9ed4cc"
-            strokeWidth="1.5"
-            strokeDasharray="4 4"
-            style={{ transition: 'd 0.5s ease' }}
-          />
-        )}
-
-        {/* Main Line (Solid Spline) */}
-        <path
-          d={mainPath}
-          fill="none"
-          stroke={color}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          style={{ transition: 'd 0.5s ease' }}
-        />
-      </svg>
-
-      {/* Legend & X-Axis */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid #f1f1f1' }}>
-        <div style={{ display: 'flex', gap: '16px' }}>
-          {['12 am', '4 am', '8 am', '12 pm', '4 pm', '8 pm'].map(time => (
-            <Text key={time} variant="bodyXs" tone="subdued">{time}</Text>
-          ))}
-        </div>
-        <InlineStack gap="300">
-          <InlineStack gap="100" blockAlign="center">
-            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: color }} />
-            <Text variant="bodyXs" tone="subdued">Feb 8 2026</Text>
-          </InlineStack>
-          {compareEnabled && (
-            <InlineStack gap="100" blockAlign="center">
-              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#9ed4cc' }} />
-              <Text variant="bodyXs" tone="subdued">Feb 7 2026</Text>
-            </InlineStack>
-          )}
-        </InlineStack>
-      </div>
-    </div>
-  );
-};
-
-const MetricToggle = ({ title, value, trend, active, onClick }) => (
-  <div
-    onClick={onClick}
-    style={{
-      cursor: 'pointer',
-      padding: '12px 16px',
-      borderRadius: '12px',
-      background: active ? '#f4f4f4' : 'transparent',
-      flex: 1,
-      transition: 'all 0.2s ease',
-      position: 'relative',
-      minWidth: '160px'
-    }}
-  >
-    <BlockStack gap="050">
-      <InlineStack align="space-between" blockAlign="center">
-        <Text variant="bodyMd" fontWeight="medium" tone="subdued">{title}</Text>
-        {active && <Icon source={EditIcon} size="small" tone="subdued" />}
-      </InlineStack>
-      <InlineStack gap="100" blockAlign="baseline">
-        <Text variant="headingLg" fontWeight="bold">{value}</Text>
-        <InlineStack gap="050" blockAlign="center">
-          <Text variant="bodySm" tone="success" fontWeight="medium">↗ {trend}</Text>
-        </InlineStack>
-      </InlineStack>
-    </BlockStack>
-  </div>
-);
-
-const TutorialStep = ({ number, title, content, completed, action }) => (
-  <div style={{ padding: '16px 0', borderBottom: '1px solid #f1f1f1' }}>
-    <BlockStack gap="200">
-      <InlineStack align="space-between" blockAlign="center">
-        <InlineStack gap="200" blockAlign="center">
-          <div style={{
-            width: '28px',
-            height: '28px',
-            borderRadius: '50%',
-            background: completed ? '#e3f1df' : '#f1f1f1',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            {completed ? <Icon source={CheckCircleIcon} tone="success" size="small" /> : <Text variant="bodySm" fontWeight="bold">{number}</Text>}
-          </div>
-          <Text variant="bodyMd" fontWeight="semibold" tone={completed ? 'subdued' : 'default'}>{title}</Text>
-        </InlineStack>
-        {completed ? <Badge tone="success">Completed</Badge> : (action && <Button size="slim" onClick={action.onAction}>{action.label}</Button>)}
-      </InlineStack>
-      {!completed && <Text variant="bodySm" tone="subdued">{content}</Text>}
-    </BlockStack>
-  </div>
-);
+const COLORS = ['#008060', '#005ea2', '#9c6ade', '#e29100'];
 
 export default function AppAnalytics() {
+  const { shop } = useLoaderData();
   const navigate = useNavigate();
-  const guidesRef = useRef(null);
-  const [dateRange, setDateRange] = useState('today');
+  const [selectedTab, setSelectedTab] = useState(0);
   const [popoverActive, setPopoverActive] = useState(false);
-  const [{ month, year }, setMonth] = useState({ month: 1, year: 2026 });
+  const [{ month, year }, setMonth] = useState({ month: 2, year: 2026 });
   const [selectedDates, setSelectedDates] = useState({
-    start: new Date('2026-02-08'),
-    end: new Date('2026-02-08'),
+    start: new Date('2026-03-04'),
+    end: new Date('2026-03-04'),
   });
 
-  const handleMonthChange = useCallback(
-    (month, year) => setMonth({ month, year }),
-    [],
-  );
+  // Advanced Date Picker State
+  const [tempDates, setTempDates] = useState(selectedDates);
+  const [activePreset, setActivePreset] = useState('Today');
+  const [selectionMode, setSelectionMode] = useState(0); // 0 for Fixed, 1 for Rolling
 
-  const togglePopoverActive = useCallback(
-    () => setPopoverActive((active) => !active),
-    [],
-  );
-  const [selectedFeature, setSelectedFeature] = useState('all');
-  const [activeHeroMetric, setActiveHeroMetric] = useState('revenue');
-  const [selectedTab, setSelectedTab] = useState(0);
-
-  const data = FEATURE_DATA[selectedFeature] || FEATURE_DATA.all;
-
-  const setupSteps = [
-    { id: 1, label: 'App Installed', completed: true, guideTab: 0 },
-    { id: 2, label: 'App Embed Enabled', completed: true, guideTab: 0 },
-    { id: 3, label: 'Product Widget Enabled', completed: false, guideTab: 1 },
-    { id: 4, label: 'Coupon Created', completed: false, guideTab: 0 },
-    { id: 5, label: 'Cart Drawer Enabled', completed: false, guideTab: 2 },
+  const presets = [
+    { label: 'Today', range: { start: new Date('2026-03-04'), end: new Date('2026-03-04') } },
+    { label: 'Yesterday', range: { start: new Date('2026-03-03'), end: new Date('2026-03-03') } },
+    { label: 'Last 7 days', range: { start: new Date('2026-02-26'), end: new Date('2026-03-04') } },
+    { label: 'Last 30 days', range: { start: new Date('2026-02-02'), end: new Date('2026-03-04') } },
+    { label: 'Last 90 days', range: { start: new Date('2025-12-04'), end: new Date('2026-03-04') } },
+    { label: 'Last 12 months', range: { start: new Date('2025-03-04'), end: new Date('2026-03-04') } },
   ];
 
-  const completedSteps = setupSteps.filter(s => s.completed).length;
-  const progressPercent = (completedSteps / setupSteps.length) * 100;
+  const [isClient, setIsClient] = useState(false);
 
-  const scrollToGuides = useCallback((tabIndex) => {
-    setSelectedTab(tabIndex);
-    if (guidesRef.current) {
-      guidesRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
+  useEffect(() => {
+    setIsClient(true);
   }, []);
 
-  return (
-    <Page
-      title="Analytics"
-      fullWidth
-      compactTitle
-    >
-      <Layout>
-        {/* 1. Header Filters */}
-        <Layout.Section>
-          <InlineStack align="space-between" blockAlign="center">
-            <InlineStack gap="200" blockAlign="center">
-              <Popover
-                active={popoverActive}
-                activator={
-                  <Button icon={CalendarIcon} onClick={togglePopoverActive}>
-                    {dateRange === 'custom'
-                      ? `${selectedDates.start.toLocaleDateString()} - ${selectedDates.end.toLocaleDateString()}`
-                      : dateRange.charAt(0).toUpperCase() + dateRange.slice(1)}
-                  </Button>
-                }
-                onClose={togglePopoverActive}
-                autofocusTarget="first-node"
-              >
-                <div style={{ padding: '16px', minWidth: '320px' }}>
-                  <BlockStack gap="400">
-                    <ActionList
-                      items={[
-                        { content: 'Today', onAction: () => { setDateRange('today'); togglePopoverActive(); } },
-                        { content: 'Last 7 days', onAction: () => { setDateRange('7d'); togglePopoverActive(); } },
-                        { content: 'Last 30 days', onAction: () => { setDateRange('30d'); togglePopoverActive(); } },
-                        { content: 'Custom Range', onAction: () => setDateRange('custom') },
-                      ]}
-                    />
-                    {dateRange === 'custom' && (
-                      <DatePicker
-                        month={month}
-                        year={year}
-                        onChange={setSelectedDates}
-                        onMonthChange={handleMonthChange}
-                        selected={selectedDates}
-                        multiMonth
-                        allowRange
-                      />
-                    )}
-                  </BlockStack>
-                </div>
-              </Popover>
-              <Select
-                options={FEATURES_LIST}
-                value={selectedFeature}
-                onChange={setSelectedFeature}
-              />
-              <Badge tone="success" progress="complete">
-                <InlineStack gap="100" blockAlign="center">
-                  <div style={{ width: '6px', height: '6px', background: '#008060', borderRadius: '50%' }} />
-                  4 live visitors
-                </InlineStack>
-              </Badge>
+  const [setupSteps, setSetupSteps] = useState([
+    { id: 1, title: 'Step 1: Create Coupon', icon: '🎫', content: 'Add coupons to your slide-out drawer to boost conversions.', completed: false, target: '/app/coupons' },
+    { id: 2, title: 'Step 2: Configure Product Widget', icon: '🛍️', content: 'Setup Frequently Bought Together and Upsell widgets.', completed: false, target: '/app/productwidget' },
+    { id: 3, title: 'Step 3: Configure Cart Drawer', icon: '🛒', content: 'Customize and enable your high-converting cart drawer.', completed: false, target: '/app/cartdrawer' },
+  ]);
+
+  const togglePopoverActive = useCallback(() => setPopoverActive((active) => !active), []);
+  const handleMonthChange = useCallback((month, year) => setMonth({ month, year }), []);
+  const handleTabChange = useCallback((selectedTabIndex) => setSelectedTab(selectedTabIndex), []);
+
+  const handlePresetClick = (preset) => {
+    setActivePreset(preset.label);
+    setTempDates(preset.range);
+    setMonth({ month: preset.range.start.getMonth(), year: preset.range.start.getFullYear() });
+  };
+
+  const handleApply = () => {
+    setSelectedDates(tempDates);
+    setPopoverActive(false);
+  };
+
+  const handleCancel = () => {
+    setTempDates(selectedDates);
+    setPopoverActive(false);
+  };
+
+  const handleStepComplete = (id) => {
+    setSetupSteps(setupSteps.map(step => step.id === id ? { ...step, completed: !step.completed } : step));
+  };
+
+  const completedSteps = setupSteps.filter(step => step.completed).length;
+  const progress = (completedSteps / setupSteps.length) * 100;
+
+  const dateValue = activePreset || `${selectedDates.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} - ${selectedDates.end.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+
+  const tabs = [
+    { id: 'analytics', content: 'Analytics' },
+    { id: 'setup', content: 'Setup Checklist' },
+    { id: 'guide', content: 'How To Use' },
+  ];
+
+  const renderFeatureSection = (title, color, kpis) => (
+    <BlockStack gap="400">
+      <Box paddingBlockStart="500">
+        <InlineStack align="space-between" blockAlign="center">
+          <Text variant="headingLg" fontWeight="bold">{title}</Text>
+          <Badge tone="success">Active</Badge>
+        </InlineStack>
+      </Box>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '16px' }}>
+        {kpis.map((kpi, index) => (
+          <Card key={index} padding="400">
+            <BlockStack gap="100">
+              <Text variant="bodySm" tone="subdued" fontWeight="medium">{kpi.title}</Text>
+              <Text variant="headingXl" fontWeight="bold">{kpi.value}</Text>
+              <InlineStack gap="100" blockAlign="center">
+                <Text variant="bodySm" tone={kpi.trend.startsWith('+') ? 'success' : 'critical'}>
+                  {kpi.trend}
+                </Text>
+                <Text variant="bodySm" tone="subdued">vs previous period</Text>
+              </InlineStack>
+            </BlockStack>
+          </Card>
+        ))}
+      </div>
+      <Card padding="500">
+        <BlockStack gap="400">
+          <InlineStack align="space-between">
+            <Text variant="headingMd" fontWeight="bold">Performance Breakdown</Text>
+            <InlineStack gap="200">
+              <Badge tone="info">Revenue (Bar)</Badge>
+              <Badge tone="attention">CTR (Line)</Badge>
             </InlineStack>
           </InlineStack>
-        </Layout.Section>
+          <div style={{ width: '100%', height: 350 }}>
+            {isClient && (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={FEATURE_DATA}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E1E3E5" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6D7175' }} />
+                  <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6D7175' }} label={{ value: 'Revenue (₹)', angle: -90, position: 'insideLeft', fill: '#6D7175' }} />
+                  <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6D7175' }} label={{ value: 'CTR %', angle: 90, position: 'insideRight', fill: '#6D7175' }} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    cursor={{ fill: '#F6F6F7' }}
+                  />
+                  <Bar yAxisId="left" dataKey="revenue" barSize={40} fill={color} radius={[4, 4, 0, 0]} />
+                  <Line yAxisId="right" type="monotone" dataKey="ctr" stroke="#e29100" strokeWidth={3} dot={{ r: 4, fill: '#e29100' }} activeDot={{ r: 6 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </BlockStack>
+      </Card>
+      <Divider />
+    </BlockStack>
+  );
 
-        {/* 2. Unified Hero Card (Metric Toggles + Graph) */}
+  const renderShippingSection = () => (
+    <BlockStack gap="400">
+      <Box paddingBlockStart="500">
+        <InlineStack align="space-between" blockAlign="center">
+          <Text variant="headingLg" fontWeight="bold">Progress Bar Analytics</Text>
+          <Badge tone="info">Optimization</Badge>
+        </InlineStack>
+      </Box>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+        <Card padding="400">
+          <BlockStack gap="100">
+            <Text variant="bodySm" tone="subdued">Average Order Value Lift</Text>
+            <Text variant="headingXl" fontWeight="bold">₹850.40</Text>
+            <Text variant="bodySm" tone="success">+18.2% boost</Text>
+          </BlockStack>
+        </Card>
+        <Card padding="400">
+          <BlockStack gap="100">
+            <Text variant="bodySm" tone="subdued">Goal Completion Rate</Text>
+            <Text variant="headingXl" fontWeight="bold">72.4%</Text>
+            <Text variant="bodySm" tone="success">+4.5% improvement</Text>
+          </BlockStack>
+        </Card>
+      </div>
+      <Layout>
         <Layout.Section>
           <Card padding="500">
             <BlockStack gap="400">
-              <div style={{ display: 'flex', gap: '8px', paddingBottom: '16px' }}>
-                <MetricToggle
-                  title="Sessions"
-                  value="780"
-                  trend="17%"
-                  active={activeHeroMetric === 'sessions'}
-                  onClick={() => setActiveHeroMetric('sessions')}
-                />
-                <MetricToggle
-                  title="Total sales"
-                  value={data.revenue}
-                  trend={data.revenueTrend}
-                  active={activeHeroMetric === 'revenue'}
-                  onClick={() => setActiveHeroMetric('revenue')}
-                />
-                <MetricToggle
-                  title="Orders"
-                  value={data.orders}
-                  trend={data.ordersTrend}
-                  active={activeHeroMetric === 'orders'}
-                  onClick={() => setActiveHeroMetric('orders')}
-                />
-                <MetricToggle
-                  title="Conversion rate"
-                  value={data.conv}
-                  trend={data.convTrend}
-                  active={activeHeroMetric === 'conv'}
-                  onClick={() => setActiveHeroMetric('conv')}
-                />
+              <Text variant="headingMd" fontWeight="bold">Conversion Impact by Threshold</Text>
+              <div style={{ width: '100%', height: 300 }}>
+                {isClient && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={FEATURE_DATA}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E1E3E5" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                      <YAxis axisLine={false} tickLine={false} />
+                      <Tooltip cursor={{ fill: '#F6F6F7' }} />
+                      <Bar dataKey="revenue" fill="#e29100" radius={[4, 4, 0, 0]} barSize={30} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
-              <HighFidelityGraph
-                color="#008060"
-                points={data.graphPoints}
-                comparePoints={data.comparePoints}
-                compareEnabled={true}
-              />
             </BlockStack>
           </Card>
         </Layout.Section>
-
-        {/* 3. Video Tutorial - Moved to Center */}
-        <Layout.Section>
-          <MediaCard
-            title="Master Your Setup in 3 Minutes"
-            primaryAction={{
-              content: 'Watch Tutorial',
-              onAction: () => window.open('https://www.youtube.com/watch?v=dQw4w9WgXcQ', '_blank'),
-            }}
-            description="Learn how to leverage our high-converting widgets and coupons to explode your Shopify store sales."
-            popoverActions={[{ content: 'Dismiss', onAction: () => { } }]}
-          >
-            <div style={{
-              background: 'linear-gradient(135deg, #008060 0%, #005bd3 100%)',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 'inherit'
-            }}>
-              <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' }}>
-                <div style={{ width: 0, height: 0, borderTop: '10px solid transparent', borderBottom: '10px solid transparent', borderLeft: '16px solid white', marginLeft: '4px' }} />
-              </div>
-            </div>
-          </MediaCard>
-        </Layout.Section>
-
-        {/* 4. Setup Progress Checklist */}
-        {progressPercent < 100 && (
-          <Layout.Section>
-            <Card padding="500">
-              <BlockStack gap="400">
-                <InlineStack align="space-between" blockAlign="center">
-                  <BlockStack gap="050">
-                    <Text variant="headingMd" fontWeight="bold">Get Started: Setup Checklist</Text>
-                    <Text variant="bodyMd" tone="subdued">Complete these steps to activate all app features and boost revenue.</Text>
-                  </BlockStack>
-                  <div style={{ textAlign: 'right' }}>
-                    <Text variant="bodyMd" fontWeight="bold" tone="success">{completedSteps}/{setupSteps.length} Steps Active</Text>
-                    <Text variant="bodySm" tone="subdued">{Math.round(progressPercent)}% complete</Text>
-                  </div>
-                </InlineStack>
-                <ProgressBar progress={progressPercent} size="medium" tone="success" />
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginTop: '8px' }}>
-                  {setupSteps.map(step => (
-                    <div
-                      key={step.id}
-                      style={{
-                        padding: '16px',
-                        borderRadius: '12px',
-                        background: step.completed ? '#f6f6f7' : '#fff',
-                        border: step.completed ? '1px solid transparent' : '1px solid #ebebed',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '12px',
-                        height: '100%'
-                      }}
-                    >
-                      <InlineStack gap="150" blockAlign="center">
-                        <div style={{ width: '20px', height: '20px', borderRadius: '50%', border: '2px solid', borderColor: step.completed ? '#008060' : '#d2d5d9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          {step.completed && <Box background="success" width="10px" height="10px" borderRadius="circle" />}
-                        </div>
-                        <Text variant="bodySm" fontWeight="bold">{step.label}</Text>
-                      </InlineStack>
-                      <Button variant="tertiary" size="micro" onClick={() => scrollToGuides(step.guideTab)} fullWidth>
-                        {step.completed ? 'Review' : 'View Guide'}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </BlockStack>
-            </Card>
-          </Layout.Section>
-        )}
-
-        {/* 5. Event Breakdown */}
-        <Layout.Section variant="oneHalf">
-          <Card padding="0">
-            <Box padding="400" borderBottomWidth="025" borderColor="border-subdued">
-              <InlineStack align="space-between">
-                <Text variant="headingMd" fontWeight="bold">Event Performance</Text>
-                <Button variant="tertiary" icon={SearchIcon} />
-              </InlineStack>
-            </Box>
-            <IndexTable
-              resourceName={{ singular: 'event', plural: 'events' }}
-              itemCount={EVENTS_DATA.length}
-              headings={[{ title: 'Event' }, { title: 'Count', alignment: 'end' }, { title: 'Status' }]}
-              selectable={false}
-            >
-              {EVENTS_DATA.map((row, index) => (
-                <IndexTable.Row id={row.id} key={row.id} position={index}>
-                  <IndexTable.Cell>
-                    <BlockStack>
-                      <Text variant="bodyMd" fontWeight="bold">{row.name}</Text>
-                      <Text variant="bodySm" tone="subdued">{row.feature}</Text>
-                    </BlockStack>
-                  </IndexTable.Cell>
-                  <IndexTable.Cell>
-                    <div style={{ textAlign: 'right' }}>
-                      <Text variant="bodyMd" fontWeight="semibold">{row.count}</Text>
-                    </div>
-                  </IndexTable.Cell>
-                  <IndexTable.Cell>
-                    <Badge tone={row.status === 'Converting' ? 'success' : 'info'} size="small">
-                      {row.status}
-                    </Badge>
-                  </IndexTable.Cell>
-                </IndexTable.Row>
-              ))}
-            </IndexTable>
-          </Card>
-        </Layout.Section>
-
         <Layout.Section variant="oneThird">
           <Card padding="500">
             <BlockStack gap="400">
-              <Text variant="headingMd" fontWeight="bold">Store Insights</Text>
-              <Banner tone="info" hideIcon>
-                <Text variant="bodySm">Users who see a **Coupon Slider** are 3x more likely to complete a purchase. Try enabling it for mobile users first.</Text>
-              </Banner>
-              <BlockStack gap="200">
-                <Button fullWidth variant="primary" onClick={() => navigate('/app/productwidget')}>Manage Widgets</Button>
-                <Button fullWidth onClick={() => navigate('/app/cartdrawer')}>Customize Cart</Button>
-              </BlockStack>
+              <Text variant="headingMd" fontWeight="bold">Customer Progress</Text>
+              <div style={{ width: '100%', height: 200 }}>
+                {isClient && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={PROGRESS_BAR_DATA}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        dataKey="value"
+                        paddingAngle={5}
+                      >
+                        {PROGRESS_BAR_DATA.map((entry, index) => <Cell key={index} fill={COLORS[index % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip />
+                      <Legend verticalAlign="bottom" height={36} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+              <Box paddingBlockStart="400">
+                <Text variant="bodySm" tone="subdued">
+                  70% of customers who see the progress bar reach the free shipping threshold.
+                </Text>
+              </Box>
             </BlockStack>
           </Card>
         </Layout.Section>
-
-        {/* 6. Setup Guides Tabs */}
-        <Layout.Section>
-          <div ref={guidesRef}>
-            <Card padding="0">
-              <Tabs
-                tabs={[
-                  { id: 'general', content: 'General Setup' },
-                  { id: 'widgets', content: 'Product Widgets' },
-                  { id: 'cart', content: 'Cart Drawer' }
-                ]}
-                selected={selectedTab}
-                onSelect={setSelectedTab}
-              >
-                <Box padding="600">
-                  {selectedTab === 0 && (
-                    <BlockStack gap="400">
-                      <Text variant="headingMd">General App Configuration</Text>
-                      <TutorialStep number="1" title="Install the App" content="Ensure the app is correctly installed." completed={true} />
-                      <TutorialStep number="2" title="Enable App Embeds" content="Go to the Theme Editor and toggle 'Cart App Core' to ON." completed={true} action={{ label: 'Theme Editor', onAction: () => window.open('https://admin.shopify.com', '_blank') }} />
-                      <TutorialStep number="3" title="Create Your First Coupon" content="Start offering discounts to your customers." completed={false} action={{ label: 'Create Coupon', onAction: () => navigate('/app/createcoupon') }} />
-                    </BlockStack>
-                  )}
-                  {selectedTab === 1 && (
-                    <BlockStack gap="400">
-                      <Text variant="headingMd">Setting Up Product Widgets</Text>
-                      <TutorialStep number="1" title="Choose a Template" content="Select from Grid, List, or Minimal templates." completed={false} action={{ label: 'Choose Template', onAction: () => navigate('/app/productwidget') }} />
-                      <TutorialStep number="2" title="Select Related Products" content="Enable AI-driven recommendations." completed={false} />
-                      <TutorialStep number="3" title="Preview and Publish" content="Verify the widget looks great on your store." completed={false} />
-                    </BlockStack>
-                  )}
-                  {selectedTab === 2 && (
-                    <BlockStack gap="400">
-                      <Text variant="headingMd">Enabling the Cart Drawer</Text>
-                      <TutorialStep number="1" title="Toggle Cart Drawer ON" content="Enable the slide-out cart drawer." completed={false} action={{ label: 'Enable Drawer', onAction: () => navigate('/app/cartdrawer') }} />
-                      <TutorialStep number="2" title="Add Cart Upsells" content="Configure upsell products." completed={false} />
-                      <TutorialStep number="3" title="Customize Design" content="Adjust colors and fonts." completed={false} />
-                    </BlockStack>
-                  )}
-                </Box>
-              </Tabs>
-            </Card>
-          </div>
-        </Layout.Section>
       </Layout>
+    </BlockStack>
+  );
+
+  const renderSetup = () => {
+    // Correct URL for app embed in customizer
+    const customizerUrl = `https://${shop}/admin/themes/current/editor?context=apps`;
+
+    return (
+      <BlockStack gap="500">
+        <Card>
+          <BlockStack gap="400">
+            <Text variant="headingMd" fontWeight="bold">Step-by-Step Installation Guide</Text>
+            <Box padding="200" background="bg-surface-secondary" borderRadius="200">
+              <div style={{ position: 'relative', paddingTop: '56.25%', borderRadius: '8px', overflow: 'hidden' }}>
+                <iframe
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
+                  src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+                  title="App Setup Tutorial"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            </Box>
+            <BlockStack gap="200">
+              <Text variant="bodyMd">
+                To start using the app, you need to enable the <b>App Embed</b> in your Shopify Theme Customizer. This allows the cart drawer and upsell widgets to appear on your store.
+              </Text>
+              <InlineStack align="start">
+                <Button
+                  variant="primary"
+                  size="large"
+                  icon={ExternalIcon}
+                  onClick={() => window.open(customizerUrl, '_blank')}
+                >
+                  Start Setup & Enable App
+                </Button>
+              </InlineStack>
+            </BlockStack>
+          </BlockStack>
+        </Card>
+
+
+        <Grid>
+          {setupSteps.map((step) => (
+            <Grid.Cell key={step.id} columnSpan={{ xs: 6, sm: 6, md: 3, lg: 4, xl: 4 }}>
+              <div
+                style={{
+                  background: 'white',
+                  borderRadius: '16px',
+                  padding: '24px',
+                  height: '100%',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                  border: '1px solid #f1f5f9',
+                  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                  cursor: 'default'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-4px)';
+                  e.currentTarget.style.boxShadow = '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                }}
+              >
+                <div style={{
+                  fontSize: '32px',
+                  background: '#f8fafc',
+                  width: '64px',
+                  height: '64px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: '12px',
+                  border: '1px solid #e2e8f0'
+                }}>
+                  {step.icon}
+                </div>
+
+                <BlockStack gap="200">
+                  <Text variant="headingMd" fontWeight="bold">{step.title}</Text>
+                  <Text variant="bodyMd" tone="subdued">{step.content}</Text>
+                </BlockStack>
+
+                <div style={{ marginTop: 'auto', paddingTop: '16px' }}>
+                  <Button
+                    variant="primary"
+                    fullWidth
+                    size="large"
+                    onClick={() => {
+                      if (step.external) {
+                        window.open(step.target, '_blank');
+                      } else {
+                        navigate(step.target);
+                      }
+                    }}
+                  >
+                    Set Up Now
+                  </Button>
+                </div>
+              </div>
+            </Grid.Cell>
+          ))}
+        </Grid>
+      </BlockStack>
+    );
+  };
+
+  const renderGuide = () => {
+    const tutorials = [
+      { id: 1, title: 'Creating Coupons', thumb: 'https://cdn.shopify.com/s/files/1/0070/7032/files/Shopify_Blog_Header_6_550x.jpg', desc: 'Learn how to create and manage attractive discount slides.' },
+      { id: 2, title: 'Adding Product Widgets', thumb: 'https://cdn.shopify.com/s/files/1/0070/7032/files/how-to-sell-online-with-shopify-6_550x.jpg', desc: 'Setup Grid and Carousel upsell widgets on your cart page.' },
+      { id: 3, title: 'Enable Cart Drawer', thumb: 'https://cdn.shopify.com/s/files/1/0070/7032/files/shopify-store-examples-6_550x.jpg', desc: 'Quick guide to activating your high-converting cart drawer.' },
+      { id: 4, title: 'Drawer Customization', thumb: 'https://cdn.shopify.com/s/files/1/0070/7032/files/shopify-dropshipping_550x.jpg', desc: 'Deep dive into styling your cart drawer and upsells.' },
+    ];
+
+    return (
+      <BlockStack gap="600">
+        <Banner title="Video Learning Center" tone="info">
+          <p>Master the app in minutes with these short, focused video tutorials.</p>
+        </Banner>
+
+        <Grid>
+          {tutorials.map((video) => (
+            <Grid.Cell key={video.id} columnSpan={{ xs: 6, sm: 6, md: 6, lg: 6, xl: 6 }}>
+              <Card padding="0">
+                <div style={{ display: 'flex' }}>
+                  <div style={{ width: '200px', height: '140px', position: 'relative', flexShrink: 0 }}>
+                    <img
+                      src={video.thumb}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      alt={video.title}
+                    />
+                    <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: 'rgba(0,0,0,0.6)', borderRadius: '50%', padding: '8px', cursor: 'pointer' }}>
+                      <Box color="icon-on-interactive">
+                        <PlayIcon style={{ width: '24px', height: '24px', fill: 'white' }} />
+                      </Box>
+                    </div>
+                  </div>
+                  <Box padding="400">
+                    <BlockStack gap="200">
+                      <Text variant="headingMd" fontWeight="bold">{video.title}</Text>
+                      <Text variant="bodyMd" tone="subdued">{video.desc}</Text>
+                      <InlineStack align="start">
+                        <Button plain icon={PlayIcon}>Watch Video</Button>
+                      </InlineStack>
+                    </BlockStack>
+                  </Box>
+                </div>
+              </Card>
+            </Grid.Cell>
+          ))}
+        </Grid>
+
+        <Divider />
+
+        <Card>
+          <BlockStack gap="400">
+            <Text variant="headingMd" fontWeight="bold">Optimization Strategies</Text>
+            <Grid>
+              <Grid.Cell columnSpan={{ md: 3, lg: 6 }}>
+                <Box padding="400" border="divider" borderRadius="200">
+                  <BlockStack gap="200">
+                    <Text variant="headingSm" fontWeight="bold">Coupon Slider & Progress Bar</Text>
+                    <Text variant="bodyMd" tone="subdued">Drive urgency by showing real-time discounts and shipping status. Use the progress bar to show exactly how much more a customer needs to spend.</Text>
+                  </BlockStack>
+                </Box>
+              </Grid.Cell>
+              <Grid.Cell columnSpan={{ md: 3, lg: 6 }}>
+                <Box padding="400" border="divider" borderRadius="200">
+                  <BlockStack gap="200">
+                    <Text variant="headingSm" fontWeight="bold">FBT & Upsells</Text>
+                    <Text variant="bodyMd" tone="subdued">Automatically suggest matching products using FBT (Frequently Bought Together) or manual Upsell products in Grid/Carousel layouts.</Text>
+                  </BlockStack>
+                </Box>
+              </Grid.Cell>
+            </Grid>
+          </BlockStack>
+        </Card>
+      </BlockStack>
+    );
+  };
+
+  return (
+    <Page
+      title="Analytics Dashboard"
+      primaryAction={
+        <Popover
+          active={popoverActive}
+          activator={<Button icon={CalendarIcon} onClick={togglePopoverActive}>{dateValue}</Button>}
+          onClose={togglePopoverActive}
+          fluidContent
+        >
+          <div style={{ display: 'flex', width: '750px', maxHeight: '550px' }}>
+            {/* Sidebar Presets */}
+            <div style={{ width: '180px', borderRight: '1px solid #e1e3e5', padding: '8px' }}>
+              <div style={{ overflowY: 'auto', height: '100%', paddingRight: '4px' }}>
+                <BlockStack gap="050">
+                  {presets.map((preset) => (
+                    <div
+                      key={preset.label}
+                      onClick={() => handlePresetClick(preset)}
+                      style={{
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        borderRadius: '6px',
+                        background: activePreset === preset.label ? '#f1f1f1' : 'transparent',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}
+                    >
+                      <Text variant="bodyMd" fontWeight={activePreset === preset.label ? 'bold' : 'regular'}>{preset.label}</Text>
+                      {activePreset === preset.label && <Icon source={CheckCircleIcon} tone="success" />}
+                    </div>
+                  ))}
+                  <div style={{ margin: '8px 0', borderTop: '1px solid #f1f1f1' }} />
+                  {['Last week', 'Last month', 'Last quarter', 'Last year'].map(item => (
+                    <div key={item} style={{ padding: '8px 12px', cursor: 'pointer', borderRadius: '6px' }}>
+                      <Text variant="bodyMd" tone="subdued">{item}</Text>
+                    </div>
+                  ))}
+                </BlockStack>
+              </div>
+            </div>
+
+            {/* Main Content Area */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              {/* Header Toggles */}
+              <div style={{ padding: '16px', borderBottom: '1px solid #e1e3e5' }}>
+                <InlineStack align="start" gap="400">
+                  <div
+                    onClick={() => setSelectionMode(0)}
+                    style={{
+                      padding: '4px 12px',
+                      background: selectionMode === 0 ? '#ebebed' : 'transparent',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Text variant="bodyMd" fontWeight="semibold">Fixed</Text>
+                  </div>
+                  <div
+                    onClick={() => setSelectionMode(1)}
+                    style={{
+                      padding: '4px 12px',
+                      background: selectionMode === 1 ? '#ebebed' : 'transparent',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <Text variant="bodyMd" fontWeight="semibold">Rolling</Text>
+                  </div>
+                </InlineStack>
+              </div>
+
+              {/* Selection Detail & Inputs */}
+              <div style={{ padding: '16px' }}>
+                <InlineStack align="space-between" blockAlign="center" gap="400">
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      labelHidden
+                      value={tempDates.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <Icon source={ArrowRightIcon} tone="base" />
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      labelHidden
+                      value={tempDates.end.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <Icon source={ClockIcon} tone="base" />
+                </InlineStack>
+              </div>
+
+              {/* Dual Calendars Container */}
+              <div style={{ display: 'flex', gap: '24px', padding: '0 16px' }}>
+                <div style={{ flex: 1 }}>
+                  <DatePicker
+                    month={month}
+                    year={year}
+                    onChange={setTempDates}
+                    onMonthChange={handleMonthChange}
+                    selected={tempDates}
+                    allowRange
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <DatePicker
+                    month={month === 11 ? 0 : month + 1}
+                    year={month === 11 ? year + 1 : year}
+                    onChange={setTempDates}
+                    onMonthChange={() => { }}
+                    selected={tempDates}
+                    allowRange
+                  />
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div style={{ marginTop: 'auto', padding: '16px', borderTop: '1px solid #e1e3e5', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <Button onClick={handleCancel}>Cancel</Button>
+                <Button variant="primary" onClick={handleApply}>Apply</Button>
+              </div>
+            </div>
+          </div>
+        </Popover>
+      }
+    >
+      <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange}>
+        <Box paddingBlockStart="400">
+          {selectedTab === 0 && (
+            <BlockStack gap="600">
+              <Banner tone="info">
+                <p>Overall performance is up <b>15%</b> compared to last week. Your <b>Upsell Products</b> are leading with highest conversion.</p>
+              </Banner>
+
+              {renderFeatureSection('Coupon Slider', '#008060', [
+                { title: 'Revenue Generated', value: '₹4,500.00', trend: '+12.4%' },
+                { title: 'Coupons Applied', value: '452', trend: '+8.1%' },
+                { title: 'Avg. Order Value', value: '₹1,240', trend: '+2.3%' },
+              ])}
+
+              {renderFeatureSection('FBT (Bought Together)', '#005ea2', [
+                { title: 'Revenue Generated', value: '₹3,240.50', trend: '+15.2%' },
+                { title: 'Bundles Added', value: '128', trend: '+10.4%' },
+                { title: 'Bundle Conv. Rate', value: '6.8%', trend: '+1.2%' },
+              ])}
+
+              {renderFeatureSection('Upsell Products', '#9c6ade', [
+                { title: 'Revenue Generated', value: '₹5,820.00', trend: '+20.5%' },
+                { title: 'Add to Carts', value: '2,850', trend: '+18.2%' },
+                { title: 'Upsell CTR', value: '7.4%', trend: '+3.1%' },
+              ])}
+
+              {renderShippingSection()}
+            </BlockStack>
+          )}
+          {selectedTab === 1 && renderSetup()}
+          {selectedTab === 2 && renderGuide()}
+        </Box>
+      </Tabs>
     </Page>
   );
 }
+
+// Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};
