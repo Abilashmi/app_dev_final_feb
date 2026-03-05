@@ -18,141 +18,234 @@
     const container = document.getElementById('ps-coupon-slider-{{ block.id }}');
     const shopDomain = container.dataset.shop;
 
+    const normalizeId = (id) => {
+      if (!id || typeof id !== 'string') return id;
+      // Clean up escaped slashes and redundant slashes, but keep gid:// protocol
+      let clean = id.replace(/\\/g, '/').replace(/\/+/g, '/');
+      if (clean.startsWith('gid:/') && !clean.startsWith('gid://')) {
+        clean = clean.replace('gid:/', 'gid://');
+      }
+      return clean;
+    };
+
+    const safeParse = (val, isArray = true) => {
+      if (!val) return isArray ? [] : {};
+      if (typeof val === 'object') return val;
+      try {
+        return JSON.parse(val);
+      } catch (e) {
+        if (!isArray) return {};
+        const matches = val.match(
+          /gid:[\/\\]+shopify[\/\\]+(DiscountCodeNode|DiscountAutomaticNode|DiscountNode)[\/\\]+\d+/g
+        );
+        return (matches || []).map(normalizeId);
+      }
+    };
+
     const API_URL =
       'https://blueviolet-clam-512487.hostingersite.com/save_coupon_slider_widget.php?shopdomain=' + shopDomain;
 
     fetch(API_URL)
-      .then((res) => res.json())
-      .then((response) => {
-        if (!response || response.status !== 'success') {
-          container.innerHTML = 'No coupons available.';
-          return;
+      .then((res) => res.text())
+      .then((text) => {
+        const isTruncated = text.length > 0 && !text.trim().endsWith('}');
+        const lastSaveMatch = text.match(/"updated_at"\s*:\s*"([^"]+)"/);
+        const lastSave = lastSaveMatch ? lastSaveMatch[1] : 'Unknown';
+
+        let data = null;
+        try {
+          const response = JSON.parse(text);
+          if (response && response.status === 'success') data = response.data;
+        } catch (e) {
+          console.warn('[Coupon Slider] Corrupted data detected.');
         }
 
-        const data = response.data;
-        const selectedTemplate = data.selectedTemplate;
+        // RECOVERY
+        if (!data || !data.selectedTemplateCoupon) {
+          const gids =
+            text.match(/gid:[\/\\]+shopify[\/\\]+(DiscountCodeNode|DiscountAutomaticNode|DiscountNode)[\/\\]+\d+/g) ||
+            [];
+          const templateMatch = text.match(/"selectedTemplate"\s*:\s*"([^"]+)"/);
+          data = {
+            selectedTemplate: templateMatch ? templateMatch[1] : 'template1',
+            selectedTemplateCoupon: [...new Set(gids)].map((id) => id.replace(/\\/g, '/').replace(/\/+/g, '/')),
+          };
+        }
 
-        let defaultStyle = {};
+        const selectedTemplate = data.selectedTemplate || 'template1';
+
+        let defaultStyle = safeParse(data.temp1DefaultStyle || data.temp2DefaultStyle || data.temp3DefaultStyle, false);
         let couponStyleMap = {};
-        let couponIds = data.selectedTemplateCoupon || [];
+        let rawCouponIds = safeParse(data.selectedTemplateCoupon, true);
 
         if (selectedTemplate === 'template1') {
-          defaultStyle = data.temp1DefaultStyle || {};
-          couponStyleMap = data.temp1CouponStyle || {};
+          defaultStyle = safeParse(data.temp1DefaultStyle, false);
+          couponStyleMap = safeParse(data.temp1CouponStyle, false);
         } else if (selectedTemplate === 'template2') {
-          defaultStyle = data.temp2DefaultStyle || {};
-          couponStyleMap = data.temp2CouponStyle || {};
+          defaultStyle = safeParse(data.temp2DefaultStyle, false);
+          couponStyleMap = safeParse(data.temp2CouponStyle, false);
         } else {
-          defaultStyle = data.temp3DefaultStyle || {};
-          couponStyleMap = data.temp3CouponStyle || {};
+          defaultStyle = safeParse(data.temp3DefaultStyle, false);
+          couponStyleMap = safeParse(data.temp3CouponStyle, false);
         }
 
-        if (!couponIds.length) {
-          container.innerHTML = 'No coupons configured.';
+        const styleMapKeys = Object.keys(couponStyleMap || {}).map(normalizeId);
+        const resolvedIds = rawCouponIds.map((raw) => {
+          const normRaw = normalizeId(raw);
+          const match = styleMapKeys.find((full) => full.startsWith(normRaw) || normRaw.startsWith(full));
+          return match || normRaw;
+        });
+
+        const couponIds = [...new Set([...resolvedIds, ...styleMapKeys])].filter(
+          (id) => typeof id === 'string' && id.includes('gid://')
+        );
+
+        const mandatoryFields = ['selectedTemplateCoupon', 'temp1DefaultStyle'];
+        const hasMandatoryFields = mandatoryFields.every((field) => text.includes(field));
+
+        if (!couponIds || !couponIds.length) {
+          if (isTruncated || !hasMandatoryFields) {
+            container.innerHTML = `
+              <div style="color: #444; font-size: 13px; line-height: 1.5; padding: 15px; background: #fff4f4; border: 1px solid #ffcccc; border-radius: 6px; margin: 10px 0;">
+                <strong style="color: #d32f2f;">🛠️ Repair Needed (Data Truncated)</strong><br>
+                The server is cutting off your data. 1) Run the SQL command again. 2) <strong>Go to App Admin and click SAVE.</strong><br>
+                <small style="opacity: 0.6;">Server Response: ${text.substring(0, 50)}...</small><br>
+                <small style="opacity: 0.6;">Last Saved: ${lastSave}</small>
+              </div>
+            `;
+          } else {
+            container.innerHTML = 'No coupons configured.';
+          }
           return;
         }
 
-        renderTemplate(container, selectedTemplate, defaultStyle, couponIds, couponStyleMap);
+        // Normalize the Style Map keys for easy lookup
+        const normalizedStyleMap = {};
+        Object.keys(couponStyleMap || {}).forEach((key) => {
+          normalizedStyleMap[normalizeId(key)] = couponStyleMap[key];
+        });
+
+        renderTemplate(container, selectedTemplate, defaultStyle, couponIds, normalizedStyleMap);
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('Coupon Slider Critical Error:', err);
         container.innerHTML = 'Error loading coupons.';
       });
 
     function renderTemplate(container, template, defaultStyle, couponIds, couponStyleMap) {
-      container.innerHTML = `<div class="ps-coupon-wrapper"></div>`;
-      const wrapper = container.querySelector('.ps-coupon-wrapper');
+      let currentIndex = 0;
 
-      couponIds.forEach((couponId) => {
-        const override = couponStyleMap[couponId] || {};
+      function buildCard(couponId) {
+        const override = (couponStyleMap && couponStyleMap[normalizeId(couponId)]) || {};
         const finalStyle = { ...defaultStyle, ...override };
-
         const heading = finalStyle.headingText || 'Special Offer';
         const subtext = finalStyle.subtextText || '';
         const code = couponId.split('/').pop();
-
         let card;
 
-        // ================= TEMPLATE 1 =================
         if (template === 'template1') {
           card = document.createElement('div');
           card.className = 'ps-template1';
-
           card.innerHTML = `
-        <div class="ps-t1-content">
-          <div class="ps-t1-text">
-            <h2>${heading}</h2>
-            <p>${subtext}</p>
-          </div>
-          <button class="ps-btn" data-code="${code}">Copy Code</button>
-        </div>
-      `;
-
+            <div class="ps-t1-content">
+              <div class="ps-t1-text">
+                <h2>${heading}</h2>
+                <p>${subtext}</p>
+              </div>
+              <button class="ps-btn" data-code="${code}">Copy Code</button>
+            </div>`;
           card.style.background = finalStyle.bgColor;
           card.style.borderLeft = `5px solid ${finalStyle.accentColor}`;
           card.style.borderRadius = finalStyle.borderRadius + 'px';
           card.style.padding = finalStyle.padding + 10 + 'px ' + (finalStyle.padding + 14) + 'px';
         }
 
-        // ================= TEMPLATE 2 =================
         if (template === 'template2') {
           card = document.createElement('div');
           card.className = 'ps-template2';
-
           card.innerHTML = `
-        <div class="ps-notch left"></div>
-        <div class="ps-notch right"></div>
-
-        <div class="ps-t2-left">
-          <span class="ps-label">Your Code</span>
-          <span class="ps-code">${code}</span>
-          <div class="ps-line"></div>
-        </div>
-
-        <div class="ps-divider"></div>
-
-        <div class="ps-t2-right">
-          <h2>${heading}</h2>
-          <p>${subtext}</p>
-          <button class="ps-btn" data-code="${code}">Redeem Now</button>
-        </div>
-      `;
-
+            <div class="ps-notch left"></div>
+            <div class="ps-notch right"></div>
+            <div class="ps-t2-left">
+              <span class="ps-label">Your Code</span>
+              <span class="ps-code">${code}</span>
+              <div class="ps-line"></div>
+            </div>
+            <div class="ps-divider"></div>
+            <div class="ps-t2-right">
+              <h2>${heading}</h2>
+              <p>${subtext}</p>
+              <button class="ps-btn" data-code="${code}">Redeem Now</button>
+            </div>`;
           card.style.background = finalStyle.bgColor;
           card.style.borderRadius = finalStyle.borderRadius + 'px';
         }
 
-        // ================= TEMPLATE 3 =================
         if (template === 'template3') {
           card = document.createElement('div');
           card.className = 'ps-template3';
-
           card.innerHTML = `
-        <div class="ps-icon">🏷️</div>
-        <div class="ps-text">
-          <h3>${heading}</h3>
-          <p>${subtext}</p>
-        </div>
-        <div class="ps-code-pill">${code}</div>
-        <button class="ps-btn" data-code="${code}">Apply</button>
-      `;
-
+            <div class="ps-icon">🏷️</div>
+            <div class="ps-text">
+              <h3>${heading}</h3>
+              <p>${subtext}</p>
+            </div>
+            <div class="ps-code-pill">${code}</div>
+            <button class="ps-btn" data-code="${code}">Apply</button>`;
           card.style.background = finalStyle.bgColor;
           card.style.borderRadius = finalStyle.borderRadius + 'px';
           card.style.border = `1px solid ${finalStyle.accentColor}22`;
         }
 
-        wrapper.appendChild(card);
-      });
+        return card;
+      }
 
-      // Wrapper styling
-      wrapper.style.display = 'flex';
-      wrapper.style.gap = '16px';
-      wrapper.style.overflowX = 'auto';
-      wrapper.style.padding = '16px';
+      function render() {
+        const hasMultiple = couponIds.length > 1;
 
-      // Copy logic
+        container.innerHTML = `
+          <div class="ps-slider-container">
+            ${hasMultiple ? '<div class="ps-nav ps-nav-left">&#8249;</div>' : ''}
+            <div class="ps-slide-area"></div>
+            ${hasMultiple ? '<div class="ps-nav ps-nav-right">&#8250;</div>' : ''}
+          </div>
+          ${hasMultiple ? '<div class="ps-dots"></div>' : ''}
+        `;
+
+        const slideArea = container.querySelector('.ps-slide-area');
+        const card = buildCard(couponIds[currentIndex]);
+        if (card) {
+          card.style.width = '100%';
+          card.style.minWidth = 'unset';
+          slideArea.appendChild(card);
+        }
+
+        // Dot indicators
+        if (hasMultiple) {
+          const dotsContainer = container.querySelector('.ps-dots');
+          couponIds.forEach((_, i) => {
+            const dot = document.createElement('div');
+            dot.className = 'ps-dot' + (i === currentIndex ? ' active' : '');
+            dot.addEventListener('click', () => {
+              currentIndex = i;
+              render();
+            });
+            dotsContainer.appendChild(dot);
+          });
+        }
+      }
+
+      render();
+
+      // Navigation click handlers
       container.addEventListener('click', function (e) {
-        if (e.target.classList.contains('ps-btn')) {
+        if (e.target.classList.contains('ps-nav-left')) {
+          currentIndex = currentIndex > 0 ? currentIndex - 1 : couponIds.length - 1;
+          render();
+        } else if (e.target.classList.contains('ps-nav-right')) {
+          currentIndex = currentIndex < couponIds.length - 1 ? currentIndex + 1 : 0;
+          render();
+        } else if (e.target.classList.contains('ps-btn')) {
           const code = e.target.dataset.code;
           navigator.clipboard.writeText(code);
           alert('Coupon copied: ' + code);
@@ -162,15 +255,75 @@
   })();
 </script>
 <style>
-  .ps-coupon-wrapper {
-    scrollbar-width: thin;
+  .ps-slider-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 4px;
+    position: relative;
+  }
+
+  .ps-slide-area {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .ps-nav {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 300;
+    color: #333;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .ps-nav:hover {
+    background: rgba(0, 0, 0, 0.12);
+    transform: scale(1.1);
+  }
+
+  .ps-nav:active {
+    transform: scale(0.95);
+  }
+
+  .ps-dots {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    padding: 4px 0 8px 0;
+  }
+
+  .ps-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #d1d5db;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .ps-dot.active {
+    width: 20px;
+    border-radius: 10px;
+    background: #2563eb;
   }
 
   /* ================= TEMPLATE 1 ================= */
 
   .ps-template1 {
-    min-width: 280px;
+    width: 100%;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    transition: transform 0.3s ease;
   }
 
   .ps-t1-content {
@@ -195,10 +348,11 @@
   .ps-template2 {
     position: relative;
     display: flex;
-    min-width: 340px;
+    width: 100%;
     min-height: 160px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     overflow: hidden;
+    transition: transform 0.3s ease;
   }
 
   .ps-notch {
@@ -279,12 +433,13 @@
   /* ================= TEMPLATE 3 ================= */
 
   .ps-template3 {
-    min-width: 420px;
+    width: 100%;
     display: flex;
     align-items: center;
     gap: 16px;
     padding: 20px 24px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    transition: transform 0.3s ease;
   }
 
   .ps-icon {
@@ -324,8 +479,21 @@
 
   .ps-btn {
     border: none;
-    padding: 10px 20px;
+    padding: 10px 24px;
     border-radius: 8px;
     cursor: pointer;
+    font-weight: 700;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .ps-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    filter: brightness(1.1);
+  }
+
+  .ps-btn:active {
+    transform: translateY(0);
   }
 </style>

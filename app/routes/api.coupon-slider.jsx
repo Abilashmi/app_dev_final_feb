@@ -21,6 +21,12 @@ const DEFAULT_DATA = {
             borderRadius: 12,
             fontSize: 16,
             padding: 16,
+            borderColor: "#e2e8f0",
+            priceColor: "#1a1a1a",
+            showPrices: true,
+            showAddAllButton: false,
+            interactionType: "copy",
+            layout: "horizontal"
         },
         template2: {
             name: "Minimal Card",
@@ -34,6 +40,12 @@ const DEFAULT_DATA = {
             borderRadius: 8,
             fontSize: 14,
             padding: 14,
+            borderColor: "#e5e7eb",
+            priceColor: "#374151",
+            showPrices: true,
+            showAddAllButton: false,
+            interactionType: "copy",
+            layout: "horizontal"
         },
         template3: {
             name: "Bold & Vibrant",
@@ -47,6 +59,12 @@ const DEFAULT_DATA = {
             borderRadius: 16,
             fontSize: 18,
             padding: 20,
+            borderColor: "#6366f1",
+            priceColor: "#ffffff",
+            showPrices: true,
+            showAddAllButton: false,
+            interactionType: "copy",
+            layout: "horizontal"
         },
     },
     selectedActiveCoupons: [],
@@ -88,8 +106,13 @@ function transformFromDB(dbData) {
             return JSON.parse(val);
         } catch {
             // If it's a truncated JSON string (e.g. ["gid://...","g), try to extract what we can
-            const matches = val.match(/gid:\/\/shopify\/DiscountCodeNode\/\d+/g);
-            if (matches) return matches;
+            // Matches DiscountCodeNode, DiscountAutomaticNode, or just DiscountNode
+            // We use [\/\\]+ to handle both normal and escaped slashes in the raw string
+            const matches = val.match(/gid:[\/\\]+shopify[\/\\]+(DiscountCodeNode|DiscountAutomaticNode|DiscountNode)[\/\\]+\d+/g);
+            if (matches) {
+                // Return cleaned IDs (replace backslashes with forward slashes for consistency)
+                return matches.map(id => id.replace(/\\/g, '/'));
+            }
             return [];
         }
     };
@@ -149,13 +172,27 @@ function transformFromDB(dbData) {
     const idsFromStyles = Object.keys(activeCouponStyles);
     const idsFromConditions = activeCouponConditions.map(c => c.couponId).filter(Boolean);
 
+    // ID Reconciliation: Prefer full IDs over truncated ones
+    const allFullIds = [...new Set([...idsFromStyles, ...idsFromConditions])];
+
+    // Normalize a GID to single forward slashes
+    const normalizeId = (id) => id.replace(/\\/g, '/').replace(/\/+/g, '/');
+
+    const reconciledSelected = idsFromSelected.map(rawId => {
+        const id = normalizeId(rawId);
+        // Find if this truncated ID matches the start of any full ID
+        const match = allFullIds.find(f => normalizeId(f).startsWith(id) || id.startsWith(normalizeId(f)));
+        return match || id;
+    });
+
     // Combine and deduplicate
-    const selectedCoupons = [...new Set([...idsFromSelected, ...idsFromStyles, ...idsFromConditions])];
+    const selectedCoupons = [...new Set([...reconciledSelected, ...allFullIds])];
 
     const couponOverrides = {};
-    for (const couponId of selectedCoupons) {
-        const styleOv = activeCouponStyles[couponId] || {};
-        const conditionEntry = activeCouponConditions.find(c => c.couponId === couponId) || {};
+    for (const rawCouponId of selectedCoupons) {
+        const couponId = normalizeId(rawCouponId);
+        const styleOv = activeCouponStyles[rawCouponId] || activeCouponStyles[couponId] || {};
+        const conditionEntry = activeCouponConditions.find(c => normalizeId(c.couponId || "") === couponId) || {};
 
         const override = { ...styleOv };
 
@@ -185,7 +222,8 @@ function transformFromDB(dbData) {
 
 export async function loader({ request }) {
     const url = new URL(request.url);
-    const shopDomain = url.searchParams.get("shop") || "";
+    const rawShop = url.searchParams.get("shop") || url.searchParams.get("shopdomain") || "";
+    const shopDomain = rawShop.toLowerCase();
 
     // If no shopDomain provided, fall back to local defaults
     if (!shopDomain) {
@@ -211,12 +249,16 @@ export async function loader({ request }) {
             const config = transformFromDB(extBody.data);
 
             // AUTO-SYNC LOGIC:
-            // If the database data was essentially empty or missing core styles, 
-            // trigger an async POST to initialize it with defaults.
-            const dbStyles = extBody.data.temp1DefaultStyle;
-            if (!dbStyles || (typeof dbStyles === "string" && dbStyles === "[]") || (typeof dbStyles === "object" && Object.keys(dbStyles).length === 0)) {
-                console.log("Database missing defaults, triggering auto-sync...");
-                // We don't await this to keep the loader fast, or we can await it if we want certainty
+            // Check if any template style is empty or malformed
+            const needsSync = !extBody.data.temp1DefaultStyle ||
+                !extBody.data.temp2DefaultStyle ||
+                !extBody.data.temp3DefaultStyle ||
+                extBody.data.temp1DefaultStyle === "[]" ||
+                extBody.data.temp1DefaultStyle === "{}";
+
+            if (needsSync) {
+                console.log("Database missing or partial defaults, triggering auto-sync...");
+                // We don't await this to keep the loader fast
                 (async () => {
                     try {
                         const dbPayload = transformForDB(config, shopDomain);
@@ -251,7 +293,12 @@ export async function loader({ request }) {
 
 /* ---------- TRANSFORM TO DB SCHEMA ---------- */
 
-const STYLE_KEYS = ["bgColor", "textColor", "accentColor", "buttonColor", "buttonTextColor", "borderRadius", "fontSize", "padding"];
+const STYLE_KEYS = [
+    "bgColor", "textColor", "accentColor", "buttonColor", "buttonTextColor",
+    "borderRadius", "fontSize", "padding", "borderColor", "priceColor",
+    "headingText", "subtextText", "showPrices", "showAddAllButton",
+    "interactionType", "layout"
+];
 const CONDITION_KEYS = ["displayCondition", "productHandles", "collectionHandles", "displayTags"];
 
 function transformForDB(data, shopDomain) {
@@ -265,7 +312,10 @@ function transformForDB(data, shopDomain) {
         const defaultTpl = (DEFAULT_DATA.templates && DEFAULT_DATA.templates[tplKey]) || {};
         const merged = {};
         for (const k of STYLE_KEYS) {
-            merged[k] = tpl[k] !== undefined ? tpl[k] : defaultTpl[k] !== undefined ? defaultTpl[k] : "";
+            // Use default if current value is undefined OR an empty string
+            const currentVal = tpl[k];
+            const defVal = defaultTpl[k] !== undefined ? defaultTpl[k] : "";
+            merged[k] = (currentVal !== undefined && currentVal !== "") ? currentVal : defVal;
         }
         return merged;
     }
@@ -323,26 +373,28 @@ function transformForDB(data, shopDomain) {
     const t3Data = buildCouponData("template3");
 
     // Align with the DB fields shown in user's JSON
+    // We STRINGIFY these objects because the PHP backend expects JSON strings in the DB
     return {
         id: "",
+        shop: shopDomain || "",
         shopDomain: shopDomain || "",
         selectedTemplate: data.activeTemplate || "template1",
         selectedTemplateCoupon: JSON.stringify(selectedCoupons),
 
-        // Styles
-        temp1DefaultStyle: buildStyle("template1"),
-        temp2DefaultStyle: buildStyle("template2"),
-        temp3DefaultStyle: buildStyle("template3"),
+        // Styles (Stringified for PHP DB)
+        temp1DefaultStyle: JSON.stringify(buildStyle("template1")),
+        temp2DefaultStyle: JSON.stringify(buildStyle("template2")),
+        temp3DefaultStyle: JSON.stringify(buildStyle("template3")),
 
-        // Coupon Styles (Overrides)
-        temp1CouponStyle: t1Data.couponStyles,
-        temp2CouponStyle: t2Data.couponStyles,
-        temp3CouponStyle: t3Data.couponStyles,
+        // Coupon Styles (Stringified for PHP DB)
+        temp1CouponStyle: JSON.stringify(t1Data.couponStyles),
+        temp2CouponStyle: JSON.stringify(t2Data.couponStyles),
+        temp3CouponStyle: JSON.stringify(t3Data.couponStyles),
 
-        // Coupon Conditions
-        temp1CouponCondition: t1Data.couponConditions,
-        temp2CouponCondition: t2Data.couponConditions,
-        temp3CouponCondition: t3Data.couponConditions,
+        // Coupon Conditions (Stringified for PHP DB)
+        temp1CouponCondition: JSON.stringify(t1Data.couponConditions),
+        temp2CouponCondition: JSON.stringify(t2Data.couponConditions),
+        temp3CouponCondition: JSON.stringify(t3Data.couponConditions),
 
         // Explicitly include counts or other fields if required by PHP
         status: "success"
@@ -352,8 +404,31 @@ function transformForDB(data, shopDomain) {
 /* ---------------- ACTION (POST) ---------------- */
 
 export async function action({ request }) {
+    console.log("------------------------------------------");
+    console.log("RECEIVED ACTION REQUEST ON /api/coupon-slider");
+    const contentType = request.headers.get("content-type");
+    console.log("Content-Type:", contentType);
+
     try {
-        const body = await request.json();
+        let body;
+        if (contentType?.includes("application/json")) {
+            body = await request.json();
+        } else {
+            const formData = await request.formData();
+            body = Object.fromEntries(formData);
+            // Parse nested objects if they were sent as JSON strings in form fields
+            if (typeof body.templateData === "string") {
+                try { body.templateData = JSON.parse(body.templateData); } catch (e) { }
+            }
+            if (typeof body.selectedActiveCoupons === "string") {
+                try { body.selectedActiveCoupons = JSON.parse(body.selectedActiveCoupons); } catch (e) { }
+            }
+            if (typeof body.couponOverrides === "string") {
+                try { body.couponOverrides = JSON.parse(body.couponOverrides); } catch (e) { }
+            }
+        }
+
+        console.log("Parsed body:", JSON.stringify(body, null, 2));
 
         // Read existing data
         const existing = await readData();
@@ -381,21 +456,49 @@ export async function action({ request }) {
         await writeData(updated);
 
         // Transform to DB schema and send to external PHP endpoint
-        const shopDomain = body.shop || "";
-        const dbPayload = transformForDB(updated, shopDomain);
-        console.log("Outgoing DB payload:", JSON.stringify(dbPayload, null, 2));
+        const rawShop = body.shop || body.shopDomain || existing.shop || updated.shop || "";
+        const shop = rawShop.toLowerCase();
+        const dbPayload = transformForDB(updated, shop);
+
+        // Ensure both identifiers are present in the final payload
+        dbPayload.shop = shop;
+        dbPayload.shopDomain = shop;
+        dbPayload.shopdomain = shop; // Add lowercase key too
+
+        if (!shop) {
+            console.warn("No shop domain found in payload or existing data. External API sync might fail.");
+        }
+
+        console.log("Outgoing DB payload to Coupon Slider API:", JSON.stringify(dbPayload, null, 2));
 
         try {
             const extRes = await fetch(EXTERNAL_API, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    "User-Agent": "Shopify-App-Action-Handler",
+                },
                 body: JSON.stringify(dbPayload),
             });
-            const extBody = await extRes.text();
-            console.log(`External API response [${extRes.status}]:`, extBody);
+
+            const responseStatus = extRes.status;
+            const responseText = await extRes.text();
+
+            console.log(`External Coupon Slider API response [${responseStatus}]:`, responseText);
+
+            try {
+                const responseJSON = JSON.parse(responseText);
+                if (responseJSON.status === "error") {
+                    console.error("External API returned error status:", responseJSON.message);
+                }
+            } catch (e) {
+                // Not JSON, that's fine, we already logged the text
+            }
         } catch (extErr) {
-            console.error("Failed to send to external API:", extErr.message);
+            console.error("Failed to send to external Coupon Slider API:", extErr.message);
         }
+
+        console.log("------------------------------------------");
 
         return new Response(
             JSON.stringify({ success: true, config: updated }),

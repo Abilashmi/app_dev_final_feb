@@ -45,6 +45,8 @@ import {
     ChevronDownIcon,
     ChevronUpIcon,
     XSmallIcon,
+    MobileIcon,
+    DesktopIcon,
 } from "@shopify/polaris-icons";
 
 // --- UTILITY FUNCTIONS ---
@@ -687,21 +689,16 @@ function CouponsSection({ config, onSave, saving }) {
     const [selectedActiveCoupons, setSelectedActiveCoupons] = useState(
         (config?.selectedActiveCoupons || []).map(item => typeof item === 'string' ? item : item.id)
     );
-    // State for per-coupon overrides
+
+    // --- State and Logic ---
     const [couponOverrides, setCouponOverrides] = useState(config?.couponOverrides || {});
-    // State for storing previous coupon texts before change
     const [previousCouponTexts, setPreviousCouponTexts] = useState({});
-
-    // State for preview navigation
     const [activePreviewCouponId, setActivePreviewCouponId] = useState(null);
-
     const [activeCouponsFromAPI, setActiveCouponsFromAPI] = useState([]);
     const [isLoadingActiveCoupons, setIsLoadingActiveCoupons] = useState(false);
     const [showCouponPickerModal, setShowCouponPickerModal] = useState(false);
     const [tempSelectedCouponIds, setTempSelectedCouponIds] = useState([]);
     const [showLimitWarning, setShowLimitWarning] = useState(false);
-
-    // --- Display Condition State ---
     const [displayCondition, setDisplayCondition] = useState(config?.displayCondition || "all");
     const [productHandles, setProductHandles] = useState(config?.productHandles || []);
     const [collectionHandles, setCollectionHandles] = useState(config?.collectionHandles || []);
@@ -709,19 +706,49 @@ function CouponsSection({ config, onSave, saving }) {
     const [handleInput, setHandleInput] = useState("");
     const [collectionInput, setCollectionInput] = useState("");
     const [tagInput, setTagInput] = useState("");
-
-    // --- Accordion open/close state (per-coupon) ---
-    // NO LONGER USED: Replacing accordions with focused editor
-    // const [openSections, setOpenSections] = useState({});
     const [currentlyEditingCouponId, setCurrentlyEditingCouponId] = useState(null);
-    const [openSections, setOpenSections] = useState([]); // All sections closed by default
+    const [openSections, setOpenSections] = useState([]);
 
-    const toggleSection = (sectionId) => {
-        setOpenSections(prev =>
-            prev.includes(sectionId)
-                ? prev.filter(s => s !== sectionId)
-                : [...prev, sectionId]
-        );
+    // Derived logic for preview
+    const previewCouponId = activePreviewCouponId || (selectedActiveCoupons.length > 0 ? selectedActiveCoupons[0] : null);
+    const previewCoupon = previewCouponId
+        ? activeCouponsFromAPI.find(c => String(c.id) === String(previewCouponId))
+        : null;
+    const baseTemplate = templates[activeTemplate];
+    const activeOverride = activePreviewCouponId ? (couponOverrides[activePreviewCouponId] || {}) : {};
+
+    const effectiveHeading = activeOverride.headingText !== undefined
+        ? activeOverride.headingText
+        : (previewCoupon ? (previewCoupon.code || previewCoupon.label) : baseTemplate?.headingText);
+
+    const effectiveSubtext = activeOverride.subtextText !== undefined
+        ? activeOverride.subtextText
+        : (previewCoupon ? (previewCoupon.description || previewCoupon.label) : baseTemplate?.subtextText);
+
+    const currentTemplate = {
+        ...(baseTemplate || {}),
+        ...activeOverride,
+        headingText: effectiveHeading,
+        subtextText: effectiveSubtext
+    };
+
+    // Helper: update a specific coupon's override field
+    const updateCouponOverride = (couponId, field, value) => {
+        setPreviousCouponTexts((prevTexts) => {
+            const prevOverride = couponOverrides[couponId] || {};
+            const prevHeading = prevOverride.headingText !== undefined ? prevOverride.headingText : (previewCoupon ? (previewCoupon.code || previewCoupon.label) : (templates[activeTemplate]?.headingText || ""));
+            const prevSubtext = prevOverride.subtextText !== undefined ? prevOverride.subtextText : (previewCoupon ? (previewCoupon.description || previewCoupon.label) : (templates[activeTemplate]?.subtextText || ""));
+            const code = previewCoupon ? previewCoupon.code : couponId;
+            saveCouponHistory(couponId, code, prevHeading, prevSubtext);
+            return {
+                ...prevTexts,
+                [couponId]: { headingText: prevHeading, subtextText: prevSubtext },
+            };
+        });
+        setCouponOverrides((prev) => ({
+            ...prev,
+            [couponId]: { ...prev[couponId], [field]: value },
+        }));
     };
 
     // Helper: get the effective template for a specific coupon
@@ -746,32 +773,12 @@ function CouponsSection({ config, onSave, saving }) {
         };
     };
 
-    // Helper: update a specific coupon's override field
-    const updateCouponOverride = (couponId, field, value) => {
-        // Save previous heading and subtext before updating
-        setPreviousCouponTexts((prevTexts) => {
-            const prevOverride = couponOverrides[couponId] || {};
-            const prevHeading = prevOverride.headingText !== undefined ? prevOverride.headingText : (previewCoupon ? (previewCoupon.code || previewCoupon.label) : (templates[activeTemplate]?.headingText || ""));
-            const prevSubtext = prevOverride.subtextText !== undefined ? prevOverride.subtextText : (previewCoupon ? (previewCoupon.description || previewCoupon.label) : (templates[activeTemplate]?.subtextText || ""));
-            // Save to file
-            const code = previewCoupon ? previewCoupon.code : couponId;
-            saveCouponHistory(couponId, code, prevHeading, prevSubtext);
-            return {
-                ...prevTexts,
-                [couponId]: {
-                    headingText: prevHeading,
-                    subtextText: prevSubtext,
-                },
-            };
-        });
-        setCouponOverrides((prev) => ({
-            ...prev,
-            [couponId]: {
-                ...prev[couponId],
-                [field]: value,
-            },
-        }));
+    const toggleSection = (sectionId) => {
+        setOpenSections(prev =>
+            prev.includes(sectionId) ? prev.filter(s => s !== sectionId) : [...prev, sectionId]
+        );
     };
+
 
     // Fetch active coupons from Shopify Admin API
     useEffect(() => {
@@ -858,6 +865,21 @@ function CouponsSection({ config, onSave, saving }) {
     const handleCouponPickerCancel = () => {
         setTempSelectedCouponIds([]);
         setShowCouponPickerModal(false);
+    };
+
+    const handleRemoveCoupon = (couponId) => {
+        const updated = selectedActiveCoupons.filter(id => id !== couponId);
+        setSelectedActiveCoupons(updated);
+
+        // If we were editing the removed coupon, switch to another one
+        if (currentlyEditingCouponId === couponId) {
+            const nextIdx = selectedActiveCoupons.indexOf(couponId);
+            const nextCouponId = updated.length > 0
+                ? (updated[nextIdx] || updated[updated.length - 1])
+                : null;
+            setCurrentlyEditingCouponId(nextCouponId);
+            setActivePreviewCouponId(nextCouponId);
+        }
     };
 
     const handleTemplateSelect = (templateKey) => {
@@ -1019,34 +1041,6 @@ function CouponsSection({ config, onSave, saving }) {
         setDisplayTags(displayTags.filter(t => t !== tag));
     };
 
-    // Determine preview content based on selected coupon (or active preview one)
-    const previewCouponId = activePreviewCouponId || (selectedActiveCoupons.length > 0 ? selectedActiveCoupons[0] : null);
-    const previewCoupon = previewCouponId
-        ? activeCouponsFromAPI.find(c => c.id === previewCouponId)
-        : null;
-
-    // Calculate effective template settings (Global + Overrides)
-    const baseTemplate = templates[activeTemplate];
-    const activeOverride = activePreviewCouponId ? (couponOverrides[activePreviewCouponId] || {}) : {};
-
-    // Merge base + overrides, BUT intelligently handle text defaults
-    // If override exists -> Use it
-    // If not, and we have a coupon -> Use coupon code/desc
-    // Else -> Use base template default ("GET 10% OFF!")
-    const effectiveHeading = activeOverride.headingText !== undefined
-        ? activeOverride.headingText
-        : (previewCoupon ? (previewCoupon.code || previewCoupon.label) : baseTemplate.headingText);
-
-    const effectiveSubtext = activeOverride.subtextText !== undefined
-        ? activeOverride.subtextText
-        : (previewCoupon ? (previewCoupon.description || previewCoupon.label) : baseTemplate.subtextText);
-
-    const currentTemplate = {
-        ...baseTemplate,
-        ...activeOverride,
-        headingText: effectiveHeading,
-        subtextText: effectiveSubtext
-    };
 
     const displayHeading = currentTemplate.headingText;
     const displaySubtext = currentTemplate.subtextText;
@@ -1082,15 +1076,29 @@ function CouponsSection({ config, onSave, saving }) {
             </Card>
 
             {/* Two Column Layout: Fixed Preview (420px), Adaptable Customization (Stable 550px height) */}
-            <div style={{ display: "grid", gridTemplateColumns: "420px 1fr", gap: "24px", alignItems: "start" }}>
-                {/* LEFT: Fixed Size Preview */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", alignItems: "start" }}>
+                {/* LEFT: Preview */}
                 <Card>
-                    <div style={{ width: "420px", height: "550px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                        <BlockStack gap="300" align="center">
-                            <Text as="h3" variant="headingMd">Preview</Text>
+                    <div style={{ width: "100%", minHeight: "500px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                        <BlockStack gap="400">
+                            {/* Device Switcher Header */}
+                            <InlineStack align="space-between" blockAlign="center">
+                                <Text as="h3" variant="headingMd">Preview</Text>
+                            </InlineStack>
 
-                            <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-                                {/* Left Arrow */}
+                            {/* Device Container Background */}
+                            <div style={{
+                                width: "100%",
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                padding: "40px 20px",
+                                background: "#f6f6f7",
+                                borderRadius: "12px",
+                                minHeight: "350px",
+                                position: "relative"
+                            }}>
+                                {/* Left Navigation Arrow */}
                                 {selectedActiveCoupons.length > 1 && (
                                     <div
                                         onClick={() => {
@@ -1099,254 +1107,148 @@ function CouponsSection({ config, onSave, saving }) {
                                             setActivePreviewCouponId(prev);
                                         }}
                                         style={{
+                                            position: "absolute",
+                                            left: "15px",
+                                            top: "50%",
+                                            transform: "translateY(-50%)",
                                             cursor: "pointer",
-                                            padding: "8px",
+                                            padding: "10px",
                                             borderRadius: "50%",
                                             background: "#fff",
-                                            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                                            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
                                             display: "flex",
                                             alignItems: "center",
                                             justifyContent: "center",
                                             zIndex: 10,
-                                            transition: "transform 0.2s ease",
+                                            border: "1px solid #eee",
+                                            transition: "all 0.2s ease"
                                         }}
-                                        onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.1)"}
-                                        onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
                                     >
                                         <Icon source={ChevronLeftIcon} tone="base" />
                                     </div>
                                 )}
 
-                                {/* Main Preview Area (Scrollable for long content) */}
+                                {/* Device Frame (Centered) */}
                                 <div style={{
-                                    flex: 1,
-                                    maxHeight: "480px",
-                                    overflowY: "auto",
-                                    paddingRight: "8px",
+                                    width: "100%",
+                                    maxWidth: "460px",
+                                    background: "#fff",
+                                    borderRadius: "8px",
+                                    border: "1px solid #dfe3e8",
+                                    minHeight: "200px",
                                     display: "flex",
                                     flexDirection: "column",
-                                    justifyContent: "center"
+                                    overflow: "hidden",
+                                    boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
+                                    transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+                                    zIndex: 1
                                 }}>
-                                    {/* Template 1: Left Accent Bar — clean card with colored left border */}
-                                    {activeTemplate === "template1" && (
-                                        <div style={{
-                                            borderRadius: `${currentTemplate.borderRadius}px`,
-                                            background: currentTemplate.bgColor,
-                                            borderLeft: `5px solid ${currentTemplate.accentColor}`,
-                                            padding: `${currentTemplate.padding + 10}px ${currentTemplate.padding + 14}px`,
-                                            minHeight: "140px",
-                                            display: "flex", alignItems: "center", gap: "20px",
-                                            width: "100%",
-                                            boxShadow: "0 2px 12px rgba(0,0,0,0.06)"
-                                        }}>
-                                            {/* Text */}
-                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                <div style={{
-                                                    fontSize: `${currentTemplate.fontSize + 4}px`,
-                                                    fontWeight: "800", color: currentTemplate.textColor,
-                                                    lineHeight: 1.2, marginBottom: "6px",
-                                                    overflowWrap: "break-word", wordBreak: "break-word"
-                                                }}>
-                                                    {displayHeading}
-                                                </div>
-                                                <div style={{
-                                                    fontSize: `${currentTemplate.fontSize - 1}px`,
-                                                    color: currentTemplate.textColor, opacity: 0.55,
-                                                    lineHeight: 1.5,
-                                                    overflowWrap: "break-word", wordBreak: "break-word"
-                                                }}>
-                                                    {displaySubtext}
-                                                </div>
-                                            </div>
-                                            {/* Button */}
+                                    {/* Template Content Area */}
+                                    <div style={{
+                                        padding: "32px",
+                                        flex: 1,
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        justifyContent: "center"
+                                    }}>
+                                        {/* Template 1: Left Accent Bar */}
+                                        {activeTemplate === "template1" && (
                                             <div style={{
-                                                padding: "10px 24px",
-                                                background: currentTemplate.buttonColor,
                                                 borderRadius: `${currentTemplate.borderRadius}px`,
-                                                color: currentTemplate.buttonTextColor,
-                                                fontWeight: "700", fontSize: "13px",
-                                                cursor: "pointer", whiteSpace: "nowrap",
-                                                flexShrink: 0
+                                                background: currentTemplate.bgColor,
+                                                borderLeft: `5px solid ${currentTemplate.accentColor}`,
+                                                padding: `${currentTemplate.padding + 10}px ${currentTemplate.padding + 14}px`,
+                                                minHeight: "140px",
+                                                display: "flex", alignItems: "center", gap: "20px",
+                                                width: "100%",
+                                                boxShadow: "0 2px 12px rgba(0,0,0,0.06)"
                                             }}>
-                                                Copy Code
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Template 2: Voucher Ticket — realistic coupon with cutout notches */}
-                                    {activeTemplate === "template2" && (
-                                        <div style={{
-                                            position: "relative",
-                                            width: "100%",
-                                            background: currentTemplate.bgColor,
-                                            borderRadius: `${currentTemplate.borderRadius}px`,
-                                            boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-                                            overflow: "hidden",
-                                            display: "flex", flexDirection: "row",
-                                            minHeight: "160px"
-                                        }}>
-                                            {/* Left notch cutout */}
-                                            <div style={{
-                                                position: "absolute", left: "-10px", top: "50%",
-                                                transform: "translateY(-50%)",
-                                                width: "20px", height: "20px", borderRadius: "50%",
-                                                background: "#f1f1f1", zIndex: 2
-                                            }} />
-                                            {/* Right notch cutout */}
-                                            <div style={{
-                                                position: "absolute", right: "-10px", top: "50%",
-                                                transform: "translateY(-50%)",
-                                                width: "20px", height: "20px", borderRadius: "50%",
-                                                background: "#f1f1f1", zIndex: 2
-                                            }} />
-
-                                            {/* Left: Code section */}
-                                            <div style={{
-                                                width: "35%", display: "flex", flexDirection: "column",
-                                                alignItems: "center", justifyContent: "center",
-                                                padding: "20px",
-                                                background: `${currentTemplate.accentColor}08`
-                                            }}>
-                                                <div style={{
-                                                    fontSize: "10px", fontWeight: "700",
-                                                    color: currentTemplate.accentColor,
-                                                    textTransform: "uppercase", letterSpacing: "2px",
-                                                    marginBottom: "8px"
-                                                }}>
-                                                    Your Code
-                                                </div>
-                                                <div style={{
-                                                    fontSize: "18px", fontWeight: "900",
-                                                    color: currentTemplate.accentColor,
-                                                    fontFamily: "monospace", letterSpacing: "2px",
-                                                    wordBreak: "break-all", overflowWrap: "anywhere",
-                                                    textAlign: "center"
-                                                }}>
-                                                    {previewCoupon?.code || "CODE"}
-                                                </div>
-                                                <div style={{
-                                                    width: "30px", height: "2px", borderRadius: "1px",
-                                                    background: currentTemplate.accentColor,
-                                                    marginTop: "10px", opacity: 0.3
-                                                }} />
-                                            </div>
-
-                                            {/* Dashed tear line */}
-                                            <div style={{
-                                                width: "0px",
-                                                borderLeft: `2px dashed ${currentTemplate.accentColor}25`,
-                                                margin: "16px 0"
-                                            }} />
-
-                                            {/* Right: Details */}
-                                            <div style={{
-                                                flex: 1, padding: `${currentTemplate.padding + 8}px ${currentTemplate.padding + 14}px`,
-                                                display: "flex", flexDirection: "column",
-                                                justifyContent: "center", minWidth: 0
-                                            }}>
-                                                <div style={{
-                                                    fontSize: `${currentTemplate.fontSize + 3}px`,
-                                                    fontWeight: "800", color: currentTemplate.textColor,
-                                                    lineHeight: 1.2, marginBottom: "6px",
-                                                    overflowWrap: "break-word", wordBreak: "break-word"
-                                                }}>
-                                                    {displayHeading}
-                                                </div>
-                                                <div style={{
-                                                    fontSize: `${currentTemplate.fontSize - 1}px`,
-                                                    color: currentTemplate.textColor, opacity: 0.5,
-                                                    lineHeight: 1.5, marginBottom: "14px",
-                                                    overflowWrap: "break-word", wordBreak: "break-word"
-                                                }}>
-                                                    {displaySubtext}
-                                                </div>
-                                                <div style={{
-                                                    padding: "9px 24px",
-                                                    background: currentTemplate.buttonColor,
-                                                    borderRadius: `${currentTemplate.borderRadius}px`,
-                                                    color: currentTemplate.buttonTextColor,
-                                                    fontWeight: "700", fontSize: "12px",
-                                                    cursor: "pointer", alignSelf: "flex-start"
-                                                }}>
-                                                    Redeem Now
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Template 3: Inline Bar — single-row horizontal bar */}
-                                    {activeTemplate === "template3" && (
-                                        <div style={{
-                                            borderRadius: `${currentTemplate.borderRadius}px`,
-                                            background: currentTemplate.bgColor,
-                                            padding: `${currentTemplate.padding + 6}px ${currentTemplate.padding + 12}px`,
-                                            width: "100%",
-                                            boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
-                                            border: `1px solid ${currentTemplate.accentColor}15`
-                                        }}>
-                                            {/* Top: Icon + Text */}
-                                            <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "12px" }}>
-                                                {/* Icon */}
-                                                <div style={{
-                                                    width: "42px", height: "42px", borderRadius: "10px",
-                                                    background: `${currentTemplate.accentColor}12`,
-                                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                                    flexShrink: 0
-                                                }}>
-                                                    <span style={{ fontSize: "20px" }}>🏷️</span>
-                                                </div>
-                                                {/* Text */}
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     <div style={{
-                                                        fontSize: `${currentTemplate.fontSize + 1}px`,
-                                                        fontWeight: "700", color: currentTemplate.textColor,
-                                                        lineHeight: 1.3, marginBottom: "4px",
+                                                        fontSize: `${currentTemplate.fontSize + 4}px`,
+                                                        fontWeight: "800", color: currentTemplate.textColor,
+                                                        lineHeight: 1.2, marginBottom: "6px",
                                                         overflowWrap: "break-word", wordBreak: "break-word"
                                                     }}>
                                                         {displayHeading}
                                                     </div>
                                                     <div style={{
-                                                        fontSize: `${currentTemplate.fontSize - 2}px`,
-                                                        color: currentTemplate.textColor, opacity: 0.5,
-                                                        lineHeight: 1.4,
+                                                        fontSize: `${currentTemplate.fontSize - 1}px`,
+                                                        color: currentTemplate.textColor, opacity: 0.55,
+                                                        lineHeight: 1.5,
                                                         overflowWrap: "break-word", wordBreak: "break-word"
                                                     }}>
                                                         {displaySubtext}
                                                     </div>
                                                 </div>
-                                            </div>
-                                            {/* Bottom: Code + Button */}
-                                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                                {/* Code pill */}
                                                 <div style={{
-                                                    padding: "6px 14px", borderRadius: "6px",
-                                                    border: `1.5px dashed ${currentTemplate.accentColor}55`,
-                                                    color: currentTemplate.accentColor,
-                                                    fontSize: "12px", fontWeight: "700",
-                                                    fontFamily: "monospace", letterSpacing: "1.5px",
-                                                    overflowWrap: "break-word", wordBreak: "break-all",
-                                                    flex: 1, minWidth: 0
-                                                }}>
-                                                    {previewCoupon?.code || "CODE"}
-                                                </div>
-                                                {/* Button */}
-                                                <div style={{
-                                                    padding: "8px 20px",
+                                                    padding: "10px 24px",
                                                     background: currentTemplate.buttonColor,
                                                     borderRadius: `${currentTemplate.borderRadius}px`,
                                                     color: currentTemplate.buttonTextColor,
-                                                    fontWeight: "700", fontSize: "12px",
+                                                    fontWeight: "700", fontSize: "13px",
                                                     cursor: "pointer", whiteSpace: "nowrap",
                                                     flexShrink: 0
                                                 }}>
-                                                    Apply
+                                                    Copy Code
                                                 </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+
+                                        {/* Template 2: Voucher Ticket */}
+                                        {activeTemplate === "template2" && (
+                                            <div style={{
+                                                position: "relative",
+                                                width: "100%",
+                                                background: currentTemplate.bgColor,
+                                                borderRadius: `${currentTemplate.borderRadius}px`,
+                                                boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+                                                overflow: "hidden",
+                                                display: "flex", flexDirection: "row",
+                                                minHeight: "160px"
+                                            }}>
+                                                <div style={{ position: "absolute", left: "-10px", top: "50%", transform: "translateY(-50%)", width: "20px", height: "20px", borderRadius: "50%", background: "#fff", zIndex: 2 }} />
+                                                <div style={{ position: "absolute", right: "-10px", top: "50%", transform: "translateY(-50%)", width: "20px", height: "20px", borderRadius: "50%", background: "#fff", zIndex: 2 }} />
+                                                <div style={{ width: "35%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px", background: `${currentTemplate.accentColor}08` }}>
+                                                    <div style={{ fontSize: "10px", fontWeight: "700", color: currentTemplate.accentColor, textTransform: "uppercase", letterSpacing: "2px", marginBottom: "8px" }}>Your Code</div>
+                                                    <div style={{ fontSize: "18px", fontWeight: "900", color: currentTemplate.accentColor, fontFamily: "monospace", letterSpacing: "2px", wordBreak: "break-all", overflowWrap: "anywhere", textAlign: "center" }}>{previewCoupon?.code || "CODE"}</div>
+                                                </div>
+                                                <div style={{ width: "0px", borderLeft: `2px dashed ${currentTemplate.accentColor}25`, margin: "16px 0" }} />
+                                                <div style={{ flex: 1, padding: `${currentTemplate.padding + 8}px ${currentTemplate.padding + 14}px`, display: "flex", flexDirection: "column", justifyContent: "center", minWidth: 0 }}>
+                                                    <div style={{ fontSize: `${currentTemplate.fontSize + 3}px`, fontWeight: "800", color: currentTemplate.textColor, lineHeight: 1.2, marginBottom: "6px", overflowWrap: "break-word", wordBreak: "break-word" }}>{displayHeading}</div>
+                                                    <div style={{ fontSize: `${currentTemplate.fontSize - 1}px`, color: currentTemplate.textColor, opacity: 0.5, lineHeight: 1.5, marginBottom: "14px", overflowWrap: "break-word", wordBreak: "break-word" }}>{displaySubtext}</div>
+                                                    <div style={{ padding: "9px 24px", background: currentTemplate.buttonColor, borderRadius: `${currentTemplate.borderRadius}px`, color: currentTemplate.buttonTextColor, fontWeight: "700", fontSize: "12px", cursor: "pointer", alignSelf: "flex-start" }}>Redeem Now</div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Template 3: Inline Bar */}
+                                        {activeTemplate === "template3" && (
+                                            <div style={{
+                                                borderRadius: `${currentTemplate.borderRadius}px`,
+                                                background: currentTemplate.bgColor,
+                                                padding: `${currentTemplate.padding + 6}px ${currentTemplate.padding + 12}px`,
+                                                width: "100%",
+                                                boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+                                                border: `1px solid ${currentTemplate.accentColor}15`
+                                            }}>
+                                                <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "12px" }}>
+                                                    <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: `${currentTemplate.accentColor}12`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><span style={{ fontSize: "20px" }}>🏷️</span></div>
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ fontSize: `${currentTemplate.fontSize + 1}px`, fontWeight: "700", color: currentTemplate.textColor, lineHeight: 1.3, marginBottom: "4px", overflowWrap: "break-word", wordBreak: "break-word" }}>{displayHeading}</div>
+                                                        <div style={{ fontSize: `${currentTemplate.fontSize - 2}px`, color: currentTemplate.textColor, opacity: 0.5, lineHeight: 1.4, overflowWrap: "break-word", wordBreak: "break-word" }}>{displaySubtext}</div>
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                                    <div style={{ padding: "6px 14px", borderRadius: "6px", border: `1.5px dashed ${currentTemplate.accentColor}55`, color: currentTemplate.accentColor, fontSize: "12px", fontWeight: "700", fontFamily: "monospace", letterSpacing: "1.5px", overflowWrap: "break-word", wordBreak: "break-all", flex: 1, minWidth: 0 }}>{previewCoupon?.code || "CODE"}</div>
+                                                    <div style={{ padding: "8px 20px", background: currentTemplate.buttonColor, borderRadius: `${currentTemplate.borderRadius}px`, color: currentTemplate.buttonTextColor, fontWeight: "700", fontSize: "12px", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>Apply</div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
-                                {/* Right Arrow */}
+                                {/* Right Navigation Arrow */}
                                 {selectedActiveCoupons.length > 1 && (
                                     <div
                                         onClick={() => {
@@ -1355,49 +1257,52 @@ function CouponsSection({ config, onSave, saving }) {
                                             setActivePreviewCouponId(next);
                                         }}
                                         style={{
+                                            position: "absolute",
+                                            right: "15px",
+                                            top: "50%",
+                                            transform: "translateY(-50%)",
                                             cursor: "pointer",
-                                            padding: "8px",
+                                            padding: "10px",
                                             borderRadius: "50%",
                                             background: "#fff",
-                                            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+                                            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
                                             display: "flex",
                                             alignItems: "center",
                                             justifyContent: "center",
                                             zIndex: 10,
-                                            transition: "transform 0.2s ease",
+                                            border: "1px solid #eee",
+                                            transition: "all 0.2s ease"
                                         }}
-                                        onMouseEnter={(e) => e.currentTarget.style.transform = "scale(1.1)"}
-                                        onMouseLeave={(e) => e.currentTarget.style.transform = "scale(1)"}
                                     >
                                         <Icon source={ChevronRightIcon} tone="base" />
                                     </div>
                                 )}
-                            </div>
 
-                            {/* Dot Indicators */}
-                            {selectedActiveCoupons.length > 1 && (
-                                <div style={{ display: "flex", justifyContent: "center", gap: "6px", marginTop: "8px" }}>
-                                    {selectedActiveCoupons.map((id) => (
-                                        <div
-                                            key={id}
-                                            onClick={() => setActivePreviewCouponId(id)}
-                                            style={{
-                                                width: activePreviewCouponId === id ? "20px" : "8px",
-                                                height: "8px",
-                                                borderRadius: "10px",
-                                                background: activePreviewCouponId === id ? "#2563eb" : "#d1d5db",
-                                                cursor: "pointer",
-                                                transition: "all 0.3s ease",
-                                            }}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                            <Box paddingBlockStart="200">
-                                <InlineStack align="center">
+                                {/* Dot Indicators */}
+                                {selectedActiveCoupons.length > 1 && (
+                                    <div style={{ display: "flex", justifyContent: "center", gap: "8px", marginTop: "24px" }}>
+                                        {selectedActiveCoupons.map((id) => (
+                                            <div
+                                                key={id}
+                                                onClick={() => setActivePreviewCouponId(id)}
+                                                style={{
+                                                    width: activePreviewCouponId === id ? "24px" : "8px",
+                                                    height: "8px",
+                                                    borderRadius: "4px",
+                                                    background: activePreviewCouponId === id ? "#202223" : "#d1d5db",
+                                                    cursor: "pointer",
+                                                    transition: "all 0.3s ease"
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Template Badge */}
+                                <div style={{ marginTop: "16px" }}>
                                     <Badge tone="success">{currentTemplate.name}</Badge>
-                                </InlineStack>
-                            </Box>
+                                </div>
+                            </div>
                         </BlockStack>
                     </div>
                 </Card>
@@ -1413,19 +1318,31 @@ function CouponsSection({ config, onSave, saving }) {
                                 {selectedActiveCoupons.length > 0 && (
                                     <BlockStack gap="100">
                                         <Text variant="bodySm" fontWeight="medium" tone="subdued">Customize Coupon</Text>
-                                        <Select
-                                            label="Customize Coupon"
-                                            labelHidden
-                                            options={selectedActiveCoupons.map(id => ({
-                                                label: activeCouponsFromAPI.find(c => String(c.id) === String(id))?.code || id,
-                                                value: id
-                                            }))}
-                                            value={currentlyEditingCouponId}
-                                            onChange={(v) => {
-                                                setCurrentlyEditingCouponId(v);
-                                                setActivePreviewCouponId(v);
-                                            }}
-                                        />
+                                        <InlineStack gap="200" blockAlign="center">
+                                            <div style={{ flex: 1 }}>
+                                                <Select
+                                                    label="Customize Coupon"
+                                                    labelHidden
+                                                    options={selectedActiveCoupons.map(id => ({
+                                                        label: activeCouponsFromAPI.find(c => String(c.id) === String(id))?.code || id,
+                                                        value: id
+                                                    }))}
+                                                    value={currentlyEditingCouponId}
+                                                    onChange={(v) => {
+                                                        setCurrentlyEditingCouponId(v);
+                                                        setActivePreviewCouponId(v);
+                                                    }}
+                                                />
+                                            </div>
+                                            <Button
+                                                variant="secondary"
+                                                tone="critical"
+                                                onClick={() => handleRemoveCoupon(currentlyEditingCouponId)}
+                                                icon={XSmallIcon}
+                                            >
+                                                Remove
+                                            </Button>
+                                        </InlineStack>
                                     </BlockStack>
                                 )}
 

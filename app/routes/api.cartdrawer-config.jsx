@@ -104,7 +104,11 @@ function transformFromDB(dbData) {
             ...DEFAULT_SETTINGS.upsell,
             ...upsellData,
             enabled: upsellEnabled,
-        }
+        },
+        // Checkout button & custom CSS — top-level fields in DB response
+        checkoutName: dbData.checkoutName || 'Checkout Now',
+        checkoutFooterText: dbData.checkoutFooterText || 'Shipping and taxes calculated at checkout',
+        customCSS: dbData.customCSS || '',
     };
 
     // Extract coupon selections if present in coupon_data
@@ -114,14 +118,18 @@ function transformFromDB(dbData) {
         allCouponDetails: couponData.allCouponDetails || [],
     };
 
-    return { settings, couponSelections, cartActive };
+    return {
+        settings,
+        couponSelections,
+        cartActive,
+        shop: dbData.shop || dbData.shopDomain || ""
+    };
 }
-
 
 // ---------------- LOADER ----------------
 export async function loader({ request }) {
     const url = new URL(request.url);
-    const shopDomain = url.searchParams.get("shop") || "";
+    const shopDomain = url.searchParams.get("shop") || url.searchParams.get("shopdomain") || "";
 
     const storedCoupons = await getStoredCoupons(shopDomain);
 
@@ -285,6 +293,14 @@ export async function action({ request }) {
         // Save to in-memory store
         savedSettings = data;
 
+        // Normalize shop identifier for external API
+        const shop = data.shop || data.shopDomain || data.Id || "";
+        const payload = {
+            ...data,
+            shop: shop,
+            shopDomain: shop, // Send both to satisfy different PHP backend versions
+        };
+
         // Attempt to forward to external PHP endpoint (optional, non-blocking)
         try {
             const externalResponse = await fetch(
@@ -292,16 +308,26 @@ export async function action({ request }) {
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(data)
+                    body: JSON.stringify(payload)
                 }
             );
 
             if (externalResponse.ok) {
                 const externalResult = await externalResponse.json();
                 console.log("External sync successful:", externalResult);
+                return Response.json({
+                    success: true,
+                    message: "Configuration saved successfully",
+                    external: externalResult
+                });
             } else {
                 const errorText = await externalResponse.text();
                 console.warn(`External sync warning (${externalResponse.status}):`, errorText);
+                return Response.json({
+                    success: false,
+                    error: `External API error: ${errorText}`,
+                    status: externalResponse.status
+                });
             }
         } catch (externalError) {
             // External endpoint is optional - log but don't fail the request

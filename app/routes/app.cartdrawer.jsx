@@ -1653,7 +1653,8 @@ export default function CartDrawerAdmin() {
     const sampleData = {
       Id: SHOP_ID,
       shop: SHOP_ID,
-      cartstatus: targetStatus === 'active' ? 'active' : 'inactive',
+      cartStatus: targetStatus === 'active' ? 1 : 0,
+      cart_status: targetStatus === 'active' ? 1 : 0,
       progress_data: JSON.stringify({
         ...progressBarSettings,
         // Send both to ensure persistence regardless of DB schema expectations
@@ -1697,17 +1698,16 @@ export default function CartDrawerAdmin() {
         ...upsellConfig,
         manualRules: savableManualRules
       }),
-      settings_data: JSON.stringify({
-        checkoutName,
-        checkoutFooterText,
-        customCSS
-      }),
+      checkoutName,
+      checkoutFooterText,
+      customCSS,
+      shopDomain: SHOP_ID, // Add shopDomain to match the field shown in user's latest JSON response
       progress_status: isProgressOn ? 1 : 0,
       coupon_status: isCouponOn ? 1 : 0,
       upsell_status: isUpsellOn ? 1 : 0
     };
 
-    console.log('[Sample API] Sending payload:', sampleData);
+    console.log('[Sample API] Sending payload to /api/cartdrawer-config:', sampleData);
     setIsSaving(true);
 
     try {
@@ -1720,11 +1720,15 @@ export default function CartDrawerAdmin() {
         body: JSON.stringify(sampleData)
       });
 
-      if (response.ok) {
+      const responseBody = await response.json();
+      console.log('[Sample API] Response received:', responseBody);
+
+      if (response.ok && responseBody.success) {
         setSaveToastMessage(`✅ Configuration synced (${targetStatus})`);
         setShowSaveToast(true);
       } else {
-        setSaveToastMessage(`❌ Sample API returned ${response.status}`);
+        const errorMsg = responseBody.error || responseBody.message || `Status ${response.status}`;
+        setSaveToastMessage(`❌ Error: ${errorMsg}`);
         setShowSaveToast(true);
       }
     } catch (error) {
