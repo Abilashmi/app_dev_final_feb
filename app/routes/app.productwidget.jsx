@@ -164,6 +164,19 @@ const FAKE_COUPON_CONFIG = {
             fontSize: 18,
             padding: 20,
         },
+        template4: {
+            name: "Modern Gradient",
+            headingText: "Inherit",
+            subtextText: "Free shipping on orders over ₹500",
+            bgColor: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
+            textColor: "#ffffff",
+            accentColor: "#fbbf24",
+            buttonColor: "#fbbf24",
+            buttonTextColor: "#000000",
+            borderRadius: 20,
+            fontSize: 16,
+            padding: 20,
+        },
     },
 };
 
@@ -1098,217 +1111,184 @@ function CouponsSection({ config, onSave, saving }) {
                                 minHeight: "350px",
                                 position: "relative"
                             }}>
-                                {/* Left Navigation Arrow */}
-                                {selectedActiveCoupons.length > 1 && (
-                                    <div
-                                        onClick={() => {
-                                            const idx = selectedActiveCoupons.indexOf(activePreviewCouponId);
-                                            const prev = idx > 0 ? selectedActiveCoupons[idx - 1] : selectedActiveCoupons[selectedActiveCoupons.length - 1];
-                                            setActivePreviewCouponId(prev);
-                                        }}
-                                        style={{
-                                            position: "absolute",
-                                            left: "15px",
-                                            top: "50%",
-                                            transform: "translateY(-50%)",
-                                            cursor: "pointer",
-                                            padding: "10px",
-                                            borderRadius: "50%",
-                                            background: "#fff",
-                                            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            zIndex: 10,
-                                            border: "1px solid #eee",
-                                            transition: "all 0.2s ease"
-                                        }}
-                                    >
-                                        <Icon source={ChevronLeftIcon} tone="base" />
-                                    </div>
-                                )}
-
-                                {/* Device Frame (Centered) */}
-                                <div style={{
-                                    width: "100%",
-                                    maxWidth: "460px",
-                                    background: "#fff",
-                                    borderRadius: "8px",
-                                    border: "1px solid #dfe3e8",
-                                    minHeight: "200px",
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    overflow: "hidden",
-                                    boxShadow: "0 8px 30px rgba(0,0,0,0.08)",
-                                    transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
-                                    zIndex: 1
-                                }}>
-                                    {/* Template Content Area */}
-                                    <div style={{
-                                        padding: "32px",
-                                        flex: 1,
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        justifyContent: "center"
-                                    }}>
-                                        {/* Template 1: Left Accent Bar */}
+                                {/* Single Card Preview (Old UI) */}
+                                <div style={{ width: "100%", display: "flex", justifyContent: "center" }}>
+                                    <div style={{ width: "100%", maxWidth: "450px" }}>
                                         {activeTemplate === "template1" && (
                                             <div style={{
-                                                borderRadius: `${currentTemplate.borderRadius}px`,
-                                                background: currentTemplate.bgColor,
+                                                backgroundColor: currentTemplate.bgColor,
+                                                borderRadius: `${currentTemplate.borderRadius || 6}px`,
+                                                padding: `${(currentTemplate.padding || 12) + 10}px ${(currentTemplate.padding || 16) + 14}px`,
                                                 borderLeft: `5px solid ${currentTemplate.accentColor}`,
-                                                padding: `${currentTemplate.padding + 10}px ${currentTemplate.padding + 14}px`,
-                                                minHeight: "140px",
-                                                display: "flex", alignItems: "center", gap: "20px",
-                                                width: "100%",
-                                                boxShadow: "0 2px 12px rgba(0,0,0,0.06)"
+                                                boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+                                                display: "flex",
+                                                flexDirection: "row",
+                                                justifyContent: "space-between",
+                                                alignItems: "center",
+                                                gap: "12px"
                                             }}>
-                                                <div style={{ flex: 1, minWidth: 0 }}>
-                                                    <div style={{
-                                                        fontSize: `${currentTemplate.fontSize + 4}px`,
-                                                        fontWeight: "800", color: currentTemplate.textColor,
-                                                        lineHeight: 1.2, marginBottom: "6px",
-                                                        overflowWrap: "break-word", wordBreak: "break-word"
-                                                    }}>
-                                                        {displayHeading}
-                                                    </div>
-                                                    <div style={{
-                                                        fontSize: `${currentTemplate.fontSize - 1}px`,
-                                                        color: currentTemplate.textColor, opacity: 0.55,
-                                                        lineHeight: 1.5,
-                                                        overflowWrap: "break-word", wordBreak: "break-word"
-                                                    }}>
-                                                        {displaySubtext}
-                                                    </div>
+                                                <div style={{ minWidth: 0, flex: 1 }}>
+                                                    <div style={{ fontWeight: 800, fontSize: `${(currentTemplate.fontSize || 13) + 4}px`, color: currentTemplate.textColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentTemplate.headingText}</div>
+                                                    <div style={{ fontSize: `${(currentTemplate.fontSize || 13) - 1}px`, opacity: 0.55, color: currentTemplate.textColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentTemplate.subtextText}</div>
                                                 </div>
-                                                <div style={{
-                                                    padding: "10px 24px",
-                                                    background: currentTemplate.buttonColor,
-                                                    borderRadius: `${currentTemplate.borderRadius}px`,
+                                                <button style={{
+                                                    backgroundColor: currentTemplate.buttonColor,
                                                     color: currentTemplate.buttonTextColor,
-                                                    fontWeight: "700", fontSize: "13px",
-                                                    cursor: "pointer", whiteSpace: "nowrap",
+                                                    border: "none",
+                                                    padding: "10px 24px",
+                                                    borderRadius: `${currentTemplate.borderRadius || 6}px`,
+                                                    fontSize: "13px",
+                                                    fontWeight: 700,
                                                     flexShrink: 0
-                                                }}>
-                                                    Copy Code
-                                                </div>
+                                                }}>Copy Code</button>
                                             </div>
                                         )}
 
-                                        {/* Template 2: Voucher Ticket */}
                                         {activeTemplate === "template2" && (
                                             <div style={{
                                                 position: "relative",
+                                                display: "flex",
+                                                flexDirection: "row",
                                                 width: "100%",
-                                                background: currentTemplate.bgColor,
-                                                borderRadius: `${currentTemplate.borderRadius}px`,
-                                                boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+                                                backgroundColor: currentTemplate.bgColor,
+                                                borderRadius: `${currentTemplate.borderRadius || 6}px`,
                                                 overflow: "hidden",
-                                                display: "flex", flexDirection: "row",
+                                                boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
                                                 minHeight: "160px"
                                             }}>
-                                                <div style={{ position: "absolute", left: "-10px", top: "50%", transform: "translateY(-50%)", width: "20px", height: "20px", borderRadius: "50%", background: "#fff", zIndex: 2 }} />
-                                                <div style={{ position: "absolute", right: "-10px", top: "50%", transform: "translateY(-50%)", width: "20px", height: "20px", borderRadius: "50%", background: "#fff", zIndex: 2 }} />
-                                                <div style={{ width: "35%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "20px", background: `${currentTemplate.accentColor}08` }}>
-                                                    <div style={{ fontSize: "10px", fontWeight: "700", color: currentTemplate.accentColor, textTransform: "uppercase", letterSpacing: "2px", marginBottom: "8px" }}>Your Code</div>
-                                                    <div style={{ fontSize: "18px", fontWeight: "900", color: currentTemplate.accentColor, fontFamily: "monospace", letterSpacing: "2px", wordBreak: "break-all", overflowWrap: "anywhere", textAlign: "center" }}>{previewCoupon?.code || "CODE"}</div>
+                                                <div style={{ position: "absolute", width: "20px", height: "20px", backgroundColor: "#fff", borderRadius: "50%", left: "-10px", top: "50%", transform: "translateY(-50%)", zIndex: 2 }} />
+                                                <div style={{ position: "absolute", width: "20px", height: "20px", backgroundColor: "#fff", borderRadius: "50%", right: "-10px", top: "50%", transform: "translateY(-50%)", zIndex: 2 }} />
+                                                <div style={{ width: "35%", backgroundColor: `${currentTemplate.accentColor}08`, display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: "20px" }}>
+                                                    <div style={{ fontSize: "10px", fontWeight: 700, opacity: 0.6, textTransform: "uppercase", letterSpacing: "2px", color: currentTemplate.accentColor, marginBottom: "8px" }}>Your Code</div>
+                                                    <div style={{ fontSize: "18px", fontWeight: 900, fontFamily: "monospace", letterSpacing: "2px", color: currentTemplate.accentColor }}>{previewCoupon?.code || "CODE"}</div>
                                                 </div>
                                                 <div style={{ width: "0px", borderLeft: `2px dashed ${currentTemplate.accentColor}25`, margin: "16px 0" }} />
-                                                <div style={{ flex: 1, padding: `${currentTemplate.padding + 8}px ${currentTemplate.padding + 14}px`, display: "flex", flexDirection: "column", justifyContent: "center", minWidth: 0 }}>
-                                                    <div style={{ fontSize: `${currentTemplate.fontSize + 3}px`, fontWeight: "800", color: currentTemplate.textColor, lineHeight: 1.2, marginBottom: "6px", overflowWrap: "break-word", wordBreak: "break-word" }}>{displayHeading}</div>
-                                                    <div style={{ fontSize: `${currentTemplate.fontSize - 1}px`, color: currentTemplate.textColor, opacity: 0.5, lineHeight: 1.5, marginBottom: "14px", overflowWrap: "break-word", wordBreak: "break-word" }}>{displaySubtext}</div>
-                                                    <div style={{ padding: "9px 24px", background: currentTemplate.buttonColor, borderRadius: `${currentTemplate.borderRadius}px`, color: currentTemplate.buttonTextColor, fontWeight: "700", fontSize: "12px", cursor: "pointer", alignSelf: "flex-start" }}>Redeem Now</div>
+                                                <div style={{ flex: 1, padding: `${(currentTemplate.padding || 12) + 8}px ${(currentTemplate.padding || 16) + 14}px`, display: "flex", flexDirection: "column", justifyContent: "center", minWidth: 0 }}>
+                                                    <div style={{ fontSize: `${(currentTemplate.fontSize || 13) + 3}px`, fontWeight: 800, color: currentTemplate.textColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentTemplate.headingText}</div>
+                                                    <div style={{ fontSize: `${(currentTemplate.fontSize || 13) - 1}px`, opacity: 0.5, marginBottom: "14px", color: currentTemplate.textColor, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentTemplate.subtextText}</div>
+                                                    <button style={{
+                                                        backgroundColor: currentTemplate.buttonColor,
+                                                        color: currentTemplate.buttonTextColor,
+                                                        border: "none",
+                                                        padding: "9px 24px",
+                                                        borderRadius: `${currentTemplate.borderRadius || 6}px`,
+                                                        fontSize: "12px",
+                                                        fontWeight: 700,
+                                                        alignSelf: "start"
+                                                    }}>Redeem Now</button>
                                                 </div>
                                             </div>
                                         )}
 
-                                        {/* Template 3: Inline Bar */}
                                         {activeTemplate === "template3" && (
                                             <div style={{
-                                                borderRadius: `${currentTemplate.borderRadius}px`,
-                                                background: currentTemplate.bgColor,
-                                                padding: `${currentTemplate.padding + 6}px ${currentTemplate.padding + 12}px`,
                                                 width: "100%",
+                                                backgroundColor: currentTemplate.bgColor,
+                                                borderRadius: `${currentTemplate.borderRadius || 6}px`,
+                                                padding: `${(currentTemplate.padding || 12) + 6}px ${(currentTemplate.padding || 16) + 12}px`,
+                                                display: "flex",
+                                                flexDirection: "column",
                                                 boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
                                                 border: `1px solid ${currentTemplate.accentColor}15`
                                             }}>
                                                 <div style={{ display: "flex", alignItems: "flex-start", gap: "12px", marginBottom: "12px" }}>
-                                                    <div style={{ width: "42px", height: "42px", borderRadius: "10px", background: `${currentTemplate.accentColor}12`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><span style={{ fontSize: "20px" }}>🏷️</span></div>
+                                                    <div style={{ width: "42px", height: "42px", borderRadius: "10px", backgroundColor: `${currentTemplate.accentColor}12`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><span style={{ fontSize: "20px" }}>🏷️</span></div>
                                                     <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ fontSize: `${currentTemplate.fontSize + 1}px`, fontWeight: "700", color: currentTemplate.textColor, lineHeight: 1.3, marginBottom: "4px", overflowWrap: "break-word", wordBreak: "break-word" }}>{displayHeading}</div>
-                                                        <div style={{ fontSize: `${currentTemplate.fontSize - 2}px`, color: currentTemplate.textColor, opacity: 0.5, lineHeight: 1.4, overflowWrap: "break-word", wordBreak: "break-word" }}>{displaySubtext}</div>
+                                                        <div style={{ fontSize: `${(currentTemplate.fontSize || 13) + 1}px`, fontWeight: 700, color: currentTemplate.textColor, lineHeight: 1.3, marginBottom: "4px" }}>{currentTemplate.headingText}</div>
+                                                        <div style={{ fontSize: `${(currentTemplate.fontSize || 13) - 2}px`, opacity: 0.5, color: currentTemplate.textColor }}>{currentTemplate.subtextText}</div>
                                                     </div>
                                                 </div>
                                                 <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                                    <div style={{ padding: "6px 14px", borderRadius: "6px", border: `1.5px dashed ${currentTemplate.accentColor}55`, color: currentTemplate.accentColor, fontSize: "12px", fontWeight: "700", fontFamily: "monospace", letterSpacing: "1.5px", overflowWrap: "break-word", wordBreak: "break-all", flex: 1, minWidth: 0 }}>{previewCoupon?.code || "CODE"}</div>
-                                                    <div style={{ padding: "8px 20px", background: currentTemplate.buttonColor, borderRadius: `${currentTemplate.borderRadius}px`, color: currentTemplate.buttonTextColor, fontWeight: "700", fontSize: "12px", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>Apply</div>
+                                                    <div style={{ padding: "6px 14px", borderRadius: "6px", border: `1.5px dashed ${currentTemplate.accentColor}55`, color: currentTemplate.accentColor, fontSize: "12px", fontWeight: 700, fontFamily: "monospace", letterSpacing: "1.5px", flex: 1, textAlign: "center" }}>{previewCoupon?.code || "CODE"}</div>
+                                                    <button style={{
+                                                        backgroundColor: currentTemplate.buttonColor,
+                                                        color: currentTemplate.buttonTextColor,
+                                                        border: "none",
+                                                        padding: "8px 20px",
+                                                        borderRadius: `${currentTemplate.borderRadius || 6}px`,
+                                                        fontSize: "12px",
+                                                        fontWeight: 700,
+                                                        flexShrink: 0
+                                                    }}>Apply</button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {activeTemplate === "template4" && (
+                                            <div style={{
+                                                width: "100%",
+                                                background: currentTemplate.bgColor,
+                                                borderRadius: `${currentTemplate.borderRadius || 20}px`,
+                                                padding: `${currentTemplate.padding || 20}px`,
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                gap: "16px",
+                                                boxShadow: "0 10px 25px rgba(99, 102, 241, 0.3)",
+                                                color: currentTemplate.textColor,
+                                                overflow: "hidden"
+                                            }}>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                                                    <div style={{
+                                                        width: "50px",
+                                                        height: "50px",
+                                                        borderRadius: "12px",
+                                                        backgroundColor: "rgba(255, 255, 255, 0.2)",
+                                                        backdropFilter: "blur(4px)",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        justifyContent: "center",
+                                                        flexShrink: 0,
+                                                        fontSize: "24px"
+                                                    }}>🏷️</div>
+                                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                                        <div style={{ fontSize: `${(currentTemplate.fontSize || 16) + 2}px`, fontWeight: 800, color: currentTemplate.textColor, marginBottom: "2px" }}>{currentTemplate.headingText}</div>
+                                                        <div style={{ fontSize: `${(currentTemplate.fontSize || 16) - 4}px`, opacity: 0.9, color: currentTemplate.textColor }}>{currentTemplate.subtextText}</div>
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                                    <div style={{
+                                                        flex: 1,
+                                                        padding: "10px",
+                                                        borderRadius: "10px",
+                                                        border: `1.5px dashed rgba(255, 255, 255, 0.5)`,
+                                                        background: "rgba(255, 255, 255, 0.1)",
+                                                        color: currentTemplate.textColor,
+                                                        fontSize: "14px",
+                                                        fontWeight: 700,
+                                                        fontFamily: "monospace",
+                                                        letterSpacing: "2px",
+                                                        textAlign: "center",
+                                                        minWidth: 0
+                                                    }}>{previewCoupon?.code || "VELWO"}</div>
+                                                    <button style={{
+                                                        width: "90px",
+                                                        backgroundColor: currentTemplate.buttonColor,
+                                                        color: currentTemplate.buttonTextColor,
+                                                        border: "none",
+                                                        padding: "10px 0",
+                                                        borderRadius: "30px",
+                                                        fontSize: "14px",
+                                                        fontWeight: 800,
+                                                        flexShrink: 0,
+                                                        boxShadow: "0 4px 10px rgba(0,0,0,0.1)"
+                                                    }}>Apply</button>
                                                 </div>
                                             </div>
                                         )}
                                     </div>
                                 </div>
+                            </div>
 
-                                {/* Right Navigation Arrow */}
-                                {selectedActiveCoupons.length > 1 && (
-                                    <div
-                                        onClick={() => {
-                                            const idx = selectedActiveCoupons.indexOf(activePreviewCouponId);
-                                            const next = idx < selectedActiveCoupons.length - 1 ? selectedActiveCoupons[idx + 1] : selectedActiveCoupons[0];
-                                            setActivePreviewCouponId(next);
-                                        }}
-                                        style={{
-                                            position: "absolute",
-                                            right: "15px",
-                                            top: "50%",
-                                            transform: "translateY(-50%)",
-                                            cursor: "pointer",
-                                            padding: "10px",
-                                            borderRadius: "50%",
-                                            background: "#fff",
-                                            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "center",
-                                            zIndex: 10,
-                                            border: "1px solid #eee",
-                                            transition: "all 0.2s ease"
-                                        }}
-                                    >
-                                        <Icon source={ChevronRightIcon} tone="base" />
-                                    </div>
-                                )}
-
-                                {/* Dot Indicators */}
-                                {selectedActiveCoupons.length > 1 && (
-                                    <div style={{ display: "flex", justifyContent: "center", gap: "8px", marginTop: "24px" }}>
-                                        {selectedActiveCoupons.map((id) => (
-                                            <div
-                                                key={id}
-                                                onClick={() => setActivePreviewCouponId(id)}
-                                                style={{
-                                                    width: activePreviewCouponId === id ? "24px" : "8px",
-                                                    height: "8px",
-                                                    borderRadius: "4px",
-                                                    background: activePreviewCouponId === id ? "#202223" : "#d1d5db",
-                                                    cursor: "pointer",
-                                                    transition: "all 0.3s ease"
-                                                }}
-                                            />
-                                        ))}
-                                    </div>
-                                )}
-
-                                {/* Template Badge */}
-                                <div style={{ marginTop: "16px" }}>
-                                    <Badge tone="success">{currentTemplate.name}</Badge>
-                                </div>
+                            {/* Template Badge */}
+                            <div style={{ marginTop: "16px" }}>
+                                <Badge tone="success">{currentTemplate.name}</Badge>
                             </div>
                         </BlockStack>
                     </div>
                 </Card>
 
                 {/* RIGHT: Customization */}
-                <Card>
+                < Card >
                     <div style={{ height: "550px", overflowY: "auto", position: "relative" }}>
                         <BlockStack gap="300">
                             <Text as="h3" variant="headingMd">Customize: {currentTemplate.name}</Text>
@@ -1742,8 +1722,8 @@ function CouponsSection({ config, onSave, saving }) {
                             )}
                         </BlockStack>
                     </div>
-                </Card>
-            </div>
+                </Card >
+            </div >
 
             <InlineStack align="end" gap="200">
                 <Button onClick={handleDiscard}>

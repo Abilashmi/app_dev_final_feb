@@ -1,6 +1,6 @@
 {
   "actionType": "saveCouponConfig",
-  "activeTemplate": "template3",
+  "activeTemplate": "template2",
   "templateData": {
     "template1": {
       "name": "Classic Banner",
@@ -31,7 +31,8 @@
   },
   "selectedActiveCoupons": [
     "gid://shopify/DiscountCodeNode/1289947381827",
-    "gid://shopify/DiscountAutomaticNode/1291464638531"
+    "gid://shopify/DiscountAutomaticNode/1291464638531",
+    "gid://shopify/DiscountCodeNode/1291464540227"
   ],
   "couponOverrides": {
     "gid://shopify/DiscountCodeNode/1289947381827": {
@@ -41,6 +42,10 @@
     "gid://shopify/DiscountAutomaticNode/1291464638531": {
       "headingText": "guoonftb",
       "subtextText": "guoonftb"
+    },
+    "gid://shopify/DiscountCodeNode/1291464540227": {
+      "headingText": "PSQEP5W9",
+      "subtextText": "PSQEP5W9"
     }
   },
   "shop": "cartapp-2.myshopify.com",
@@ -100,6 +105,25 @@
       "showPrices": true,
       "showAddAllButton": false,
       "interactionType": "copy",
+      "layout": "horizontal"
+    },
+    "template4": {
+      "name": "Modern Gradient",
+      "headingText": "Inherit",
+      "subtextText": "Free shipping on orders over ₹500",
+      "bgColor": "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
+      "textColor": "#ffffff",
+      "accentColor": "#fbbf24",
+      "buttonColor": "#fbbf24",
+      "buttonTextColor": "#000000",
+      "borderRadius": 20,
+      "fontSize": 16,
+      "padding": 20,
+      "borderColor": "transparent",
+      "priceColor": "#ffffff",
+      "showPrices": true,
+      "showAddAllButton": false,
+      "interactionType": "apply",
       "layout": "horizontal"
     }
   },
