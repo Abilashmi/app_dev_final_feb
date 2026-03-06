@@ -1,6 +1,6 @@
 {
   "actionType": "saveCouponConfig",
-  "activeTemplate": "template2",
+  "activeTemplate": "template3",
   "templateData": {
     "template1": {
       "name": "Classic Banner",

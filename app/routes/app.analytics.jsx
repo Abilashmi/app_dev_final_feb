@@ -57,7 +57,7 @@ const FEATURE_DATA = [
   { name: 'Feb 04', revenue: 520, clicks: 260, ctr: 8.4 },
   { name: 'Feb 05', revenue: 460, clicks: 230, ctr: 7.2 },
   { name: 'Feb 06', revenue: 820, clicks: 410, ctr: 12.5 },
-  { name: 'Feb 07', revenue: 740, clicks: 370, ctr: 11.2 },
+  { name: 'Feb 07', revenue: 740, clicks: 370, trend: '+11.2%' },
 ];
 
 const PROGRESS_BAR_DATA = [
@@ -68,6 +68,7 @@ const COLORS = ['#008060', '#005ea2', '#9c6ade', '#e29100'];
 
 export default function AppAnalytics() {
   const { shop } = useLoaderData();
+
   const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState(0);
   const [popoverActive, setPopoverActive] = useState(false);
@@ -93,9 +94,35 @@ export default function AppAnalytics() {
 
   const [isClient, setIsClient] = useState(false);
 
+  const [analytics, setAnalytics] = useState({
+    checkout_click: 0,
+    coupon_click: 0,
+    upsell_click: 0,
+    loading: true,
+    error: false
+  });
+
+  const fetchAnalytics = useCallback(async () => {
+    setAnalytics(prev => ({ ...prev, loading: true, error: false }));
+    try {
+      const response = await fetch(`https://prefixal-turbanlike-britt.ngrok-free.dev/analytics.php?shop=${shop}`);
+      if (!response.ok) throw new Error("Fetch failed");
+      const data = await response.json();
+      setAnalytics({
+        ...data,
+        loading: false,
+        error: false
+      });
+    } catch (err) {
+      console.error("Client-side fetch error:", err);
+      setAnalytics(prev => ({ ...prev, loading: false, error: true }));
+    }
+  }, []);
+
   useEffect(() => {
     setIsClient(true);
-  }, []);
+    fetchAnalytics();
+  }, [fetchAnalytics]);
 
   const [setupSteps, setSetupSteps] = useState([
     { id: 1, title: 'Step 1: Create Coupon', icon: '🎫', content: 'Add coupons to your slide-out drawer to boost conversions.', completed: false, target: '/app/coupons' },
@@ -184,6 +211,7 @@ export default function AppAnalytics() {
                     cursor={{ fill: '#F6F6F7' }}
                   />
                   <Bar yAxisId="left" dataKey="revenue" barSize={40} fill={color} radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="left" dataKey="clicks" barSize={40} fill={color} radius={[4, 4, 0, 0]} />
                   <Line yAxisId="right" type="monotone" dataKey="ctr" stroke="#e29100" strokeWidth={3} dot={{ r: 4, fill: '#e29100' }} activeDot={{ r: 6 }} />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -593,13 +621,51 @@ export default function AppAnalytics() {
         <Box paddingBlockStart="400">
           {selectedTab === 0 && (
             <BlockStack gap="600">
+              {analytics.error && (
+                <Banner tone="critical">
+                  <p>Unable to fetch real-time analytics from <b>{`https://prefixal-turbanlike-britt.ngrok-free.dev`}</b>. Please check your server and CORS settings.</p>
+                </Banner>
+              )}
+              {analytics.loading && (
+                <Box padding="400">
+                  <ProgressBar progress={50} />
+                  <Text variant="bodySm" tone="subdued">Fetching real-time data...</Text>
+                </Box>
+              )}
               <Banner tone="info">
-                <p>Overall performance is up <b>15%</b> compared to last week. Your <b>Upsell Products</b> are leading with highest conversion.</p>
+                <InlineStack align="space-between" blockAlign="center">
+                  <p>Overall performance is up <b>15%</b> compared to last week. Your <b>Upsell Products</b> are leading with highest conversion.</p>
+                  <Button variant="secondary" onClick={fetchAnalytics} loading={analytics.loading}>Refresh Stats</Button>
+                </InlineStack>
               </Banner>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                <Card padding="400">
+                  <BlockStack gap="100">
+                    <Text variant="bodySm" tone="subdued">Checkout Clicks (Total)</Text>
+                    <Text variant="headingXl" fontWeight="bold">{analytics.checkout_click}</Text>
+                    <Text variant="bodySm" tone="success">Real-time status</Text>
+                  </BlockStack>
+                </Card>
+                <Card padding="400">
+                  <BlockStack gap="100">
+                    <Text variant="bodySm" tone="subdued">Coupon Clicks</Text>
+                    <Text variant="headingXl" fontWeight="bold">{analytics.coupon_click}</Text>
+                    <Text variant="bodySm" tone="success">Real-time status</Text>
+                  </BlockStack>
+                </Card>
+                <Card padding="400">
+                  <BlockStack gap="100">
+                    <Text variant="bodySm" tone="subdued">Upsell Clicks</Text>
+                    <Text variant="headingXl" fontWeight="bold">{analytics.upsell_click}</Text>
+                    <Text variant="bodySm" tone="success">Real-time status</Text>
+                  </BlockStack>
+                </Card>
+              </div>
 
               {renderFeatureSection('Coupon Slider', '#008060', [
                 { title: 'Revenue Generated', value: '₹4,500.00', trend: '+12.4%' },
-                { title: 'Coupons Applied', value: '452', trend: '+8.1%' },
+                { title: 'Coupons Applied', value: analytics.coupon_click.toString(), trend: '+8.1%' },
                 { title: 'Avg. Order Value', value: '₹1,240', trend: '+2.3%' },
               ])}
 
@@ -611,7 +677,7 @@ export default function AppAnalytics() {
 
               {renderFeatureSection('Upsell Products', '#9c6ade', [
                 { title: 'Revenue Generated', value: '₹5,820.00', trend: '+20.5%' },
-                { title: 'Add to Carts', value: '2,850', trend: '+18.2%' },
+                { title: 'Add to Carts', value: analytics.upsell_click.toString(), trend: '+18.2%' },
                 { title: 'Upsell CTR', value: '7.4%', trend: '+3.1%' },
               ])}
 
@@ -620,9 +686,9 @@ export default function AppAnalytics() {
           )}
           {selectedTab === 1 && renderSetup()}
           {selectedTab === 2 && renderGuide()}
-        </Box>
-      </Tabs>
-    </Page>
+        </Box >
+      </Tabs >
+    </Page >
   );
 }
 

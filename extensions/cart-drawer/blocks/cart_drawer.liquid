@@ -251,6 +251,7 @@
       const API_BASE = '/apps/cart-app/';
       const CONFIG_API = API_BASE + '/save_cart_drawer.php?shopdomain=' + SHOP;
       const COUPON_API = API_BASE + '/save_coupon.php?shopdomain=' + SHOP;
+      const CLICK_API = API_BASE + '/click.php';
 
       let CONFIG = null;
       let COUPONS = [];
@@ -633,6 +634,33 @@
       document.addEventListener('DOMContentLoaded', ccWatchCartCount);
       window.addEventListener('load', ccWatchCartCount);
 
+      /* =================== EVENT TRACKING =================== */
+
+      async function sendClickEvent(eventType) {
+        try {
+          // Attempt to get shop_id. If not available in CONFIG, use null.
+          const shopId = CONFIG?.id || null;
+          const payload = {
+            shop_id: shopId,
+            domain: SHOP,
+            event_type: eventType,
+          };
+
+          console.log('[CartDrawer] Sending click event:', payload);
+
+          await originalFetch(CLICK_API, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Accept: 'application/json',
+            },
+            body: JSON.stringify(payload),
+          });
+        } catch (e) {
+          console.warn('[CartDrawer] Click tracking failed:', e);
+        }
+      }
+
       /* =================== CART ACTIONS =================== */
 
       // Debounce flag to prevent overlapping updates
@@ -727,6 +755,7 @@
           // Replace any existing coupon with the new one (only 1 at a time)
           appliedCouponCodes = [code];
         }
+        sendClickEvent('coupon_click');
         renderDrawer();
       }
 
@@ -1112,7 +1141,7 @@
           <span style="font-size:18px;color:#0f172a;font-weight:900;">₹${finalTotal.toFixed(0)}</span>
         </div>
       </div>
-      <a href="/checkout" style="text-decoration:none;">
+      <a href="/checkout" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
         <button style="width:100%;padding:16px;background:#111827;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
           Checkout Now <span style="font-size:18px;">→</span>
         </button>
@@ -1513,7 +1542,7 @@
                     line-height:1.2;width:100%;text-align:left;">${escapeHtml(title)}</p>
                   <div style="display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;margin-top:auto;">
                     <span style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
-                    <button onclick="ccAddToCart('${addToCartId}')" class="cc-add-btn" style="padding:4px 10px;font-size:10px;">Add</button>
+                    <button onclick="ccAddToCart('${addToCartId}', true)" class="cc-add-btn" style="padding:4px 10px;font-size:10px;">Add</button>
                   </div>
                 </div>
               </div>
@@ -1535,7 +1564,7 @@
                     )}</p>
                     <span style="font-size:15px;font-weight:800;color:#10b981;">${priceText}</span>
                   </div>
-                  <button onclick="ccAddToCart('${addToCartId}')" class="cc-add-btn" style="padding:10px 24px; font-size:12px; border-radius: 30px; letter-spacing: 0.5px; margin-left:8px;">ADD</button>
+                  <button onclick="ccAddToCart('${addToCartId}', true)" class="cc-add-btn" style="padding:10px 24px; font-size:12px; border-radius: 30px; letter-spacing: 0.5px; margin-left:8px;">ADD</button>
                 </div>
               </div>
             `;
@@ -1614,8 +1643,13 @@
         removeItem(key);
       };
 
-      window.ccAddToCart = function (variantId) {
+      window.ccAddToCart = function (variantId, isUpsell) {
+        if (isUpsell) sendClickEvent('upsell_click');
         addToCart(variantId, 1);
+      };
+
+      window.ccSendClickEvent = function (eventType) {
+        sendClickEvent(eventType);
       };
 
       window.ccApplyCoupon = function (code) {
