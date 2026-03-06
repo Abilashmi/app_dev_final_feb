@@ -6,16 +6,397 @@
 }
 {% endschema %}
 
-{{ 'coupon_slider.css' | asset_url | stylesheet_tag }}
-
 <div
   id="ps-coupon-slider-{{ block.id }}"
   data-shop="{{ shop.permanent_domain }}"
-  data-product-handle="{{ product.handle }}"
-  data-collection-handles="{% for collection in product.collections %}{{ collection.handle }}{% unless forloop.last %},{% endunless %}{% endfor %}"
-  data-current-collection="{{ collection.handle }}"
 >
   <div>Loading coupons...</div>
 </div>
 
-<script src="{{ 'coupon_slider.js' | asset_url }}" defer="defer"></script>
+<script>
+  (function () {
+    const container = document.getElementById('ps-coupon-slider-{{ block.id }}');
+    const shopDomain = container.dataset.shop;
+
+    const API_URL =
+      'https://blueviolet-clam-512487.hostingersite.com/save_coupon_slider_widget.php?shopdomain=' + shopDomain;
+
+    fetch(API_URL)
+      .then((res) => res.json())
+      .then((response) => {
+        if (!response || response.status !== 'success') {
+          container.innerHTML = 'No coupons available.';
+          return;
+        }
+
+        const data = response.data;
+        const selectedTemplate = data.selectedTemplate;
+
+        let defaultStyle = {};
+        let couponStyleMap = {};
+        let couponIds = data.selectedTemplateCoupon || [];
+
+        if (selectedTemplate === 'template1') {
+          defaultStyle = data.temp1DefaultStyle || {};
+          couponStyleMap = data.temp1CouponStyle || {};
+        } else if (selectedTemplate === 'template2') {
+          defaultStyle = data.temp2DefaultStyle || {};
+          couponStyleMap = data.temp2CouponStyle || {};
+        } else {
+          defaultStyle = data.temp3DefaultStyle || {};
+          couponStyleMap = data.temp3CouponStyle || {};
+        }
+
+        if (!couponIds.length) {
+          container.innerHTML = 'No coupons configured.';
+          return;
+        }
+
+        renderSlider(container, selectedTemplate, defaultStyle, couponIds, couponStyleMap);
+      })
+      .catch(() => {
+        container.innerHTML = 'Error loading coupons.';
+      });
+
+    function renderSlider(container, template, defaultStyle, couponIds, couponStyleMap) {
+      container.innerHTML = `
+<div class="ps-slider">
+
+  <div class="ps-slider-header">
+      <div class="ps-nav-group">
+          <button class="ps-nav ps-prev">&#8592;</button>
+          <button class="ps-nav ps-next">&#8594;</button>
+      </div>
+  </div>
+
+  <div class="ps-coupon-wrapper"></div>
+
+</div>
+`;
+
+      const wrapper = container.querySelector('.ps-coupon-wrapper');
+
+      couponIds.forEach((couponId) => {
+        const override = couponStyleMap[couponId] || {};
+        const finalStyle = { ...defaultStyle, ...override };
+
+        const heading = finalStyle.headingText || 'Special Offer';
+        const subtext = finalStyle.subtextText || '';
+        const code = couponId.split('/').pop();
+
+        let card;
+
+        if (template === 'template1') {
+          card = document.createElement('div');
+          card.className = 'ps-template1';
+
+          card.innerHTML = `
+<div class="ps-t1-content">
+<div class="ps-t1-text">
+<h2>${heading}</h2>
+<p>${subtext}</p>
+</div>
+<button class="ps-btn" data-code="${code}">Copy Code</button>
+</div>
+`;
+
+          card.style.background = finalStyle.bgColor;
+          card.style.borderLeft = `5px solid ${finalStyle.accentColor}`;
+          card.style.borderRadius = finalStyle.borderRadius + 'px';
+        }
+
+        if (template === 'template2') {
+          card = document.createElement('div');
+          card.className = 'ps-template2';
+
+          card.innerHTML = `
+
+<div class="ps-t2-left">
+<span class="ps-label">CODE</span>
+<span class="ps-code">${code}</span>
+</div>
+
+<div class="ps-divider"></div>
+
+<div class="ps-t2-right">
+<h2>${heading}</h2>
+<p>${subtext}</p>
+<button class="ps-btn" data-code="${code}">Redeem</button>
+</div>
+
+`;
+
+          card.style.background = finalStyle.bgColor;
+          card.style.borderRadius = finalStyle.borderRadius + 'px';
+        }
+
+        if (template === 'template3') {
+          card = document.createElement('div');
+          card.className = 'ps-template3';
+
+          card.innerHTML = `
+<div class="ps-icon">🏷️</div>
+
+<div class="ps-text">
+<h3>${heading}</h3>
+<p>${subtext}</p>
+</div>
+
+<div class="ps-code-pill">${code}</div>
+
+<button class="ps-btn" data-code="${code}">Apply</button>
+`;
+
+          card.style.background = finalStyle.bgColor;
+          card.style.borderRadius = finalStyle.borderRadius + 'px';
+        }
+
+        wrapper.appendChild(card);
+      });
+
+      const nextBtn = container.querySelector('.ps-next');
+      const prevBtn = container.querySelector('.ps-prev');
+
+      // slider navigation
+      if (nextBtn && prevBtn && wrapper) {
+        nextBtn.addEventListener('click', () => {
+          wrapper.scrollBy({
+            left: 320,
+            behavior: 'smooth',
+          });
+        });
+
+        prevBtn.addEventListener('click', () => {
+          wrapper.scrollBy({
+            left: -320,
+            behavior: 'smooth',
+          });
+        });
+      }
+
+      // coupon copy button
+      container.addEventListener('click', function (e) {
+        if (e.target.classList.contains('ps-btn')) {
+          const code = e.target.dataset.code;
+
+          navigator.clipboard.writeText(code).then(() => {
+            const originalText = e.target.innerText;
+
+            e.target.innerText = 'Copied';
+
+            setTimeout(() => {
+              e.target.innerText = originalText;
+            }, 1500);
+          });
+        }
+      });
+    }
+  })();
+</script>
+
+<style>
+  /* SLIDER */
+  .ps-slider {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .ps-slider-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+  }
+
+  .ps-nav-group {
+    display: flex;
+    gap: 10px;
+  }
+
+  /* COUPON WRAPPER — horizontal scroll layout */
+  .ps-coupon-wrapper {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 16px;
+    padding: 10px 0;
+    scroll-behavior: smooth;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .ps-coupon-wrapper::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* NAVIGATION */
+  .ps-nav {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid #ddd;
+    background: white;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+
+  .ps-nav:hover {
+    background: #f3f3f3;
+  }
+
+  /* TEMPLATE 1 — cards stretch to fill */
+  .ps-template1 {
+    flex: 1 1 220px;
+    min-width: 220px;
+    padding: 20px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    box-sizing: border-box;
+  }
+
+  .ps-t1-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ps-t1-text h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+  }
+
+  .ps-t1-text p {
+    margin: 0;
+    opacity: 0.6;
+  }
+
+  /* TEMPLATE 2 — cards stretch to fill */
+  .ps-template2 {
+    display: flex;
+    flex: 1 1 260px;
+    min-width: 260px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    box-sizing: border-box;
+  }
+
+  .ps-t2-left {
+    width: 40%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.03);
+  }
+
+  .ps-code {
+    font-size: 18px;
+    font-weight: 900;
+    font-family: monospace;
+    word-break: break-all;
+  }
+
+  .ps-divider {
+    border-left: 2px dashed rgba(0, 0, 0, 0.2);
+  }
+
+  .ps-t2-right {
+    flex: 1;
+    padding: 20px;
+  }
+
+  .ps-t2-right h2 {
+    margin: 0 0 6px;
+    font-size: 16px;
+  }
+
+  .ps-t2-right p {
+    margin: 0 0 10px;
+    opacity: 0.6;
+  }
+
+  /* TEMPLATE 3 — cards stretch to fill */
+  .ps-template3 {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 1 1 280px;
+    min-width: 280px;
+    padding: 20px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    box-sizing: border-box;
+  }
+
+  .ps-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.05);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .ps-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .ps-text h3 {
+    margin: 0;
+    font-size: 17px;
+  }
+
+  .ps-text p {
+    margin: 2px 0 0;
+    opacity: 0.6;
+  }
+
+  .ps-code-pill {
+    border: 1px dashed currentColor;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-family: monospace;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  /* BUTTON */
+  .ps-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    background: black;
+    color: white;
+    white-space: nowrap;
+  }
+
+  /* MOBILE */
+  @media (max-width: 768px) {
+    .ps-coupon-wrapper {
+      padding: 10px;
+      gap: 12px;
+    }
+
+    .ps-nav {
+      width: 32px;
+      height: 32px;
+    }
+
+    /* On small screens, cards fit screen width */
+    .ps-template1,
+    .ps-template2,
+    .ps-template3 {
+      flex: 0 0 85vw;
+      min-width: 0;
+    }
+  }
+</style>
