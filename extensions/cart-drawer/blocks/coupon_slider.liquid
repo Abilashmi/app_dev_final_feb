@@ -8,7 +8,6 @@ var _cache={};
 function getStyles(d,tpl){
   if(tpl==='template1')return{def:d.temp1DefaultStyle||{},map:d.temp1CouponStyle||{},conds:d.temp1CouponCondition||[]};
   if(tpl==='template2')return{def:d.temp2DefaultStyle||{},map:d.temp2CouponStyle||{},conds:d.temp2CouponCondition||[]};
-  if(tpl==='template3')return{def:d.temp3DefaultStyle||{},map:d.temp3CouponStyle||{},conds:d.temp3CouponCondition||[]};
   return{def:d.temp3DefaultStyle||{},map:d.temp3CouponStyle||{},conds:d.temp3CouponCondition||[]};
 }
 
@@ -116,37 +115,6 @@ function buildCard(tpl,s,code,h,sub){
         +'</button>'
       +'</div>';
 
-  }else{
-    /* ── Template 4: Modern Gradient ─────────────────────────────────────
-       Gradient bg · glass icon · monospace code box (dashed white) · Apply pill btn */
-    card.style.cssText=
-      'background:'+bg+';'
-      +'border-radius:'+br+'px;'
-      +'padding:'+p+'px;'
-      +'display:flex;flex-direction:column;gap:16px;'
-      +'box-shadow:0 10px 25px rgba(99,102,241,0.3);'
-      +'overflow:hidden;'
-      +'flex:1 1 280px;min-width:280px;box-sizing:border-box;';
-    card.innerHTML=
-      /* top row: glass icon + heading+subtext */
-      '<div style="display:flex;align-items:center;gap:12px;">'
-        +'<div style="width:50px;height:50px;border-radius:12px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:24px;">🏷️</div>'
-        +'<div style="flex:1;min-width:0;">'
-          +'<div style="font-size:'+( fs+2 )+'px;font-weight:800;color:'+tc+';margin-bottom:2px;">'+h+'</div>'
-          +'<div style="font-size:'+( fs-4 )+'px;opacity:0.9;color:'+tc+';">'+sub+'</div>'
-        +'</div>'
-      +'</div>'
-      /* bottom row: dashed code box + Apply pill */
-      +'<div style="display:flex;align-items:center;gap:10px;">'
-        +'<div style="flex:1;padding:10px;border-radius:10px;border:1.5px dashed rgba(255,255,255,0.5);background:rgba(255,255,255,0.1);color:'+tc+';font-size:14px;font-weight:700;font-family:monospace;letter-spacing:2px;text-align:center;min-width:0;">'+code+'</div>'
-        +'<button class="ps-btn" data-code="'+code+'" style="'
-          +'width:90px;background:'+bc+';color:'+btc+';border:none;'
-          +'padding:10px 0;border-radius:30px;'
-          +'font-size:14px;font-weight:800;flex-shrink:0;cursor:pointer;'
-          +'box-shadow:0 4px 10px rgba(0,0,0,0.1);">'
-          +'Apply'
-        +'</button>'
-      +'</div>';
   }
 
   return card;
@@ -184,8 +152,9 @@ function renderSlider(el,data){
     var cond=conds.find(function(c){return c.couponId===id;})||{};
 
     var code=storedCode||cond.couponCode||s.couponCode||id.split('/').pop();
-    var h=storedH!==null?storedH:(cond.headingText!==undefined?cond.headingText:(ov.headingText!==undefined?ov.headingText:code));
-    var sub=storedSub!==null?storedSub:(cond.subtextText!==undefined?cond.subtextText:(ov.subtextText||''));
+    /* Priority: embedded item.h → condition.headingText → override.headingText → template default headingText → coupon code */
+    var h=storedH!==null?storedH:(cond.headingText!==undefined?cond.headingText:(ov.headingText!==undefined?ov.headingText:(s.headingText||code)));
+    var sub=storedSub!==null?storedSub:(cond.subtextText!==undefined?cond.subtextText:(ov.subtextText!==undefined?ov.subtextText:(s.subtextText||'')));
 
     w.appendChild(buildCard(tpl,s,code,h,sub));
   });
