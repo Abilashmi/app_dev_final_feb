@@ -3,10 +3,16 @@
 
   <style>
     /* ========== OVERLAY & DRAWER ========== */
+    #cc-root {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647; /* max possible z-index — escapes any theme stacking context */
+      pointer-events: none;
+    }
     #cc-overlay {
       position: fixed;
       inset: 0;
-      z-index: 999999;
+      z-index: 2147483647;
       pointer-events: none;
       opacity: 0;
       transition: opacity 0.3s ease;
@@ -232,23 +238,14 @@
       }
     }
 
-    /* ========== SUPPRESS THEME CART UI ========== */
-    /* Hides Dawn's add-to-cart popup and any theme cart-drawer element
-   so only our custom drawer appears. */
-    cart-notification,
-    cart-drawer,
-    .cart-notification,
-    .cart-notification-wrapper {
-      display: none !important;
-    }
   </style>
 
   <script>
     (function () {
-      console.log('[CartDrawer] Custom Cart Loaded - v2.1 (Strict Layout/Direction)');
+      console.log('[CartDrawer] Script loaded ✓');
 
       const SHOP = '{{ shop.permanent_domain }}';
-      const API_BASE = '/apps/cart-app/';
+      const API_BASE = '/apps/cart-app';
       const CONFIG_API = API_BASE + '/save_cart_drawer.php?shopdomain=' + SHOP;
       const COUPON_API = API_BASE + '/save_coupon.php?shopdomain=' + SHOP;
       const CLICK_API = API_BASE + '/click.php';
@@ -256,10 +253,12 @@
       let CONFIG = null;
       let COUPONS = [];
       let appliedCouponCodes = [];
+      let _ccConfigLoading = false;
 
       /* =================== LOAD CONFIG =================== */
 
       async function loadConfig() {
+        _ccConfigLoading = true;
         try {
           const fetchOptions = {
             method: 'GET',
@@ -270,8 +269,8 @@
           };
 
           const [configRes, couponRes] = await Promise.all([
-            fetch(CONFIG_API, fetchOptions),
-            fetch(COUPON_API, fetchOptions).catch(() => null),
+            window.fetch(CONFIG_API, fetchOptions),
+            window.fetch(COUPON_API, fetchOptions).catch(() => null),
           ]);
 
           if (!configRes || !configRes.ok) {
@@ -283,13 +282,11 @@
           if (configJson.status === 'success' && configJson.data) {
             const d = configJson.data;
 
-            const cartActive = d.cartStatus == 1 || d.cart_status == 1 || d.cartstatus === 'active';
-
-            console.log('[CartDrawer] Config fetched:', d);
-            console.log('[CartDrawer] Cart active status:', cartActive);
+            const cartActive =
+              isEnabled(d.cartStatus) || isEnabled(d.cart_status) ||
+              isEnabled(d.cartstatus) || isEnabled(d.status);
 
             if (!cartActive) {
-              console.warn('[CartDrawer] Cart NOT active');
               CONFIG = null;
               return;
             }
@@ -301,24 +298,30 @@
               upsell: parseUpsellData(d),
             };
 
-            // Enrich upsell products with title/price/image from Shopify AJAX API
             await enrichUpsellProducts(CONFIG.upsell);
           }
 
-          // Coupons
           if (couponRes && couponRes.ok) {
             try {
               const couponJson = await couponRes.json();
-
               if (couponJson.status === 'success' && Array.isArray(couponJson.data)) {
                 COUPONS = couponJson.data;
               }
-            } catch (e) {
-              console.warn('[CartDrawer] Coupon JSON parse error', e);
-            }
+            } catch (e) {}
           }
         } catch (e) {
-          console.error('[CartDrawer] Config load error:', e);
+          console.error('[CartDrawer] Config load FAILED:', e);
+          // API failed — use minimal fallback so the drawer can still open
+          if (!CONFIG) {
+            CONFIG = {
+              cartStatus: true,
+              progress: { enabled: false, tiers: [], mode: 'amount', showOnEmpty: false, maxTarget: 1000, barBackgroundColor: '#e2e8f0', barForegroundColor: '#2563eb', borderRadius: 8, completionText: '🎉 All Rewards Unlocked!' },
+              coupon: { enabled: false, selectedActiveCoupons: [], style: 'style-2', position: 'top', layout: 'grid', alignment: 'horizontal', couponOverrides: {}, allCouponDetails: [] },
+              upsell: { enabled: false, manualRules: [], direction: 'vertical', layout: 'carousel', position: 'bottom', showOnEmptyCart: false, showIfInCart: false, limit: 3, buttonText: 'Add to cart', upsellTitle: { text: 'Recommended for you', color: '#111827', bold: false, italic: false, underline: false }, activeTemplate: 'grid' },
+            };
+          }
+        } finally {
+          _ccConfigLoading = false;
         }
       }
 
@@ -369,7 +372,6 @@
         const highestTier = parsedTiers.length > 0 ? Math.max(...parsedTiers.map((t) => t.target)) : 0;
         const maxTarget = highestTier > 0 ? highestTier : parseFloat(data.maxTarget) || 1000;
 
-        console.log('[CartDrawer] parseProgressData — mode:', mode, 'tiers:', parsedTiers, 'maxTarget:', maxTarget);
 
         return {
           enabled,
@@ -483,31 +485,38 @@
                         image: detail.image || sp.images?.[0]?.src || null,
                         variantId: sp.variants[0].id,
                       };
-                      console.log('[CartDrawer] Individually enriched:', detail.handle);
                     }
                   }
                 } catch (innerErr) {
-                  console.warn('[CartDrawer] Individual enrichment failed for', detail.handle, innerErr);
                 }
               }
               // Final warning if still no variantId
               if (!rule.upsellProductDetails[i].variantId) {
-                console.warn('[CartDrawer] No variantId resolved for product:', detail.id || detail.handle);
               }
             }
           }
-          console.log('[CartDrawer] Upsell products enriched from /products.json');
         } catch (e) {
-          console.warn('[CartDrawer] Product enrichment failed:', e);
         }
       }
 
       /* =================== OPEN DRAWER =================== */
 
       async function openDrawer() {
-        console.log('[CartDrawer] Opening drawer...');
-        if (!CONFIG) await loadConfig();
-        if (!CONFIG) return;
+        if (!CONFIG) {
+          // Avoid concurrent loads
+          if (_ccConfigLoading) {
+            // Wait up to 3s for the in-flight load to finish
+            for (let i = 0; i < 30; i++) {
+              await new Promise((r) => setTimeout(r, 100));
+              if (CONFIG) break;
+            }
+          } else {
+            await loadConfig();
+          }
+        }
+        if (!CONFIG) {
+          return;
+        }
         renderDrawer();
       }
 
@@ -537,43 +546,74 @@
 
       /* =================== CART ACTION INTERCEPTS =================== */
 
-      // 1. Fetch intercept — catches AJAX add-to-cart calls
+      // 1. Fetch intercept — catches AJAX add-to-cart calls (only on success)
       const originalFetch = window.fetch;
       window.fetch = async function (...args) {
         const response = await originalFetch.apply(this, args);
         try {
           const url = typeof args[0] === 'string' ? args[0] : args[0] instanceof Request ? args[0].url : '';
-          if (url.includes('/cart/add')) {
-            console.log('[CartDrawer] Fetch /cart/add detected');
+          if (url.includes('/cart/add') && response.ok) {
             scheduleOpenDrawer(350);
           }
         } catch (e) {}
         return response;
       };
 
-      // 2. XHR intercept — catches themes that use XMLHttpRequest
+      // 2. XHR intercept — catches themes that use XMLHttpRequest (only on success)
       const originalXHROpen = XMLHttpRequest.prototype.open;
       XMLHttpRequest.prototype.open = function (method, url) {
         if (url && url.includes('/cart/add')) {
           this.addEventListener('load', function () {
-            console.log('[CartDrawer] XHR /cart/add detected');
-            scheduleOpenDrawer(350);
+            if (this.status >= 200 && this.status < 300) {
+              scheduleOpenDrawer(350);
+            }
           });
         }
         return originalXHROpen.apply(this, arguments);
       };
 
-      // 3. Form submit intercept — catches non-AJAX form submissions
+      // 3. Form submit intercept — prevents page navigation and converts to AJAX
+      // This is critical for themes that do a real form POST to /cart/add
       document.addEventListener('submit', function (e) {
         const form = e.target;
-        if (form && form.action && form.action.includes('/cart/add')) {
-          console.log('[CartDrawer] Form submit /cart/add detected');
-          scheduleOpenDrawer(500);
+        if (!form || !form.action || !form.action.includes('/cart/add')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const formData = new FormData(form);
+        originalFetch('/cart/add.js', { method: 'POST', body: formData })
+          .then(function (res) {
+            if (res.ok) scheduleOpenDrawer(300);
+          })
+          .catch(function () {});
+      }, true); // capture phase — fires before theme JS
+
+      // 3b. Universal cart polling — checks /cart.js every 1.5s and opens drawer
+      // if item_count increases. This catches every add-to-cart regardless of method.
+      (function () {
+        let _ccPollCount = -1;
+        let _ccPollActive = false;
+        function ccPoll() {
+          if (_ccPollActive) return;
+          _ccPollActive = true;
+          originalFetch('/cart.js')
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+              const count = data.item_count || 0;
+              if (_ccPollCount !== -1 && count > _ccPollCount) {
+                scheduleOpenDrawer(150);
+              }
+              _ccPollCount = count;
+            })
+            .catch(function () {})
+            .finally(function () { _ccPollActive = false; });
         }
-      });
+        ccPoll(); // set baseline immediately
+        setInterval(ccPoll, 1500);
+      })();
 
       // 4. Common Shopify theme custom events
-      // Covers Dawn, Debut, Brooklyn, Impulse, Turbo, and most 3rd-party themes
+      // Covers Dawn, Debut, Brooklyn, Impulse, Turbo, Prestige, Broadcast,
+      // Focal, Impact, Symmetry, Flex, Warehouse, Pipeline, District, and most 3rd-party themes
       [
         'cart:item-added',
         'cart:updated',
@@ -583,6 +623,31 @@
         'shopify:cart:added',
         'theme:cart:open',
         'cart:open',
+        // Additional theme events
+        'cart:add-item',
+        'cart:added',
+        'cart.added',
+        'ajaxProduct:added',
+        'ajaxCart:itemAdded',
+        'CartDrawer:open',
+        'cart-drawer:open',
+        'theme:cart:drawer-open',
+        'bc-ajax-add',
+        'product:added',
+        'items:added',
+        'theme:mini-cart:open',
+        'cart:open-drawer',
+        'theme:cart-drawer:open',
+        // Archetype themes (Impulse, Motion, Streamline)
+        'cart:open',
+        'ajaxCart:open',
+        // Debut / vintage
+        'ajaxCart:buildCart',
+        'cart.requestComplete',
+        // Prestige
+        'drawer:open',
+        // General / third-party
+        'cart:build',
       ].forEach(function (evt) {
         document.addEventListener(evt, function () {
           scheduleOpenDrawer(300);
@@ -599,7 +664,34 @@
         function (e) {
           if (
             e.target.closest(
-              '[name="add"],[data-add-to-cart],[data-action="add-to-cart"],.btn-add-to-cart,.add-to-cart,.product-form__submit'
+              '[name="add"],' +
+              '[data-add-to-cart],' +
+              '[data-action="add-to-cart"],' +
+              '.btn-add-to-cart,' +
+              '.add-to-cart,' +
+              '.product-form__submit,' +
+              // Additional theme-specific selectors
+              '.product-form__cart-submit,' +
+              '[data-cart-add],' +
+              '[data-product-add],' +
+              '[data-btn-addtocart],' +
+              '[data-add-to-bag],' +
+              '#AddToCart,' +
+              '.AddToCart,' +
+              '[id^="AddToCart"],' +
+              '[id*="add-to-cart"],' +
+              '[class*="add_to_cart"],' +
+              '[class*="addToCart"],' +
+              '.btn--add-to-cart,' +
+              '.button--add-to-cart,' +
+              '.js-add-to-cart,' +
+              '.js-ajax-submit,' +
+              '[data-product-form-submit],' +
+              '[data-add-to-cart-trigger],' +
+              '.cart__add-btn,' +
+              '.product__add-to-cart,' +
+              '.product-single__cart-submit,' +
+              '[data-testid="cart-drawer-trigger"]'
             )
           ) {
             scheduleOpenDrawer(600);
@@ -608,28 +700,151 @@
         true
       );
 
+      // 5b. Cart icon intercept — opens our drawer when the theme's cart icon is clicked
+      // Covers Dawn, Debut, Brooklyn, Impulse, Focal, Impact, Prestige, Turbo, Flex,
+      // Broadcast, Symmetry, Pipeline, Warehouse, and generic catch-alls
+      document.addEventListener('click', function (e) {
+        const cartTrigger = e.target.closest(
+          // Dawn family
+          '#cart-icon-bubble,' +
+          '.header__icon--cart,' +
+          // Debut / Brooklyn
+          '.site-header__cart,' +
+          '.site-header__cart-toggle,' +
+          // Archetype (Impulse, Motion, Streamline)
+          '.site-nav__link--cart,' +
+          '.js-drawer-open-cart,' +
+          // Maestrooo (Focal, Impact, Warehouse)
+          '[aria-controls="mini-cart"],' +
+          '[aria-controls="sidebar-cart"],' +
+          '[data-action="open-mini-cart"],' +
+          '[data-action="toggle-cart"],' +
+          '[data-action="open-cart"],' +
+          // Prestige
+          '[data-action="open-drawer"],' +
+          '.header__cart-toggle,' +
+          // Out of the Sandbox (Turbo, Flex)
+          '.cart-button,' +
+          '.header-cart,' +
+          '[data-show-cart],' +
+          '.mini_cart-toggle,' +
+          // Broadcast
+          '[data-drawer-trigger="cart-drawer"],' +
+          '.header__cart__link,' +
+          // Symmetry
+          '.cart-link,' +
+          '.toggle-cart,' +
+          // Pipeline
+          '[data-cart-toggle],' +
+          '.header-cart__link,' +
+          // Current theme
+          '[data-testid="cart-drawer-trigger"],' +
+          // Universal catch-alls
+          'a[href="/cart"],' +
+          '[data-ajax-cart-trigger]'
+        );
+        if (cartTrigger) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          openDrawer();
+        }
+      }, true);
+
       // 6. Shopify section rendering events (used when themes reload sections via AJAX)
       document.addEventListener('shopify:section:load', function () {
         if (new URL(location.href).searchParams.get('added')) scheduleOpenDrawer(100);
       });
 
-      // 7. MutationObserver — watches cart count badge as a last-resort fallback.
+      // 7. MutationObserver — watches ALL cart count badges as a last-resort fallback.
       // Fires when count increases, meaning an item was just added.
+      const CC_COUNT_SELECTOR =
+        '[data-cart-count],[data-cart-item-count],[data-item-count],' +
+        '.cart-count,.cart__item-count,.CartCount,#cart-icon-bubble,' +
+        '.cart-item-count,.site-header__cart-count,#cart-count,' +
+        '[data-header-cart-count],.header__cart-count,.nav-cart-count,' +
+        '.cart-link__count,.header-cart-count,.cart__count';
+
       function ccWatchCartCount() {
-        const el = document.querySelector(
-          '[data-cart-count],[data-cart-item-count],.cart-count,.cart__item-count,.CartCount,#cart-icon-bubble'
-        );
-        if (!el || el._ccWatching) return;
-        el._ccWatching = true;
-        let lastCount = parseInt(el.textContent || el.getAttribute('data-cart-count') || 0);
-        new MutationObserver(function () {
-          const now = parseInt(el.textContent || el.getAttribute('data-cart-count') || 0);
-          if (now > lastCount) {
-            scheduleOpenDrawer(200);
-          }
-          lastCount = now;
-        }).observe(el, { childList: true, subtree: true, characterData: true, attributes: true });
+        document.querySelectorAll(CC_COUNT_SELECTOR).forEach(function (el) {
+          if (el._ccWatching) return;
+          el._ccWatching = true;
+          let lastCount = parseInt(el.textContent || el.getAttribute('data-cart-count') || el.getAttribute('data-item-count') || 0);
+          new MutationObserver(function () {
+            const now = parseInt(el.textContent || el.getAttribute('data-cart-count') || el.getAttribute('data-item-count') || 0);
+            if (now > lastCount) {
+              scheduleOpenDrawer(200);
+            }
+            lastCount = now;
+          }).observe(el, { childList: true, subtree: true, characterData: true, attributes: true });
+        });
       }
+
+      // 8. Body MutationObserver — detects when themes dynamically show their
+      // cart drawer/panel by adding an 'open', 'active', or 'is-visible' class.
+      // This is the universal fallback for themes not covered above.
+      (function () {
+        const CC_DRAWER_TAGS = [
+          'cart-notification', 'cart-drawer',   // Dawn family
+          'mini-cart',                           // Focal / Impact
+          'drawer-component', 'sidebar-cart', 'ajax-cart', // other modern themes
+        ];
+        const CC_DRAWER_IDS = [
+          'CartDrawer', 'cart-sidebar', 'MiniCart', 'mini-cart',
+          'ajax-cart', 'CartContainer', 'slideout-cart', 'slide-cart', 'flyout-cart',
+          'sidebar-cart',                        // Prestige / Warehouse
+        ];
+        const CC_OPEN_CLASSES = [
+          'open', 'is-open', 'is-visible', 'active', 'is-active', 'show', 'cart--open',
+          'drawer--is-open',                     // Debut / Brooklyn / Impulse
+          'drawer--open',                        // Prestige / Focal / Impact
+          'drawer--visible',                     // Pipeline / Broadcast
+          'js-drawer-open',                      // Archetype themes (applied to body)
+        ];
+
+        new MutationObserver(function (mutations) {
+          for (const m of mutations) {
+            const el = m.target;
+            if (!el || !el.tagName) continue;
+            // Only watch elements that look like cart panels
+            const isCartEl =
+              CC_DRAWER_TAGS.includes(el.tagName.toLowerCase()) ||
+              CC_DRAWER_IDS.includes(el.id) ||
+              (el.className && typeof el.className === 'string' &&
+                (el.className.includes('cart-drawer') || el.className.includes('mini-cart') ||
+                  el.className.includes('ajax-cart') || el.className.includes('cart-sidebar') ||
+                  el.className.includes('drawer--cart') || el.className.includes('drawer--right') ||
+                  el.className.includes('mini_cart') || el.className.includes('cart_container')));
+            if (!isCartEl) continue;
+            // Check if a visible/open class was just added
+            if (m.type === 'attributes' && m.attributeName === 'class') {
+              const added = CC_OPEN_CLASSES.some((c) => el.classList.contains(c));
+              if (added) scheduleOpenDrawer(200);
+            }
+          }
+        }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['class'] });
+      })();
+
+      // 9. history.pushState intercept — some themes navigate to /cart instead of opening a drawer.
+      // We intercept that and open our drawer instead.
+      (function () {
+        const _origPush = history.pushState.bind(history);
+        history.pushState = function (state, title, url) {
+          if (url && (String(url) === '/cart' || String(url).match(/\/cart(\?.*)?$/))) {
+            scheduleOpenDrawer(300);
+            return;
+          }
+          return _origPush(state, title, url);
+        };
+        const _origReplace = history.replaceState.bind(history);
+        history.replaceState = function (state, title, url) {
+          if (url && (String(url) === '/cart' || String(url).match(/\/cart(\?.*)?$/))) {
+            scheduleOpenDrawer(300);
+            return;
+          }
+          return _origReplace(state, title, url);
+        };
+      })();
+
       ccWatchCartCount();
       document.addEventListener('DOMContentLoaded', ccWatchCartCount);
       window.addEventListener('load', ccWatchCartCount);
@@ -646,7 +861,6 @@
             event_type: eventType,
           };
 
-          console.log('[CartDrawer] Sending click event:', payload);
 
           await originalFetch(CLICK_API, {
             method: 'POST',
@@ -657,7 +871,6 @@
             body: JSON.stringify(payload),
           });
         } catch (e) {
-          console.warn('[CartDrawer] Click tracking failed:', e);
         }
       }
 
@@ -681,7 +894,6 @@
           });
           await renderDrawer();
         } catch (e) {
-          console.error('[CartDrawer] Qty update error:', e);
         } finally {
           _ccUpdating = false;
         }
@@ -696,7 +908,6 @@
           // If variantId looks like a product ID (no variant), try to resolve it
           let resolvedId = variantId;
           if (!resolvedId || String(resolvedId).length < 10) {
-            console.warn('[CartDrawer] addToCart called with potentially non-variant ID:', variantId);
           }
           const res = await originalFetch('/cart/add.js', {
             method: 'POST',
@@ -710,15 +921,12 @@
             setTimeout(() => renderDrawer(), 800);
           } else {
             const errData = await res.json().catch(() => ({}));
-            console.error('[CartDrawer] Add to cart failed:', res.status, errData);
             // If it failed because it's a product ID and not a variant, try resolving
             if (errData.description && errData.description.includes('not found')) {
-              console.warn('[CartDrawer] Attempting variant resolution for product ID:', variantId);
               await resolveAndAddVariant(variantId, quantity);
             }
           }
         } catch (e) {
-          console.error('[CartDrawer] Add to cart error:', e);
         }
       }
 
@@ -729,7 +937,6 @@
           const product = (data.products || []).find((p) => String(p.id) === String(productId));
           if (product && product.variants && product.variants.length > 0) {
             const resolvedVariantId = product.variants[0].id;
-            console.log('[CartDrawer] Resolved variant ID:', resolvedVariantId, 'for product:', productId);
             const addRes = await originalFetch('/cart/add.js', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -740,10 +947,8 @@
               setTimeout(() => renderDrawer(), 800);
             }
           } else {
-            console.error('[CartDrawer] Could not resolve variant for product ID:', productId);
           }
         } catch (e) {
-          console.error('[CartDrawer] Variant resolution error:', e);
         }
       }
 
@@ -799,7 +1004,6 @@
         if (isNaN(percentage) || !isFinite(percentage)) percentage = 0;
         percentage = Math.min(100, Math.max(0, percentage));
 
-        console.log('[CartDrawer] getProgressInfo — val:', currentVal, 'max:', maxTarget, '%:', percentage.toFixed(1));
 
         return { currentVal, maxTarget, completed, upcoming, nextAmount, percentage, mode, tiers };
       }
@@ -989,19 +1193,8 @@
 
         /* ---- UPSELL (TOP POSITION) ---- */
         const upsell = CONFIG.upsell;
-        console.log(
-          '[CartDrawer] Checking top upsell. Enabled:',
-          upsell.enabled,
-          'Pos:',
-          upsell.position,
-          'Empty:',
-          isEmpty,
-          'ShowOnEmpty:',
-          upsell.showOnEmptyCart
-        );
         if (upsell.enabled && upsell.position === 'top' && (upsell.showOnEmptyCart || !isEmpty)) {
           const upsellHtml = renderUpsellSection(cart, upsell);
-          console.log('[CartDrawer] Top upsell HTML length:', upsellHtml.length);
           drawerHtml += upsellHtml;
         }
 
@@ -1075,10 +1268,8 @@
         }
 
         /* ---- UPSELL (BOTTOM POSITION) ---- */
-        console.log('[CartDrawer] Checking bottom upsell. Enabled:', upsell.enabled, 'Pos:', upsell.position);
         if (upsell.enabled && upsell.position === 'bottom' && (upsell.showOnEmptyCart || !isEmpty)) {
           const upsellHtml = renderUpsellSection(cart, upsell);
-          console.log('[CartDrawer] Bottom upsell HTML length:', upsellHtml.length);
           drawerHtml += upsellHtml;
         }
 
@@ -1383,30 +1574,19 @@
       /* =================== UPSELL SECTION RENDERER =================== */
 
       function renderUpsellSection(cart, upsellConfig) {
-        console.log(
-          '[CartDrawer] Rendering upsell section (v2.1). Enabled:',
-          upsellConfig.enabled,
-          'Layout:',
-          upsellConfig.layout,
-          'Direction:',
-          upsellConfig.direction
-        );
         // For the storefront, we use manual rules to determine upsell products
         const cartProductIds = cart.items.map((item) => {
           // Extract numeric product ID from Shopify variant
           return String(item.product_id);
         });
-        console.log('[CartDrawer] Cart Product IDs:', cartProductIds);
 
         let upsellProducts = [];
         let matchedUpsellDetails = [];
 
         if (upsellConfig.manualRules && upsellConfig.manualRules.length > 0) {
-          console.log('[CartDrawer] Found', upsellConfig.manualRules.length, 'manual rules');
           // Collect products from ALL matching rules
           for (const rule of upsellConfig.manualRules) {
             if (!rule.enabled && rule.enabled !== undefined) {
-              console.log('[CartDrawer] Skipping disabled rule:', rule.id);
               continue;
             }
 
@@ -1416,11 +1596,9 @@
             );
             const triggerType = rule.triggerType || 'products';
 
-            console.log('[CartDrawer] Evaluating rule:', rule.id, 'Type:', triggerType, 'Triggers:', triggerIds);
 
             const hasMatch = triggerIds.some((id) => cartProductIds.includes(id));
             if (hasMatch || triggerType === 'all' || triggerIds.length === 0) {
-              console.log('[CartDrawer] Rule MATCHED! Adding products to collection...');
 
               // Add new products to our list
               const ruleProducts = (rule.upsellProductIds || []).map((id) =>
@@ -1445,7 +1623,6 @@
           const beforeFilter = upsellProducts.length;
           upsellProducts = upsellProducts.filter((id) => !cartProductIds.includes(String(id)));
           if (beforeFilter !== upsellProducts.length) {
-            console.log('[CartDrawer] Filtered out', beforeFilter - upsellProducts.length, 'products already in cart');
           }
         }
 
@@ -1454,10 +1631,8 @@
           upsellProducts = upsellProducts.slice(0, upsellConfig.limit);
         }
 
-        console.log('[CartDrawer] Final Upsell Product IDs to show:', upsellProducts);
 
         if (upsellProducts.length === 0) {
-          console.log('[CartDrawer] No upsell products to show.');
           return '';
         }
 
@@ -1686,7 +1861,7 @@
 
       // 2. Patch cart-notification and cart-drawer custom elements (Dawn + others).
       //    We replace open/show so they open our drawer instead of theirs.
-      ['cart-notification', 'cart-drawer'].forEach(function (tag) {
+      ['cart-notification', 'cart-drawer', 'mini-cart', 'drawer-component', 'sidebar-cart', 'ajax-cart'].forEach(function (tag) {
         customElements.whenDefined(tag).then(function () {
           const Proto = customElements.get(tag) && customElements.get(tag).prototype;
           if (!Proto) return;
