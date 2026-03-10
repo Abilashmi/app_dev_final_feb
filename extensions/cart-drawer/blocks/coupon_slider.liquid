@@ -1,402 +1,249 @@
-{% schema %}
-{
-  "name": "Coupon Slider",
-  "target": "section",
-  "settings": []
-}
-{% endschema %}
-
-<div
-  id="ps-coupon-slider-{{ block.id }}"
-  data-shop="{{ shop.permanent_domain }}"
->
-  <div>Loading coupons...</div>
-</div>
-
+{% schema %}{"name":"Coupon Slider","target":"section","settings":[]}{% endschema %}
+<ps-coupon-slider id="ps-coupon-slider-{{ block.id }}" data-shop="{{ shop.permanent_domain }}"><div>Loading coupons...</div></ps-coupon-slider>
 <script>
-  (function () {
-    const container = document.getElementById('ps-coupon-slider-{{ block.id }}');
-    const shopDomain = container.dataset.shop;
+(function(){
+if(customElements.get('ps-coupon-slider'))return;
+var _cache={};
 
-    const API_URL =
-      'https://blueviolet-clam-512487.hostingersite.com/save_coupon_slider_widget.php?shopdomain=' + shopDomain;
+function getStyles(d,tpl){
+  if(tpl==='template1')return{def:d.temp1DefaultStyle||{},map:d.temp1CouponStyle||{},conds:d.temp1CouponCondition||[]};
+  if(tpl==='template2')return{def:d.temp2DefaultStyle||{},map:d.temp2CouponStyle||{},conds:d.temp2CouponCondition||[]};
+  if(tpl==='template3')return{def:d.temp3DefaultStyle||{},map:d.temp3CouponStyle||{},conds:d.temp3CouponCondition||[]};
+  return{def:d.temp3DefaultStyle||{},map:d.temp3CouponStyle||{},conds:d.temp3CouponCondition||[]};
+}
 
-    fetch(API_URL)
-      .then((res) => res.json())
-      .then((response) => {
-        if (!response || response.status !== 'success') {
-          container.innerHTML = 'No coupons available.';
-          return;
-        }
+function buildCard(tpl,s,code,h,sub){
+  var fs=parseInt(s.fontSize)||13;
+  var br=parseInt(s.borderRadius)||6;
+  var p=parseInt(s.padding)||16;
+  var bg=s.bgColor||'#fff';
+  var tc=s.textColor||'#111827';
+  var ac=s.accentColor||'#3b82f6';
+  var bc=s.buttonColor||'#3b82f6';
+  var btc=s.buttonTextColor||'#ffffff';
 
-        const data = response.data;
-        const selectedTemplate = data.selectedTemplate;
+  var card=document.createElement('div');
+  card.className='ps-card';
 
-        let defaultStyle = {};
-        let couponStyleMap = {};
-        let couponIds = data.selectedTemplateCoupon || [];
+  if(tpl==='template1'){
+    /* ── Template 1: Classic Banner ──────────────────────────────────────
+       White/colored bg · left accent bar · ROW: [heading+subtext] [Copy Code btn]
+       Matches admin preview exactly. */
+    card.style.cssText=
+      'background:'+bg+';'
+      +'border-left:5px solid '+ac+';'
+      +'border-radius:'+br+'px;'
+      +'padding:'+((p)+10)+'px '+((p)+14)+'px;'
+      +'box-shadow:0 2px 12px rgba(0,0,0,0.06);'
+      +'display:flex;flex-direction:row;'
+      +'justify-content:space-between;align-items:center;'
+      +'gap:12px;flex:1 1 280px;min-width:280px;box-sizing:border-box;';
+    card.innerHTML=
+      '<div style="min-width:0;flex:1;">'
+        +'<div style="font-weight:800;font-size:'+( fs+4 )+'px;color:'+tc+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+h+'</div>'
+        +'<div style="font-size:'+( fs-1 )+'px;opacity:0.55;color:'+tc+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">'+sub+'</div>'
+      +'</div>'
+      +'<button class="ps-btn" data-code="'+code+'" style="'
+        +'background:'+bc+';color:'+btc+';border:none;'
+        +'padding:10px 24px;border-radius:'+br+'px;'
+        +'font-size:13px;font-weight:700;flex-shrink:0;cursor:pointer;">'
+        +'Copy Code'
+      +'</button>';
 
-        if (selectedTemplate === 'template1') {
-          defaultStyle = data.temp1DefaultStyle || {};
-          couponStyleMap = data.temp1CouponStyle || {};
-        } else if (selectedTemplate === 'template2') {
-          defaultStyle = data.temp2DefaultStyle || {};
-          couponStyleMap = data.temp2CouponStyle || {};
-        } else {
-          defaultStyle = data.temp3DefaultStyle || {};
-          couponStyleMap = data.temp3CouponStyle || {};
-        }
+  }else if(tpl==='template2'){
+    /* ── Template 2: Ticket / Minimal Card ───────────────────────────────
+       Punched-circle ticket with left code panel + right content + Redeem Now btn */
+    card.style.cssText=
+      'background:'+bg+';'
+      +'border-radius:'+br+'px;'
+      +'display:flex;flex-direction:row;'
+      +'overflow:hidden;'
+      +'box-shadow:0 4px 20px rgba(0,0,0,0.08);'
+      +'min-height:160px;'
+      +'flex:1 1 280px;min-width:280px;'
+      +'box-sizing:border-box;position:relative;';
+    card.innerHTML=
+      /* punch-out circles */
+      '<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;left:-10px;top:50%;transform:translateY(-50%);z-index:2;"></div>'
+      +'<div style="position:absolute;width:20px;height:20px;background:#f9fafb;border-radius:50%;right:-10px;top:50%;transform:translateY(-50%);z-index:2;"></div>'
+      /* left panel */
+      +'<div style="width:35%;background:'+ac+'08;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;">'
+        +'<span style="font-size:10px;font-weight:700;opacity:0.6;text-transform:uppercase;letter-spacing:2px;color:'+ac+';margin-bottom:8px;display:block;">Your Code</span>'
+        +'<span style="font-size:18px;font-weight:900;font-family:monospace;letter-spacing:2px;color:'+ac+';word-break:break-all;">'+code+'</span>'
+      +'</div>'
+      /* dashed divider */
+      +'<div style="width:0;border-left:2px dashed '+ac+'25;margin:16px 0;"></div>'
+      /* right panel */
+      +'<div style="flex:1;padding:'+((p)+8)+'px '+((p)+14)+'px;display:flex;flex-direction:column;justify-content:center;min-width:0;">'
+        +'<div style="font-size:'+( fs+3 )+'px;font-weight:800;color:'+tc+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px;">'+h+'</div>'
+        +'<div style="font-size:'+( fs-1 )+'px;opacity:0.5;color:'+tc+';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:14px;">'+sub+'</div>'
+        +'<button class="ps-btn" data-code="'+code+'" style="'
+          +'background:'+bc+';color:'+btc+';border:none;'
+          +'padding:9px 24px;border-radius:'+br+'px;'
+          +'font-size:12px;font-weight:700;align-self:flex-start;cursor:pointer;">'
+          +'Redeem Now'
+        +'</button>'
+      +'</div>';
 
-        if (!couponIds.length) {
-          container.innerHTML = 'No coupons configured.';
-          return;
-        }
+  }else if(tpl==='template3'){
+    /* ── Template 3: Bold & Vibrant ──────────────────────────────────────
+       COLUMN: [icon + heading+subtext row] then [dashed code pill + Apply btn row] */
+    card.style.cssText=
+      'background:'+bg+';'
+      +'border-radius:'+br+'px;'
+      +'padding:'+( p+6 )+'px '+( p+12 )+'px;'
+      +'display:flex;flex-direction:column;'
+      +'box-shadow:0 2px 12px rgba(0,0,0,0.06);'
+      +'border:1px solid '+ac+'15;'
+      +'flex:1 1 260px;min-width:260px;box-sizing:border-box;';
+    card.innerHTML=
+      /* top row: icon + text */
+      '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;">'
+        +'<div style="width:42px;height:42px;border-radius:10px;background:'+ac+'12;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;">🏷️</div>'
+        +'<div style="flex:1;min-width:0;">'
+          +'<div style="font-size:'+( fs+1 )+'px;font-weight:700;color:'+tc+';line-height:1.3;margin-bottom:4px;">'+h+'</div>'
+          +'<div style="font-size:'+( fs-2 )+'px;opacity:0.5;color:'+tc+';">'+sub+'</div>'
+        +'</div>'
+      +'</div>'
+      /* bottom row: code pill + Apply btn */
+      +'<div style="display:flex;align-items:center;gap:10px;">'
+        +'<div style="padding:6px 14px;border-radius:6px;border:1.5px dashed '+ac+'55;color:'+ac+';font-size:12px;font-weight:700;font-family:monospace;letter-spacing:1.5px;flex:1;text-align:center;">'+code+'</div>'
+        +'<button class="ps-btn" data-code="'+code+'" style="'
+          +'background:'+bc+';color:'+btc+';border:none;'
+          +'padding:8px 20px;border-radius:'+br+'px;'
+          +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;">'
+          +'Apply'
+        +'</button>'
+      +'</div>';
 
-        renderSlider(container, selectedTemplate, defaultStyle, couponIds, couponStyleMap);
+  }else{
+    /* ── Template 4: Modern Gradient ─────────────────────────────────────
+       Gradient bg · glass icon · monospace code box (dashed white) · Apply pill btn */
+    card.style.cssText=
+      'background:'+bg+';'
+      +'border-radius:'+br+'px;'
+      +'padding:'+p+'px;'
+      +'display:flex;flex-direction:column;gap:16px;'
+      +'box-shadow:0 10px 25px rgba(99,102,241,0.3);'
+      +'overflow:hidden;'
+      +'flex:1 1 280px;min-width:280px;box-sizing:border-box;';
+    card.innerHTML=
+      /* top row: glass icon + heading+subtext */
+      '<div style="display:flex;align-items:center;gap:12px;">'
+        +'<div style="width:50px;height:50px;border-radius:12px;background:rgba(255,255,255,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:24px;">🏷️</div>'
+        +'<div style="flex:1;min-width:0;">'
+          +'<div style="font-size:'+( fs+2 )+'px;font-weight:800;color:'+tc+';margin-bottom:2px;">'+h+'</div>'
+          +'<div style="font-size:'+( fs-4 )+'px;opacity:0.9;color:'+tc+';">'+sub+'</div>'
+        +'</div>'
+      +'</div>'
+      /* bottom row: dashed code box + Apply pill */
+      +'<div style="display:flex;align-items:center;gap:10px;">'
+        +'<div style="flex:1;padding:10px;border-radius:10px;border:1.5px dashed rgba(255,255,255,0.5);background:rgba(255,255,255,0.1);color:'+tc+';font-size:14px;font-weight:700;font-family:monospace;letter-spacing:2px;text-align:center;min-width:0;">'+code+'</div>'
+        +'<button class="ps-btn" data-code="'+code+'" style="'
+          +'width:90px;background:'+bc+';color:'+btc+';border:none;'
+          +'padding:10px 0;border-radius:30px;'
+          +'font-size:14px;font-weight:800;flex-shrink:0;cursor:pointer;'
+          +'box-shadow:0 4px 10px rgba(0,0,0,0.1);">'
+          +'Apply'
+        +'</button>'
+      +'</div>';
+  }
+
+  return card;
+}
+
+function renderSlider(el,data){
+  var tpl=data.selectedTemplate||'template1';
+  var r=getStyles(data,tpl);
+  var def=r.def,map=r.map,conds=r.conds||[];
+  var ids=data.selectedTemplateCoupon||[];
+  if(!ids.length){el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons configured.</p>';return;}
+
+  el.innerHTML=
+    '<div class="ps-slider">'
+      +'<div class="ps-slider-header">'
+        +'<div class="ps-nav-group">'
+          +'<button class="ps-nav ps-prev">&#8592;</button>'
+          +'<button class="ps-nav ps-next">&#8594;</button>'
+        +'</div>'
+      +'</div>'
+      +'<div class="ps-coupon-wrapper"></div>'
+    +'</div>';
+
+  var w=el.querySelector('.ps-coupon-wrapper');
+
+  ids.forEach(function(item){
+    var isObj=item&&typeof item==='object';
+    var id=isObj?item.id:item;
+    var storedCode=isObj?item.code:null;
+    var storedH=isObj&&item.h!==undefined?item.h:null;
+    var storedSub=isObj&&item.s!==undefined?item.s:null;
+
+    var ov=map[id]||{};
+    var s=Object.assign({},def,ov);
+    var cond=conds.find(function(c){return c.couponId===id;})||{};
+
+    var code=storedCode||cond.couponCode||s.couponCode||id.split('/').pop();
+    var h=storedH!==null?storedH:(cond.headingText!==undefined?cond.headingText:(ov.headingText!==undefined?ov.headingText:code));
+    var sub=storedSub!==null?storedSub:(cond.subtextText!==undefined?cond.subtextText:(ov.subtextText||''));
+
+    w.appendChild(buildCard(tpl,s,code,h,sub));
+  });
+
+  /* Nav scroll */
+  var nxt=el.querySelector('.ps-next'),prv=el.querySelector('.ps-prev');
+  if(nxt&&prv){
+    nxt.addEventListener('click',function(){w.scrollBy({left:320,behavior:'smooth'});});
+    prv.addEventListener('click',function(){w.scrollBy({left:-320,behavior:'smooth'});});
+  }
+
+  /* Copy to clipboard */
+  el.addEventListener('click',function(e){
+    var btn=e.target.closest('.ps-btn');
+    if(!btn)return;
+    var c=btn.dataset.code,t=btn.innerText;
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(c).then(function(){
+        btn.innerText='Copied!';setTimeout(function(){btn.innerText=t;},1500);
+      });
+    }else{
+      var ta=document.createElement('textarea');
+      ta.value=c;document.body.appendChild(ta);ta.select();
+      document.execCommand('copy');document.body.removeChild(ta);
+      btn.innerText='Copied!';setTimeout(function(){btn.innerText=t;},1500);
+    }
+  });
+}
+
+customElements.define('ps-coupon-slider',class extends HTMLElement{
+  connectedCallback(){
+    var el=this,shop=el.dataset.shop;
+    if(_cache[shop]){renderSlider(el,_cache[shop]);return;}
+    var API='/apps/cart-app/save_coupon_slider_widget.php?shopdomain='+shop;
+    fetch(API,{headers:{'ngrok-skip-browser-warning':'true'}})
+      .then(function(r){return r.json();})
+      .then(function(res){
+        if(!res||res.status!=='success'){el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons available.</p>';return;}
+        _cache[shop]=res.data;
+        renderSlider(el,res.data);
       })
-      .catch(() => {
-        container.innerHTML = 'Error loading coupons.';
-      });
-
-    function renderSlider(container, template, defaultStyle, couponIds, couponStyleMap) {
-      container.innerHTML = `
-<div class="ps-slider">
-
-  <div class="ps-slider-header">
-      <div class="ps-nav-group">
-          <button class="ps-nav ps-prev">&#8592;</button>
-          <button class="ps-nav ps-next">&#8594;</button>
-      </div>
-  </div>
-
-  <div class="ps-coupon-wrapper"></div>
-
-</div>
-`;
-
-      const wrapper = container.querySelector('.ps-coupon-wrapper');
-
-      couponIds.forEach((couponId) => {
-        const override = couponStyleMap[couponId] || {};
-        const finalStyle = { ...defaultStyle, ...override };
-
-        const heading = finalStyle.headingText || 'Special Offer';
-        const subtext = finalStyle.subtextText || '';
-        const code = couponId.split('/').pop();
-
-        let card;
-
-        if (template === 'template1') {
-          card = document.createElement('div');
-          card.className = 'ps-template1';
-
-          card.innerHTML = `
-<div class="ps-t1-content">
-<div class="ps-t1-text">
-<h2>${heading}</h2>
-<p>${subtext}</p>
-</div>
-<button class="ps-btn" data-code="${code}">Copy Code</button>
-</div>
-`;
-
-          card.style.background = finalStyle.bgColor;
-          card.style.borderLeft = `5px solid ${finalStyle.accentColor}`;
-          card.style.borderRadius = finalStyle.borderRadius + 'px';
-        }
-
-        if (template === 'template2') {
-          card = document.createElement('div');
-          card.className = 'ps-template2';
-
-          card.innerHTML = `
-
-<div class="ps-t2-left">
-<span class="ps-label">CODE</span>
-<span class="ps-code">${code}</span>
-</div>
-
-<div class="ps-divider"></div>
-
-<div class="ps-t2-right">
-<h2>${heading}</h2>
-<p>${subtext}</p>
-<button class="ps-btn" data-code="${code}">Redeem</button>
-</div>
-
-`;
-
-          card.style.background = finalStyle.bgColor;
-          card.style.borderRadius = finalStyle.borderRadius + 'px';
-        }
-
-        if (template === 'template3') {
-          card = document.createElement('div');
-          card.className = 'ps-template3';
-
-          card.innerHTML = `
-<div class="ps-icon">🏷️</div>
-
-<div class="ps-text">
-<h3>${heading}</h3>
-<p>${subtext}</p>
-</div>
-
-<div class="ps-code-pill">${code}</div>
-
-<button class="ps-btn" data-code="${code}">Apply</button>
-`;
-
-          card.style.background = finalStyle.bgColor;
-          card.style.borderRadius = finalStyle.borderRadius + 'px';
-        }
-
-        wrapper.appendChild(card);
-      });
-
-      const nextBtn = container.querySelector('.ps-next');
-      const prevBtn = container.querySelector('.ps-prev');
-
-      // slider navigation
-      if (nextBtn && prevBtn && wrapper) {
-        nextBtn.addEventListener('click', () => {
-          wrapper.scrollBy({
-            left: 320,
-            behavior: 'smooth',
-          });
-        });
-
-        prevBtn.addEventListener('click', () => {
-          wrapper.scrollBy({
-            left: -320,
-            behavior: 'smooth',
-          });
-        });
-      }
-
-      // coupon copy button
-      container.addEventListener('click', function (e) {
-        if (e.target.classList.contains('ps-btn')) {
-          const code = e.target.dataset.code;
-
-          navigator.clipboard.writeText(code).then(() => {
-            const originalText = e.target.innerText;
-
-            e.target.innerText = 'Copied';
-
-            setTimeout(() => {
-              e.target.innerText = originalText;
-            }, 1500);
-          });
-        }
-      });
-    }
-  })();
+      .catch(function(){el.innerHTML='<p style="color:#ef4444;font-size:14px;padding:16px;">Error loading coupons.</p>';});
+  }
+});
+})();
 </script>
-
 <style>
-  /* SLIDER */
-  .ps-slider {
-    position: relative;
-    width: 100%;
-    max-width: 100%;
-  }
-
-  .ps-slider-header {
-    display: flex;
-    justify-content: flex-end;
-    margin-bottom: 10px;
-  }
-
-  .ps-nav-group {
-    display: flex;
-    gap: 10px;
-  }
-
-  /* COUPON WRAPPER — horizontal scroll layout */
-  .ps-coupon-wrapper {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    gap: 16px;
-    padding: 10px 0;
-    scroll-behavior: smooth;
-    scroll-snap-type: x mandatory;
-    scrollbar-width: none;
-  }
-
-  .ps-coupon-wrapper::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* NAVIGATION */
-  .ps-nav {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: 1px solid #ddd;
-    background: white;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
-    transition: all 0.2s;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  }
-
-  .ps-nav:hover {
-    background: #f3f3f3;
-  }
-
-  /* TEMPLATE 1 — cards stretch to fill */
-  .ps-template1 {
-    flex: 1 1 220px;
-    min-width: 220px;
-    padding: 20px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-    box-sizing: border-box;
-  }
-
-  .ps-t1-content {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .ps-t1-text h2 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 800;
-  }
-
-  .ps-t1-text p {
-    margin: 0;
-    opacity: 0.6;
-  }
-
-  /* TEMPLATE 2 — cards stretch to fill */
-  .ps-template2 {
-    display: flex;
-    flex: 1 1 260px;
-    min-width: 260px;
-    overflow: hidden;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-    box-sizing: border-box;
-  }
-
-  .ps-t2-left {
-    width: 40%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    background: rgba(0, 0, 0, 0.03);
-  }
-
-  .ps-code {
-    font-size: 18px;
-    font-weight: 900;
-    font-family: monospace;
-    word-break: break-all;
-  }
-
-  .ps-divider {
-    border-left: 2px dashed rgba(0, 0, 0, 0.2);
-  }
-
-  .ps-t2-right {
-    flex: 1;
-    padding: 20px;
-  }
-
-  .ps-t2-right h2 {
-    margin: 0 0 6px;
-    font-size: 16px;
-  }
-
-  .ps-t2-right p {
-    margin: 0 0 10px;
-    opacity: 0.6;
-  }
-
-  /* TEMPLATE 3 — cards stretch to fill */
-  .ps-template3 {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    flex: 1 1 280px;
-    min-width: 280px;
-    padding: 20px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-    box-sizing: border-box;
-  }
-
-  .ps-icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
-    background: rgba(0, 0, 0, 0.05);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  .ps-text {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .ps-text h3 {
-    margin: 0;
-    font-size: 17px;
-  }
-
-  .ps-text p {
-    margin: 2px 0 0;
-    opacity: 0.6;
-  }
-
-  .ps-code-pill {
-    border: 1px dashed currentColor;
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-family: monospace;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  /* BUTTON */
-  .ps-btn {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    background: black;
-    color: white;
-    white-space: nowrap;
-  }
-
-  /* MOBILE */
-  @media (max-width: 768px) {
-    .ps-coupon-wrapper {
-      padding: 10px;
-      gap: 12px;
-    }
-
-    .ps-nav {
-      width: 32px;
-      height: 32px;
-    }
-
-    /* On small screens, cards fit screen width */
-    .ps-template1,
-    .ps-template2,
-    .ps-template3 {
-      flex: 0 0 85vw;
-      min-width: 0;
-    }
-  }
+.ps-slider{position:relative;width:100%}
+.ps-slider-header{display:flex;justify-content:flex-end;margin-bottom:10px}
+.ps-nav-group{display:flex;gap:10px}
+.ps-coupon-wrapper{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:16px;padding:10px 0;scroll-behavior:smooth;scrollbar-width:none;-ms-overflow-style:none}
+.ps-coupon-wrapper::-webkit-scrollbar{display:none}
+.ps-nav{width:36px;height:36px;border-radius:50%;border:1px solid #e2e8f0;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
+.ps-nav:hover{background:#f8fafc;border-color:#cbd5e1}
+.ps-card{box-shadow:0 4px 16px rgba(0,0,0,.08)}
+@media(max-width:768px){
+  .ps-coupon-wrapper{gap:12px}
+  .ps-nav{width:32px;height:32px}
+  .ps-card{flex:0 0 85vw!important;min-width:0!important}
+}
 </style>
