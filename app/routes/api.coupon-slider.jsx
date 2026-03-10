@@ -193,7 +193,21 @@ function transformFromDB(dbData) {
     // 1. selectedTemplateCoupon (primary list)
     // 2. IDs present in active template's style overrides
     // 3. IDs present in active template's conditions
-    const idsFromSelected = parseJSONArray(dbData.selectedTemplateCoupon);
+    // Support both old string format ["gid://..."] and new object format [{id,code}]
+    const rawSelectedItems = parseJSONArray(dbData.selectedTemplateCoupon);
+    const embeddedCodes = {};
+    const embeddedHeadings = {};
+    const embeddedSubtexts = {};
+    const idsFromSelected = rawSelectedItems.map(item => {
+        if (item && typeof item === 'object') {
+            const itemId = item.id || '';
+            if (itemId && item.code) embeddedCodes[itemId] = item.code;
+            if (itemId && item.h !== undefined) embeddedHeadings[itemId] = item.h;
+            if (itemId && item.s !== undefined) embeddedSubtexts[itemId] = item.s;
+            return itemId;
+        }
+        return item;
+    }).filter(Boolean);
     const idsFromStyles = Object.keys(activeCouponStyles);
     const idsFromConditions = activeCouponConditions.map(c => c.couponId).filter(Boolean);
 
@@ -225,7 +239,19 @@ function transformFromDB(dbData) {
         if (styleOv.headingText) override.label = styleOv.headingText;
         if (styleOv.subtextText) override.description = styleOv.subtextText;
 
+        // Embedded data from selectedTemplateCoupon (most reliable PHP storage)
+        // Skip codes that are purely numeric — those are GID tails saved by mistake, not real coupon codes
+        const embedded = embeddedCodes[rawCouponId] || embeddedCodes[couponId];
+        if (embedded && !/^\d+$/.test(embedded)) override.couponCode = embedded;
+        const embH = embeddedHeadings[rawCouponId] ?? embeddedHeadings[couponId];
+        if (embH !== undefined) override.headingText = embH;
+        const embS = embeddedSubtexts[rawCouponId] ?? embeddedSubtexts[couponId];
+        if (embS !== undefined) override.subtextText = embS;
+
         if (conditionEntry.displayCondition) override.displayCondition = conditionEntry.displayCondition;
+        if (!override.couponCode && conditionEntry.couponCode) override.couponCode = conditionEntry.couponCode;
+        if (conditionEntry.headingText !== undefined) override.headingText = conditionEntry.headingText;
+        if (conditionEntry.subtextText !== undefined) override.subtextText = conditionEntry.subtextText;
         if (conditionEntry.productHandles?.length) override.productHandles = conditionEntry.productHandles;
         if (conditionEntry.collectionHandles?.length) override.collectionHandles = conditionEntry.collectionHandles;
         if (conditionEntry.displayTags?.length) override.displayTags = conditionEntry.displayTags;
@@ -348,25 +374,23 @@ function transformForDB(data, shopDomain) {
 
     // Helper to build coupon styles & conditions for a template
     function buildCouponData(tplKey) {
-        // We only include coupon data if this is the active template
-        // OR if the user expects all template configurations to be persisted.
-        // Assuming we want to persist what's currently in the config.
         const isActive = data.activeTemplate === tplKey;
         const couponConditions = [];
         const couponStyles = {};
 
-        // If it's active, we use the selectedCoupons
-        // NOTE: The current data structure seems to store overrides globally, 
-        // but the DB has per-template coupon style/condition fields.
         if (isActive) {
             for (const couponId of selectedCoupons) {
                 const ov = overrides[couponId] || {};
 
-                // Build condition
+                // Build condition — also store couponCode + text overrides here since
+                // temp*CouponCondition reliably saves to PHP (temp*CouponStyle may not)
                 const condition = {
                     couponId,
                     displayCondition: ov.displayCondition || "all",
                 };
+                if (ov.couponCode) condition.couponCode = ov.couponCode;
+                if (ov.headingText !== undefined) condition.headingText = ov.headingText;
+                if (ov.subtextText !== undefined) condition.subtextText = ov.subtextText;
                 if (ov.productHandles?.length) condition.productHandles = ov.productHandles;
                 if (ov.collectionHandles?.length) condition.collectionHandles = ov.collectionHandles;
                 if (ov.displayTags?.length) condition.displayTags = ov.displayTags;
@@ -406,7 +430,18 @@ function transformForDB(data, shopDomain) {
         shop: shopDomain || "",
         shopDomain: shopDomain || "",
         selectedTemplate: data.activeTemplate || "template1",
-        selectedTemplateCoupon: JSON.stringify(selectedCoupons),
+        // Store {id, code, h, s} objects so storefront liquid reads them directly
+        // (bypasses unreliable temp*CouponStyle PHP storage)
+        selectedTemplateCoupon: JSON.stringify(selectedCoupons.map(id => {
+            const ov = overrides[id] || {};
+            // Only write code if it's a real coupon string (not a numeric GID tail)
+            const realCode = ov.couponCode && !/^\d+$/.test(ov.couponCode) ? ov.couponCode : null;
+            const item = { id };
+            if (realCode) item.code = realCode;
+            if (ov.headingText !== undefined) item.h = ov.headingText;
+            if (ov.subtextText !== undefined) item.s = ov.subtextText;
+            return item;
+        })),
 
         // Styles (Stringified for PHP DB)
         temp1DefaultStyle: JSON.stringify(buildStyle("template1")),

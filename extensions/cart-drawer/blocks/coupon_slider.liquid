@@ -143,15 +143,21 @@ function renderSlider(el,data){
   ids.forEach(function(item){
     var isObj=item&&typeof item==='object';
     var id=isObj?item.id:item;
-    var storedCode=isObj?item.code:null;
+    var rawStoredCode=isObj?item.code:null;
+    /* Ignore codes that are purely numeric — they are GID tails saved by mistake */
+    var storedCode=(rawStoredCode&&!/^\d+$/.test(rawStoredCode))?rawStoredCode:null;
     var storedH=isObj&&item.h!==undefined?item.h:null;
     var storedSub=isObj&&item.s!==undefined?item.s:null;
 
     var ov=map[id]||{};
     var s=Object.assign({},def,ov);
     var cond=conds.find(function(c){return c.couponId===id;})||{};
+    /* Filter out any purely-numeric coupon codes from condition/style as well */
+    var condCode=(cond.couponCode&&!/^\d+$/.test(cond.couponCode))?cond.couponCode:null;
+    var ovCode=(ov.couponCode&&!/^\d+$/.test(ov.couponCode))?ov.couponCode:null;
+    var sCode=(s.couponCode&&!/^\d+$/.test(s.couponCode))?s.couponCode:null;
 
-    var code=storedCode||cond.couponCode||ov.couponCode||s.couponCode||id.split('/').pop();
+    var code=storedCode||condCode||ovCode||sCode||id.split('/').pop();
     /* Priority: embedded item.h → condition.headingText → override.headingText → template default headingText → coupon code */
     var h=storedH!==null?storedH:(cond.headingText!==undefined?cond.headingText:(ov.headingText!==undefined?ov.headingText:(s.headingText||code)));
     var sub=storedSub!==null?storedSub:(cond.subtextText!==undefined?cond.subtextText:(ov.subtextText!==undefined?ov.subtextText:(s.subtextText||'')));
