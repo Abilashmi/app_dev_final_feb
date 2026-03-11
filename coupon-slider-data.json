@@ -1,6 +1,6 @@
 {
   "actionType": "saveCouponConfig",
-  "activeTemplate": "template2",
+  "activeTemplate": "template3",
   "templateData": {
     "template1": {
       "name": "Classic Banner",
@@ -30,13 +30,31 @@
     }
   },
   "selectedActiveCoupons": [
-    "gid://shopify/DiscountRedeemCode/21741594542373"
+    "gid://shopify/DiscountAutomaticNode/1291464638531",
+    "gid://shopify/DiscountRedeemCode/26833535139907",
+    "gid://shopify/DiscountRedeemCode/26805031010371",
+    "gid://shopify/DiscountRedeemCode/26805030813763"
   ],
   "couponOverrides": {
-    "gid://shopify/DiscountRedeemCode/21741594542373": {
-      "couponCode": "JLJW3J2M",
-      "headingText": "SPECIAL OFFER",
-      "subtextText": "Free shipping on orders over ₹500"
+    "gid://shopify/DiscountAutomaticNode/1291464638531": {
+      "couponCode": "guoonftb",
+      "headingText": "FLASH SALE!",
+      "subtextText": "Use code: BOLD25 for extra 25% OFF"
+    },
+    "gid://shopify/DiscountRedeemCode/26833535139907": {
+      "couponCode": "PSQEP5W9",
+      "headingText": "FLASH SALE!",
+      "subtextText": "Use code: BOLD25 for extra 25% OFF"
+    },
+    "gid://shopify/DiscountRedeemCode/26805031010371": {
+      "couponCode": "velwo",
+      "headingText": "FLASH SALE!",
+      "subtextText": "Use code: BOLD25 for extra 25% OFF"
+    },
+    "gid://shopify/DiscountRedeemCode/26805030813763": {
+      "couponCode": "J62ZTBU1",
+      "headingText": "FLASH SALE!",
+      "subtextText": "Use code: BOLD25 for extra 25% OFF"
     }
   },
   "shop": "cartapp-2.myshopify.com",
