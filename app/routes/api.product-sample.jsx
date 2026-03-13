@@ -52,6 +52,13 @@ const DEFAULT_COUPON_DATA = {
     },
 };
 
+const DEFAULT_AI_SETTINGS = {
+    aiEnabled: false,
+    aiProductCount: 3,
+    maxSuggestions: 3,
+    customPrompt: "",
+};
+
 const DEFAULT_FBT_DATA = {
     activeTemplate: "fbt1",
     mode: "manual",
@@ -99,8 +106,28 @@ const DEFAULT_FBT_DATA = {
             showAddAllButton: true,
         },
     },
+    aiSettings: { ...DEFAULT_AI_SETTINGS },
     manualRules: [],
 };
+
+function normalizeAiSettings(rawSettings) {
+    const source = rawSettings && typeof rawSettings === "object" ? rawSettings : {};
+    const parsedLimit = Number.parseInt(source.aiProductCount ?? source.maxSuggestions, 10);
+    const maxSuggestions = Number.isFinite(parsedLimit)
+        ? Math.min(20, Math.max(1, parsedLimit))
+        : DEFAULT_AI_SETTINGS.maxSuggestions;
+
+    const aiEnabled = source.aiEnabled === true || source.aiEnabled === 1 || source.aiEnabled === "1";
+
+    return {
+        aiEnabled,
+        aiProductCount: maxSuggestions,
+        maxSuggestions,
+        customPrompt: typeof source.customPrompt === "string"
+            ? source.customPrompt.slice(0, 1000)
+            : DEFAULT_AI_SETTINGS.customPrompt,
+    };
+}
 
 /* ---------------- FILE HELPERS ---------------- */
 
@@ -172,7 +199,8 @@ export async function action({ request }) {
                 activeTemplate,
                 templateData: rawTemplateData,
                 mode,
-                configData: rawConfigData
+                configData: rawConfigData,
+                aiSettings: rawAiSettings,
             } = data;
 
             const templates = typeof rawTemplateData === "string"
@@ -182,6 +210,17 @@ export async function action({ request }) {
             const manualRules = typeof rawConfigData === "string"
                 ? JSON.parse(rawConfigData)
                 : (rawConfigData || []);
+
+            let parsedAiSettings = rawAiSettings;
+            if (typeof parsedAiSettings === "string") {
+                try {
+                    parsedAiSettings = JSON.parse(parsedAiSettings);
+                } catch {
+                    parsedAiSettings = null;
+                }
+            }
+
+            const aiSettings = normalizeAiSettings(parsedAiSettings);
 
             const activeTpl = templates[activeTemplate] || {};
 
@@ -231,6 +270,7 @@ export async function action({ request }) {
                 templates,
                 mode,
                 manualRules,
+                aiSettings,
                 // New structured fields
                 selectedTemplate,
                 interactionStyle,
@@ -257,8 +297,10 @@ export async function action({ request }) {
                             shop,
                             fbt: {
                                 ...storedData.fbt,
-                                // PHP reads "condition" for rules — map from manualConfiguration
-                                condition: storedData.fbt.manualConfiguration || [],
+                                // PHP reads `condition` as the rules payload consumed by storefront.
+                                condition: storedData.fbt.manualRules || [],
+                                ai_enabled: aiSettings.aiEnabled ? 1 : 0,
+                                ai_product_count: aiSettings.aiProductCount || aiSettings.maxSuggestions || 0,
                             }
                         })
                     }
@@ -279,6 +321,7 @@ export async function action({ request }) {
             console.log("Color:", color);
             console.log("Styling:", styling);
             console.log("Mode:", configurationMode);
+            console.log("AI Settings:", aiSettings);
             if (mode === "manual") {
                 console.log("Manual Rules:", manualConfiguration);
             }

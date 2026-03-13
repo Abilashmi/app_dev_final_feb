@@ -6,6 +6,17 @@
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = "gpt-4o-mini";
+const DEFAULT_PRODUCTS_PER_TRIGGER = 3;
+const MIN_PRODUCTS_PER_TRIGGER = 1;
+const MAX_PRODUCTS_PER_TRIGGER = 10;
+
+function normalizeProductsPerTrigger(value) {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed)) {
+        return DEFAULT_PRODUCTS_PER_TRIGGER;
+    }
+    return Math.min(MAX_PRODUCTS_PER_TRIGGER, Math.max(MIN_PRODUCTS_PER_TRIGGER, parsed));
+}
 
 export async function action({ request }) {
     if (request.method !== "POST") {
@@ -34,25 +45,51 @@ export async function action({ request }) {
         );
     }
 
+    const requestedProductsPerTrigger = normalizeProductsPerTrigger(
+        body.productsPerTrigger ?? body.limit
+    );
+
+    const productsPerTrigger = Math.min(
+        requestedProductsPerTrigger,
+        Math.max(0, products.length - 1)
+    );
+
+    if (productsPerTrigger <= 0) {
+        return new Response(
+            JSON.stringify({ error: "At least 2 products are required for FBT generation." }),
+            { status: 400, headers: { "Content-Type": "application/json" } }
+        );
+    }
+
+    const customPrompt = typeof body.customPrompt === "string"
+        ? body.customPrompt.trim().slice(0, 1000)
+        : "";
+
     // Build a compact product list for the prompt (title + price only — no IDs sent to OpenAI)
     const productIndex = products.map((p, i) => `${i + 1}. ${p.title} ($${p.price})`).join("\n");
+
+    const customInstructionBlock = customPrompt
+        ? `\nAdditional merchant instruction:\n${customPrompt}\n`
+        : "";
 
     const prompt = `You are an e-commerce product recommendation expert.
 
 Given this product catalog from an online store, suggest which products are frequently bought together.
-For each product, suggest 1–3 other products from the catalog that customers commonly buy with it.
+Cover ALL products in the catalog as trigger products.
+For each trigger product, suggest exactly ${productsPerTrigger} other products from the catalog that customers commonly buy with it.
 Focus on natural complementary pairings (e.g. phone + case, shoes + socks, camera + memory card).
+${customInstructionBlock}
 
 Product Catalog:
 ${productIndex}
 
 Return ONLY a valid JSON array. Each item must have:
 - "triggerIndex": the 1-based index of the main product
-- "fbtIndexes": array of 1-based indexes of the suggested FBT products (1–3 items)
+- "fbtIndexes": array of ${productsPerTrigger} unique 1-based indexes of suggested FBT products
 
 Example: [{"triggerIndex": 1, "fbtIndexes": [3, 5]}, ...]
 
-Return only products that have clear, natural pairings. Skip products with no obvious FBT match.
+Return one object for every triggerIndex from 1 to ${products.length}. Do not skip trigger indexes.
 JSON array:`;
 
     try {
@@ -95,17 +132,67 @@ JSON array:`;
 
         const aiRules = JSON.parse(jsonMatch[0]);
 
-        // Map AI indexes back to real product objects
-        const rules = [];
-        for (const rule of aiRules) {
-            const triggerProduct = products[rule.triggerIndex - 1];
-            const fbtProducts = (rule.fbtIndexes || [])
-                .map(i => products[i - 1])
-                .filter(Boolean);
+        const aiRuleMap = new Map();
+        for (const rule of Array.isArray(aiRules) ? aiRules : []) {
+            const triggerIndex = Number.parseInt(rule?.triggerIndex, 10);
+            if (!Number.isFinite(triggerIndex) || triggerIndex < 1 || triggerIndex > products.length) {
+                continue;
+            }
+            aiRuleMap.set(triggerIndex, Array.isArray(rule?.fbtIndexes) ? rule.fbtIndexes : []);
+        }
 
-            if (triggerProduct && fbtProducts.length > 0) {
+        const buildFallbackIndexes = (triggerIndex, neededCount, existingSet) => {
+            const fallback = [];
+            for (let i = 1; i <= products.length; i += 1) {
+                if (i === triggerIndex) continue;
+                if (existingSet.has(i)) continue;
+                fallback.push(i);
+                if (fallback.length >= neededCount) break;
+            }
+            return fallback;
+        };
+
+        // Map AI indexes back to real product objects with strict full-product coverage.
+        const rules = [];
+        for (let triggerIndex = 1; triggerIndex <= products.length; triggerIndex += 1) {
+            const triggerProduct = products[triggerIndex - 1];
+            if (!triggerProduct) continue;
+
+            const uniqueIndexes = [];
+            const seenIndexes = new Set();
+
+            const fromAI = aiRuleMap.get(triggerIndex) || [];
+            for (const idx of fromAI) {
+                const numeric = Number.parseInt(idx, 10);
+                if (!Number.isFinite(numeric)) continue;
+                if (numeric === triggerIndex) continue;
+                if (numeric < 1 || numeric > products.length) continue;
+                if (seenIndexes.has(numeric)) continue;
+                seenIndexes.add(numeric);
+                uniqueIndexes.push(numeric);
+                if (uniqueIndexes.length >= productsPerTrigger) break;
+            }
+
+            if (uniqueIndexes.length < productsPerTrigger) {
+                const fallbackIndexes = buildFallbackIndexes(
+                    triggerIndex,
+                    productsPerTrigger - uniqueIndexes.length,
+                    seenIndexes
+                );
+                fallbackIndexes.forEach((idx) => {
+                    seenIndexes.add(idx);
+                    uniqueIndexes.push(idx);
+                });
+            }
+
+            const fbtProducts = uniqueIndexes
+                .map((idx) => products[idx - 1])
+                .filter(Boolean)
+                .slice(0, productsPerTrigger);
+
+            if (fbtProducts.length > 0) {
                 rules.push({
-                    id: `ai-rule-${Date.now()}-${rule.triggerIndex}`,
+                    id: `ai-rule-${Date.now()}-${triggerIndex}`,
                     displayScope: "single",
                     triggerProducts: [triggerProduct],
                     fbtProducts,
@@ -115,7 +202,13 @@ JSON array:`;
         }
 
         return new Response(
-            JSON.stringify({ success: true, rules }),
+            JSON.stringify({
+                success: true,
+                rules,
+                totalProducts: products.length,
+                productsPerTrigger,
+                requestedProductsPerTrigger,
+            }),
             { headers: { "Content-Type": "application/json" } }
         );
 

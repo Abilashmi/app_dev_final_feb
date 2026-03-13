@@ -1863,10 +1863,12 @@ function FBTSection({ config, products, onSave, saving }) {
     const [templates, setTemplates] = useState(config?.templates || FAKE_FBT_CONFIG.templates);
     const [mode, setMode] = useState(config?.mode || "manual");
     const [manualRules, setManualRules] = useState(config?.manualRules || []);
-    const [aiSuggestions, setAiSuggestions] = useState([]);
     const [aiLoading, setAiLoading] = useState(false);
     const [aiError, setAiError] = useState(null);
-    const [aiPendingSave, setAiPendingSave] = useState(false);
+    const [aiProductCount, setAiProductCount] = useState(() => {
+        const raw = Number.parseInt(config?.aiSettings?.aiProductCount ?? config?.aiSettings?.maxSuggestions, 10);
+        return String(Number.isFinite(raw) ? Math.min(10, Math.max(1, raw)) : 3);
+    });
     const [simulatedTriggerId, setSimulatedTriggerId] = useState("");
 
     // --- New display scope state ---
@@ -2022,6 +2024,22 @@ function FBTSection({ config, products, onSave, saving }) {
         return rulesToSave;
     };
 
+    const normalizeAiProductCount = useCallback((value) => {
+        const parsed = Number.parseInt(value, 10);
+        if (!Number.isFinite(parsed)) return 3;
+        return Math.min(10, Math.max(1, parsed));
+    }, []);
+
+    const getAiSettingsPayload = useCallback((forcedMode = mode) => {
+        const count = normalizeAiProductCount(aiProductCount);
+        return {
+            maxSuggestions: count,
+            aiProductCount: count,
+            aiEnabled: forcedMode === "ai",
+            customPrompt: "",
+        };
+    }, [aiProductCount, mode, normalizeAiProductCount]);
+
     const handleSave = () => {
         // Only validate rules when mode is "manual" — AI auto-recommends
         if (mode === "manual") {
@@ -2055,21 +2073,24 @@ function FBTSection({ config, products, onSave, saving }) {
             }
         }
 
-        setAiPendingSave(false);
+        setAiError(null);
         onSave({
             activeTemplate,
             templateData: templates,
             mode,
             configData: getRulesToSave(),
+            aiSettings: getAiSettingsPayload(mode),
         });
     };
 
     const handleSaveTemplate = () => {
+        setAiError(null);
         onSave({
             activeTemplate,
             templateData: templates,
             mode,
             configData: getRulesToSave(),
+            aiSettings: getAiSettingsPayload(mode),
             _toastMessage: "Template is saved!",
         });
     };
@@ -2080,58 +2101,81 @@ function FBTSection({ config, products, onSave, saving }) {
     };
 
     const handleDiscardAll = () => {
+        const raw = Number.parseInt(config?.aiSettings?.aiProductCount ?? config?.aiSettings?.maxSuggestions, 10);
+        const resetCount = String(Number.isFinite(raw) ? Math.min(10, Math.max(1, raw)) : 3);
         setActiveTemplate(config?.activeTemplate || "fbt1");
         setTemplates(config?.templates || FAKE_FBT_CONFIG.templates);
         setMode(config?.mode || "manual");
         setManualRules(config?.manualRules || []);
-        setAiSuggestions([]);
         setAiError(null);
+        setAiProductCount(resetCount);
         setDisplayScope("all");
         setScopeTriggerProducts([]);
         setRuleFbtProducts([]);
     };
 
-    // Check if we can add a rule
-    // AI: call backend which calls OpenAI with the store's product catalog
-    const handleGenerateAI = async () => {
-        if (!products || products.length === 0) {
-            setAiError("No products found in your store.");
+    // AI run flow: generate coverage for all products and save immediately
+    const handleRunAIForAllProducts = async () => {
+        if (!products || products.length < 2) {
+            const message = "At least 2 products are required to generate FBT combinations.";
+            setAiError(message);
+            shopify.toast.show(message, { isError: true });
             return;
         }
+
+        const aiSettings = getAiSettingsPayload("ai");
+
         setAiLoading(true);
         setAiError(null);
-        setAiSuggestions([]);
+
         try {
             const res = await fetch("/api/fbt-ai", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ products }),
+                body: JSON.stringify({
+                    products,
+                    productsPerTrigger: aiSettings.aiProductCount,
+                    coverAllProducts: true,
+                }),
             });
+
             const data = await res.json();
             if (!res.ok || !data.success) {
-                setAiError(data.error || "AI generation failed.");
-            } else {
-                setAiSuggestions(data.rules || []);
+                const message = data.error || "AI generation failed.";
+                setAiError(message);
+                shopify.toast.show(message, { isError: true });
+                return;
             }
+
+            const generatedRules = Array.isArray(data.rules)
+                ? data.rules.map((rule) => ({ ...rule, aiGenerated: true }))
+                : [];
+
+            if (generatedRules.length === 0) {
+                const message = "No AI combinations were generated.";
+                setAiError(message);
+                shopify.toast.show(message, { isError: true });
+                return;
+            }
+
+            setManualRules(generatedRules);
+            setMode("ai");
+
+            onSave({
+                activeTemplate,
+                templateData: templates,
+                mode: "ai",
+                configData: generatedRules,
+                aiSettings,
+                _toastMessage: `AI combinations saved for ${generatedRules.length} product${generatedRules.length === 1 ? "" : "s"}.`,
+            });
         } catch (err) {
-            setAiError("Network error. Please try again.");
+            const message = err?.message || "Network error while generating AI combinations.";
+            setAiError(message);
+            shopify.toast.show(message, { isError: true });
         } finally {
             setAiLoading(false);
         }
-    };
-
-    // Accept a single AI suggestion — move it into manualRules
-    const handleAcceptSuggestion = (rule) => {
-        setManualRules(prev => [...prev, { ...rule, aiGenerated: true }]);
-        setAiSuggestions(prev => prev.filter(r => r.id !== rule.id));
-        setAiPendingSave(true);
-    };
-
-    // Accept all AI suggestions at once
-    const handleAcceptAllSuggestions = () => {
-        setManualRules(prev => [...prev, ...aiSuggestions.map(r => ({ ...r, aiGenerated: true }))]);
-        setAiSuggestions([]);
-        setAiPendingSave(true);
     };
 
     const canAddRule = useMemo(() => {
@@ -2721,124 +2765,51 @@ function FBTSection({ config, products, onSave, saving }) {
             {/* AI Mode */}
             {mode === "ai" && (
                 <Card>
-                    <BlockStack gap="400">
-                        <InlineStack align="space-between" blockAlign="center">
-                            <BlockStack gap="100">
-                                <Text as="h3" variant="headingMd">AI Suggestions</Text>
-                                <Text tone="subdued" variant="bodySm">
-                                    Analyzes your {products.length} store products and suggests natural FBT pairings.
-                                </Text>
-                            </BlockStack>
+                    <BlockStack gap="300">
+                        <Text as="h3" variant="headingMd">AI Coverage Run</Text>
+                        <Text tone="subdued" variant="bodySm">
+                            AI will generate recommendations for every store product and save them directly to backend.
+                        </Text>
+
+                        <InlineStack gap="300" wrap blockAlign="end">
+                            <div style={{ flex: "1 1 240px", minWidth: "220px" }}>
+                                <TextField
+                                    label="FBT products per product"
+                                    type="number"
+                                    min={1}
+                                    max={10}
+                                    value={aiProductCount}
+                                    onChange={(value) => {
+                                        const onlyDigits = (value || "").replace(/\D/g, "");
+                                        if (!onlyDigits) {
+                                            setAiProductCount("");
+                                            return;
+                                        }
+                                        const parsedValue = Number.parseInt(onlyDigits, 10);
+                                        if (Number.isNaN(parsedValue)) {
+                                            setAiProductCount("");
+                                            return;
+                                        }
+                                        setAiProductCount(String(Math.min(10, Math.max(1, parsedValue))));
+                                    }}
+                                    placeholder="3"
+                                    helpText="Example: 3 means each product gets 3 FBT suggestions."
+                                    autoComplete="off"
+                                />
+                            </div>
+
                             <Button
                                 variant="primary"
-                                onClick={handleGenerateAI}
+                                onClick={handleRunAIForAllProducts}
                                 loading={aiLoading}
-                                disabled={aiLoading || products.length === 0}
+                                disabled={aiLoading || products.length < 2}
                             >
-                                {aiSuggestions.length > 0 ? "Regenerate" : "Generate Suggestions"}
+                                Run & Save
                             </Button>
                         </InlineStack>
 
-                        {aiPendingSave && (
-                            <Banner tone="warning">
-                                Suggestions accepted — scroll down and click <strong>Save</strong> to apply them to your storefront.
-                            </Banner>
-                        )}
-
                         {aiError && (
                             <Banner tone="critical">{aiError}</Banner>
-                        )}
-
-                        {aiLoading && (
-                            <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "16px 0" }}>
-                                <Spinner size="small" />
-                                <Text tone="subdued">Analyzing your product catalog with AI…</Text>
-                            </div>
-                        )}
-
-                        {aiSuggestions.length > 0 && (
-                            <BlockStack gap="300">
-                                <InlineStack align="space-between" blockAlign="center">
-                                    <Text variant="headingSm" fontWeight="semibold">
-                                        {aiSuggestions.length} suggestion{aiSuggestions.length !== 1 ? "s" : ""} — review and accept
-                                    </Text>
-                                    <Button size="slim" onClick={handleAcceptAllSuggestions}>
-                                        Accept All
-                                    </Button>
-                                </InlineStack>
-
-                                {aiSuggestions.map((rule) => {
-                                    const trigger = rule.triggerProducts?.[0];
-                                    return (
-                                        <div key={rule.id} style={{
-                                            border: "1px solid #e3e3e3",
-                                            borderRadius: "10px",
-                                            padding: "14px 16px",
-                                            background: "#fafafa"
-                                        }}>
-                                            <InlineStack align="space-between" blockAlign="start" gap="400" wrap>
-                                                <div style={{ flex: "1 1 340px", minWidth: 0 }}>
-                                                    <BlockStack gap="100">
-                                                        <InlineStack gap="200" blockAlign="center" wrap>
-                                                            <Text variant="bodySm" fontWeight="semibold" tone="subdued">Trigger:</Text>
-                                                            {trigger?.image && (
-                                                                <Thumbnail source={trigger.image} alt={trigger.title} size="extraSmall" />
-                                                            )}
-                                                            <Text variant="bodySm" fontWeight="semibold">{trigger?.title}</Text>
-                                                        </InlineStack>
-                                                        <InlineStack gap="200" blockAlign="center" wrap>
-                                                            <Text variant="bodySm" tone="subdued">FBT:</Text>
-                                                            {rule.fbtProducts.map(p => (
-                                                                <InlineStack key={p.id} gap="100" blockAlign="center">
-                                                                    {p.image && <Thumbnail source={p.image} alt={p.title} size="extraSmall" />}
-                                                                    <div
-                                                                        title={p.title}
-                                                                        style={{
-                                                                            fontSize: "12px",
-                                                                            border: "1px solid #d0d7de",
-                                                                            borderRadius: "999px",
-                                                                            padding: "2px 8px",
-                                                                            maxWidth: "220px",
-                                                                            whiteSpace: "nowrap",
-                                                                            overflow: "hidden",
-                                                                            textOverflow: "ellipsis",
-                                                                        }}
-                                                                    >
-                                                                        {p.title}
-                                                                    </div>
-                                                                </InlineStack>
-                                                            ))}
-                                                        </InlineStack>
-                                                    </BlockStack>
-                                                </div>
-                                                <InlineStack gap="200" wrap>
-                                                    <Button
-                                                        size="slim"
-                                                        variant="primary"
-                                                        onClick={() => handleAcceptSuggestion(rule)}
-                                                    >
-                                                        Accept
-                                                    </Button>
-                                                    <Button
-                                                        size="slim"
-                                                        tone="critical"
-                                                        onClick={() => setAiSuggestions(prev => prev.filter(r => r.id !== rule.id))}
-                                                    >
-                                                        Dismiss
-                                                    </Button>
-                                                </InlineStack>
-                                            </InlineStack>
-                                        </div>
-                                    );
-                                })}
-                            </BlockStack>
-                        )}
-
-                        {!aiLoading && aiSuggestions.length === 0 && !aiError && (
-                            <Banner tone="info">
-                                Click <strong>Generate Suggestions</strong> and our AI will analyze your product catalog
-                                and recommend FBT pairings. Accepted suggestions are added to your rules above.
-                            </Banner>
                         )}
                     </BlockStack>
                 </Card>
@@ -2960,6 +2931,7 @@ export default function ProductWidgetPage() {
                 templateData: data.templateData,
                 mode: data.mode,
                 configData: enrichedRules, // Send enriched rules with product details
+                aiSettings: data.aiSettings,
                 shop,
             },
             { method: "POST", encType: "application/json", action: "/api/product-sample" }

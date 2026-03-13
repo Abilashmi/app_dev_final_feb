@@ -44,6 +44,13 @@ export const FAKE_COUPON_CONFIG = {
     },
 };
 
+const DEFAULT_AI_SETTINGS = {
+    aiEnabled: false,
+    aiProductCount: 3,
+    maxSuggestions: 3,
+    customPrompt: "",
+};
+
 export const FAKE_FBT_CONFIG = {
     activeTemplate: "fbt1",
     mode: "manual",
@@ -92,6 +99,7 @@ export const FAKE_FBT_CONFIG = {
             showAddAllButton: true,
         },
     },
+    aiSettings: { ...DEFAULT_AI_SETTINGS },
     manualRules: [],
 };
 

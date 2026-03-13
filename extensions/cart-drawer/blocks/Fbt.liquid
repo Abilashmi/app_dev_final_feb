@@ -205,9 +205,9 @@
     const shop = container.dataset.shop;
     const productId = 'gid://shopify/Product/' + container.dataset.productId;
 
-    const API_URL = 'https://blueviolet-clam-512487.hostingersite.com/save_fbt_widget.php?shopdomain=' + shop;
+    const API_URL = '/apps/cart-app/save_fbt_widget.php?shopdomain=' + encodeURIComponent(shop);
 
-    fetch(API_URL)
+    fetch(API_URL, { headers: { 'ngrok-skip-browser-warning': 'true' } })
       .then((r) => r.json())
       .then((response) => {
         console.log('[FBT] raw response:', response);
@@ -219,23 +219,29 @@
 
         const data = response.data;
         console.log('[FBT] data keys:', Object.keys(data));
-        console.log('[FBT] selectedTemp:', data.selectedTemp);
+        const selectedTemplate = data.selectedTemp || data.selectedTemplate || data.activeTemplate || 'fbt1';
+        console.log('[FBT] selectedTemp:', selectedTemplate);
         console.log('[FBT] condition:', data.condition);
         console.log('[FBT] current productId:', productId);
 
         const templateMap = {
-          fbt1: data.temp1,
-          fbt2: data.temp2,
-          fbt3: data.temp3,
+          fbt1: data.temp1 || (data.templates && data.templates.fbt1),
+          fbt2: data.temp2 || (data.templates && data.templates.fbt2),
+          fbt3: data.temp3 || (data.templates && data.templates.fbt3),
         };
 
-        const config = templateMap[data.selectedTemp];
+        const config = normalizeConfig(templateMap[selectedTemplate]);
         if (!config) {
-          console.warn('[FBT] no config for template:', data.selectedTemp, '— available:', Object.keys(templateMap));
+          console.warn('[FBT] no config for template:', selectedTemplate, '— available:', Object.keys(templateMap));
           return;
         }
 
-        const rules = data.condition || [];
+        const rules = normalizeRules(
+          data.condition ||
+          data.manualRules ||
+          data.manualConfiguration ||
+          []
+        );
         console.log('[FBT] rules count:', rules.length);
 
         // -----------------------------
@@ -244,14 +250,18 @@
         let matchedProducts = [];
 
         rules.forEach((rule, i) => {
-          console.log(`[FBT] rule[${i}] scope:`, rule.displayScope, 'triggers:', (rule.triggerProducts||[]).map(p=>p.id));
+          const triggerCandidates = (rule.triggerProducts || []).length
+            ? (rule.triggerProducts || [])
+            : (rule.triggerProductId ? [{ id: rule.triggerProductId }] : []);
+
+          console.log(`[FBT] rule[${i}] scope:`, rule.displayScope, 'triggers:', triggerCandidates.map(p => p.id));
 
           if (rule.displayScope === 'all') {
             matchedProducts = matchedProducts.concat(rule.fbtProducts);
           }
 
           if (rule.displayScope === 'single' || rule.displayScope === 'per_product') {
-            const match = (rule.triggerProducts || []).some((p) => p.id === productId);
+            const match = triggerCandidates.some((p) => p.id === productId);
             console.log(`[FBT] rule[${i}] match:`, match);
             if (match) {
               matchedProducts = matchedProducts.concat(rule.fbtProducts);
@@ -273,6 +283,49 @@
       const map = new Map();
       products.forEach((p) => map.set(p.id, p));
       return Array.from(map.values());
+    }
+
+    function normalizeRules(source) {
+      let parsed = source;
+      if (typeof parsed === 'string') {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch (e) {
+          parsed = [];
+        }
+      }
+
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed
+        .filter((rule) => rule && typeof rule === 'object')
+        .map((rule, index) => ({
+          id: rule.id || rule.ruleId || `rule-${index}`,
+          displayScope: rule.displayScope || 'all',
+          triggerProducts: Array.isArray(rule.triggerProducts) ? rule.triggerProducts : [],
+          triggerProductId: rule.triggerProductId || null,
+          fbtProducts: Array.isArray(rule.fbtProducts) ? rule.fbtProducts : [],
+        }))
+        .filter((rule) => rule.fbtProducts.length > 0);
+    }
+
+    function normalizeConfig(config) {
+      if (!config || typeof config !== 'object') return null;
+
+      const borderRadius = Number(config.borderRadius);
+      return {
+        layout: config.layout || 'horizontal',
+        interactionType: config.interactionType || 'classic',
+        bgColor: config.bgColor || '#ffffff',
+        textColor: config.textColor || '#111827',
+        priceColor: config.priceColor || '#059669',
+        buttonColor: config.buttonColor || '#111827',
+        buttonTextColor: config.buttonTextColor || config.buttonText || '#ffffff',
+        borderColor: config.borderColor || '#e5e7eb',
+        borderRadius: Number.isFinite(borderRadius) ? borderRadius : 8,
+        showPrices: config.showPrices !== false,
+        showAddAllButton: config.showAddAllButton !== false,
+      };
     }
 
     function toPriceNumber(value) {
@@ -364,9 +417,9 @@
             ${
               config.showPrices
                 ? `
-              <div class="ps-product-price" style="color:${config.priceColor}">
-                ₹${price.toLocaleString('en-IN')}
-              </div>`
+            <div class="ps-product-price" style="color:${config.priceColor}">
+              ₹${price.toLocaleString('en-IN')}
+            </div>`
                 : ''
             }
           </div>
@@ -390,6 +443,7 @@
               selected.delete(p.id);
               btn.textContent = 'Add';
               btn.style.background = 'transparent';
+              btn.style.color = config.buttonColor;
             } else {
               selected.set(p.id, 1);
               btn.textContent = 'Added ✓';
