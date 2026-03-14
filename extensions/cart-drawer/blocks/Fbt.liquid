@@ -170,10 +170,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    background: #fff;
+    opacity: 1;
+    transition: none;
   }
   .ps-bundle-check.active {
-    background: currentColor;
-    color: #fff;
+    opacity: 1;
   }
   .ps-required {
     position: absolute;
@@ -616,7 +618,7 @@
               btn.style.color = config.buttonColor;
             } else {
               selected.set(p.id, 1);
-              btn.textContent = 'Added ✓';
+              btn.textContent = 'Added';
               btn.style.background = config.buttonColor;
               btn.style.color = config.buttonTextColor;
             }
@@ -667,24 +669,44 @@
 
         // -------- BUNDLE --------
         if (config.interactionType === 'bundle') {
-          const check = document.createElement('div');
-          check.className = 'ps-bundle-check active';
+          const check = document.createElement('button');
+          check.type = 'button';
+          check.className = 'ps-bundle-check';
           check.style.borderColor = config.buttonColor;
           check.style.color = config.buttonColor;
+          check.style.background = '#fff';
+          check.style.opacity = '1';
+          check.style.transition = 'none';
 
-          check.innerHTML = '✓';
+          const setBundleCheckState = (isSelected) => {
+            if (isSelected) {
+              check.classList.add('active');
+              check.style.background = config.buttonColor;
+              check.style.color = config.buttonTextColor || '#fff';
+              check.textContent = '✓';
+            } else {
+              check.classList.remove('active');
+              check.style.background = '#fff';
+              check.style.color = config.buttonColor;
+              check.textContent = '';
+            }
+
+            // Keep fully visible in both selected and unselected states.
+            check.style.opacity = '1';
+            card.style.opacity = '1';
+          };
+
+          setBundleCheckState(selected.has(p.id));
 
           check.onclick = () => {
             if (selected.size <= 1 && selected.has(p.id)) return; // min 1 required
 
             if (selected.has(p.id)) {
               selected.delete(p.id);
-              check.classList.remove('active');
-              check.innerHTML = '';
+              setBundleCheckState(false);
             } else {
               selected.set(p.id, 1);
-              check.classList.add('active');
-              check.innerHTML = '✓';
+              setBundleCheckState(true);
             }
             updateTotal();
           };

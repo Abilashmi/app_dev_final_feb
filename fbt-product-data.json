@@ -50,14 +50,14 @@
       "fbt1": {
         "name": "Classic Grid",
         "layout": "vertical",
-        "interactionType": "quickAdd",
-        "bgColor": "#ffffff",
-        "textColor": "#111827",
+        "interactionType": "bundle",
+        "bgColor": "#932d2d",
+        "textColor": "#0b0c0f",
         "priceColor": "#059669",
-        "buttonColor": "#111827",
-        "buttonTextColor": "#ffffff",
+        "buttonColor": "#cdddff",
+        "buttonTextColor": "#ff2e2e",
         "borderColor": "#e5e7eb",
-        "borderRadius": 8,
+        "borderRadius": 18,
         "showPrices": true,
         "showAddAllButton": true
       },
@@ -793,18 +793,18 @@
       "customPrompt": ""
     },
     "selectedTemplate": "fbt1",
-    "interactionStyle": "quickAdd",
+    "interactionStyle": "bundle",
     "layoutAlignment": "vertical",
     "color": {
-      "bgColor": "#ffffff",
-      "textColor": "#111827",
+      "bgColor": "#932d2d",
+      "textColor": "#0b0c0f",
       "priceColor": "#059669",
-      "buttonColor": "#111827",
-      "buttonText": "#ffffff",
+      "buttonColor": "#cdddff",
+      "buttonText": "#ff2e2e",
       "borderColor": "#e5e7eb"
     },
     "styling": {
-      "borderRadius": 8,
+      "borderRadius": 18,
       "showPrices": true,
       "showAddAllButton": true
     },

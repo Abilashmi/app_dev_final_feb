@@ -2939,7 +2939,6 @@ export default function ProductWidgetPage() {
 
                 if (!scope) scope = "legacy";
             }
-
             // Handle legacy FBTs (array of IDs)
             if (fbts.length === 0 && rule.upsellProductIds && rule.upsellProductIds.length > 0) {
                 fbts = rule.upsellProductIds.map(id => {

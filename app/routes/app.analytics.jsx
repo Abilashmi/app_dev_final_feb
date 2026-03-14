@@ -14,7 +14,6 @@ import {
   Badge,
   Box,
   Button,
-  Tabs,
   ProgressBar,
   Banner,
   Select,
@@ -44,9 +43,79 @@ import {
 } from 'recharts';
 import { authenticate } from "../shopify.server";
 
+const DEFAULT_ANALYTICS = {
+  checkout_click: 0,
+  coupon_click: 0,
+  upsell_click: 0,
+  upsell_revenue_generated: 0,
+  cartdrawer_total_revenue: 0,
+  cartdrawer_total_coupon_applied: 0,
+};
+
+function toCount(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+}
+
+function toAmount(value) {
+  if (value === null || value === undefined || value === "") {
+    return 0;
+  }
+
+  const numeric = typeof value === "number"
+    ? value
+    : Number.parseFloat(String(value).replace(/[^0-9.-]/g, ""));
+
+  return Number.isFinite(numeric) ? Math.max(0, numeric) : 0;
+}
+
+function formatINR(value) {
+  return `₹${toAmount(value).toLocaleString("en-IN", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function normalizeAnalyticsState(payload = {}) {
+  return {
+    checkout_click: toCount(payload.checkout_click),
+    coupon_click: toCount(payload.coupon_click),
+    upsell_click: toCount(payload.upsell_click),
+    upsell_revenue_generated: toAmount(payload.upsell_revenue_generated),
+    cartdrawer_total_revenue: toAmount(payload.cartdrawer_total_revenue),
+    cartdrawer_total_coupon_applied: toCount(payload.cartdrawer_total_coupon_applied),
+  };
+}
+
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-  return { shop: session.shop };
+  const shop = session.shop;
+
+  let initialAnalytics = { ...DEFAULT_ANALYTICS };
+  let initialAnalyticsError = false;
+
+  try {
+    const requestUrl = new URL(request.url);
+    const apiUrl = `${requestUrl.origin}/api/analytics?shop=${encodeURIComponent(shop)}`;
+    const response = await fetch(apiUrl, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        "ngrok-skip-browser-warning": "true",
+      },
+    });
+
+    const payload = await response.json();
+    if (response.ok && payload?.success) {
+      initialAnalytics = normalizeAnalyticsState(payload.data);
+    } else {
+      initialAnalyticsError = true;
+    }
+  } catch {
+    initialAnalyticsError = true;
+  }
+
+  return { shop, initialAnalytics, initialAnalyticsError };
 };
 
 // More granular mock data for professional feel
@@ -67,10 +136,9 @@ const PROGRESS_BAR_DATA = [
 const COLORS = ['#008060', '#005ea2', '#9c6ade', '#e29100'];
 
 export default function AppAnalytics() {
-  const { shop } = useLoaderData();
+  const { shop, initialAnalytics, initialAnalyticsError } = useLoaderData();
 
   const navigate = useNavigate();
-  const [selectedTab, setSelectedTab] = useState(0);
   const [popoverActive, setPopoverActive] = useState(false);
   const [{ month, year }, setMonth] = useState({ month: 2, year: 2026 });
   const [selectedDates, setSelectedDates] = useState({
@@ -95,21 +163,25 @@ export default function AppAnalytics() {
   const [isClient, setIsClient] = useState(false);
 
   const [analytics, setAnalytics] = useState({
-    checkout_click: 0,
-    coupon_click: 0,
-    upsell_click: 0,
-    loading: true,
-    error: false
+    ...normalizeAnalyticsState(initialAnalytics),
+    loading: false,
+    error: Boolean(initialAnalyticsError)
   });
 
   const fetchAnalytics = useCallback(async () => {
     setAnalytics(prev => ({ ...prev, loading: true, error: false }));
     try {
-      const response = await fetch(`https://7d56-103-130-91-50.ngrok-free.ap/analytics.php?shop=${shop}`);
-      if (!response.ok) throw new Error("Fetch failed");
-      const data = await response.json();
+      const response = await fetch(`/api/analytics?shop=${encodeURIComponent(shop)}`);
+      const payload = await response.json();
+
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || "Fetch failed");
+      }
+
+      const nextAnalytics = normalizeAnalyticsState(payload.data);
+
       setAnalytics({
-        ...data,
+        ...nextAnalytics,
         loading: false,
         error: false
       });
@@ -117,12 +189,14 @@ export default function AppAnalytics() {
       console.error("Client-side fetch error:", err);
       setAnalytics(prev => ({ ...prev, loading: false, error: true }));
     }
-  }, []);
+  }, [shop]);
 
   useEffect(() => {
     setIsClient(true);
-    fetchAnalytics();
-  }, [fetchAnalytics]);
+    if (initialAnalyticsError) {
+      fetchAnalytics();
+    }
+  }, [fetchAnalytics, initialAnalyticsError]);
 
   const [setupSteps, setSetupSteps] = useState([
     { id: 1, title: 'Step 1: Create Coupon', icon: '🎫', content: 'Add coupons to your slide-out drawer to boost conversions.', completed: false, target: '/app/coupons' },
@@ -132,7 +206,6 @@ export default function AppAnalytics() {
 
   const togglePopoverActive = useCallback(() => setPopoverActive((active) => !active), []);
   const handleMonthChange = useCallback((month, year) => setMonth({ month, year }), []);
-  const handleTabChange = useCallback((selectedTabIndex) => setSelectedTab(selectedTabIndex), []);
 
   const handlePresetClick = (preset) => {
     setActivePreset(preset.label);
@@ -158,12 +231,6 @@ export default function AppAnalytics() {
   const progress = (completedSteps / setupSteps.length) * 100;
 
   const dateValue = activePreset || `${selectedDates.start.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} - ${selectedDates.end.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`;
-
-  const tabs = [
-    { id: 'analytics', content: 'Analytics' },
-    { id: 'setup', content: 'Setup Checklist' },
-    { id: 'guide', content: 'How To Use' },
-  ];
 
   const renderFeatureSection = (title, color, kpis) => (
     <BlockStack gap="400">
@@ -617,77 +684,76 @@ export default function AppAnalytics() {
         </Popover>
       }
     >
-      <Tabs tabs={tabs} selected={selectedTab} onSelect={handleTabChange}>
-        <Box paddingBlockStart="400">
-          {selectedTab === 0 && (
-            <BlockStack gap="600">
-              {analytics.error && (
-                <Banner tone="critical">
-                  <p>Unable to fetch real-time analytics from <b>{`https://7d56-103-130-91-50.ngrok-free.ap`}</b>. Please check your server and CORS settings.</p>
-                </Banner>
-              )}
-              {analytics.loading && (
-                <Box padding="400">
-                  <ProgressBar progress={50} />
-                  <Text variant="bodySm" tone="subdued">Fetching real-time data...</Text>
-                </Box>
-              )}
-              <Banner tone="info">
-                <InlineStack align="space-between" blockAlign="center">
-                  <p>Overall performance is up <b>15%</b> compared to last week. Your <b>Upsell Products</b> are leading with highest conversion.</p>
-                  <Button variant="secondary" onClick={fetchAnalytics} loading={analytics.loading}>Refresh Stats</Button>
-                </InlineStack>
-              </Banner>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
-                <Card padding="400">
-                  <BlockStack gap="100">
-                    <Text variant="bodySm" tone="subdued">Checkout Clicks (Total)</Text>
-                    <Text variant="headingXl" fontWeight="bold">{analytics.checkout_click}</Text>
-                    <Text variant="bodySm" tone="success">Real-time status</Text>
-                  </BlockStack>
-                </Card>
-                <Card padding="400">
-                  <BlockStack gap="100">
-                    <Text variant="bodySm" tone="subdued">Coupon Clicks</Text>
-                    <Text variant="headingXl" fontWeight="bold">{analytics.coupon_click}</Text>
-                    <Text variant="bodySm" tone="success">Real-time status</Text>
-                  </BlockStack>
-                </Card>
-                <Card padding="400">
-                  <BlockStack gap="100">
-                    <Text variant="bodySm" tone="subdued">Upsell Clicks</Text>
-                    <Text variant="headingXl" fontWeight="bold">{analytics.upsell_click}</Text>
-                    <Text variant="bodySm" tone="success">Real-time status</Text>
-                  </BlockStack>
-                </Card>
-              </div>
-
-              {renderFeatureSection('Coupon Slider', '#008060', [
-                { title: 'Revenue Generated', value: '₹4,500.00', trend: '+12.4%' },
-                { title: 'Coupons Applied', value: analytics.coupon_click.toString(), trend: '+8.1%' },
-                { title: 'Avg. Order Value', value: '₹1,240', trend: '+2.3%' },
-              ])}
-
-              {renderFeatureSection('FBT (Bought Together)', '#005ea2', [
-                { title: 'Revenue Generated', value: '₹3,240.50', trend: '+15.2%' },
-                { title: 'Bundles Added', value: '128', trend: '+10.4%' },
-                { title: 'Bundle Conv. Rate', value: '6.8%', trend: '+1.2%' },
-              ])}
-
-              {renderFeatureSection('Upsell Products', '#9c6ade', [
-                { title: 'Revenue Generated', value: '₹5,820.00', trend: '+20.5%' },
-                { title: 'Add to Carts', value: analytics.upsell_click.toString(), trend: '+18.2%' },
-                { title: 'Upsell CTR', value: '7.4%', trend: '+3.1%' },
-              ])}
-
-              {renderShippingSection()}
-            </BlockStack>
+      <Box paddingBlockStart="400">
+        <BlockStack gap="600">
+          {analytics.error && (
+            <Banner tone="critical">
+              <p>Unable to fetch real-time analytics from the internal analytics API. Please check /api/analytics and upstream analytics service.</p>
+            </Banner>
           )}
-          {selectedTab === 1 && renderSetup()}
-          {selectedTab === 2 && renderGuide()}
-        </Box >
-      </Tabs >
+          {analytics.loading && (
+            <Box padding="400">
+              <ProgressBar progress={50} />
+              <Text variant="bodySm" tone="subdued">Fetching real-time data...</Text>
+            </Box>
+          )}
+          <Banner tone="info">
+            <InlineStack align="space-between" blockAlign="center">
+              <p>Overall performance is up <b>15%</b> compared to last week. Your <b>Upsell Products</b> are leading with highest conversion.</p>
+              <Button variant="secondary" onClick={fetchAnalytics} loading={analytics.loading}>Refresh Stats</Button>
+            </InlineStack>
+          </Banner>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+            <Card padding="400">
+              <BlockStack gap="100">
+                <Text variant="bodySm" tone="subdued">Checkout Clicks (Total)</Text>
+                <Text variant="headingXl" fontWeight="bold">{analytics.checkout_click}</Text>
+                <Text variant="bodySm" tone="success">Real-time status</Text>
+              </BlockStack>
+            </Card>
+            <Card padding="400">
+              <BlockStack gap="100">
+                <Text variant="bodySm" tone="subdued">Coupon Clicks</Text>
+                <Text variant="headingXl" fontWeight="bold">{analytics.coupon_click}</Text>
+                <Text variant="bodySm" tone="success">Real-time status</Text>
+              </BlockStack>
+            </Card>
+            <Card padding="400">
+              <BlockStack gap="100">
+                <Text variant="bodySm" tone="subdued">Upsell Clicks</Text>
+                <Text variant="headingXl" fontWeight="bold">{analytics.upsell_click}</Text>
+                <Text variant="bodySm" tone="success">Real-time status</Text>
+              </BlockStack>
+            </Card>
+            <Card padding="400">
+              <BlockStack gap="100">
+                <Text variant="bodySm" tone="subdued">Revenue Generated From Upsell</Text>
+                <Text variant="headingXl" fontWeight="bold">{formatINR(analytics.upsell_revenue_generated)}</Text>
+                <Text variant="bodySm" tone="success">Real-time status</Text>
+              </BlockStack>
+            </Card>
+            <Card padding="400">
+              <BlockStack gap="100">
+                <Text variant="bodySm" tone="subdued">Total Revenue From Cart Drawer</Text>
+                <Text variant="headingXl" fontWeight="bold">{formatINR(analytics.cartdrawer_total_revenue)}</Text>
+                <Text variant="bodySm" tone="success">Real-time status</Text>
+              </BlockStack>
+            </Card>
+            <Card padding="400">
+              <BlockStack gap="100">
+                <Text variant="bodySm" tone="subdued">Total Coupon Applied In Cart Drawer</Text>
+                <Text variant="headingXl" fontWeight="bold">{analytics.cartdrawer_total_coupon_applied}</Text>
+                <Text variant="bodySm" tone="success">Real-time status</Text>
+              </BlockStack>
+            </Card>
+          </div>
+
+          {renderSetup()}
+          {renderGuide()}
+
+        </BlockStack>
+      </Box >
     </Page >
   );
 }
