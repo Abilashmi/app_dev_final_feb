@@ -139,6 +139,12 @@ function normalizeProductSelection(selected = []) {
                 id: id || handle,
                 title: product?.title || item?.title || "",
                 handle: handle || "",
+                variantId:
+                    product?.variants?.[0]?.id ||
+                    item?.variants?.[0]?.id ||
+                    product?.variantId ||
+                    item?.variantId ||
+                    "",
                 image:
                     product?.images?.[0]?.originalSrc ||
                     product?.image?.originalSrc ||
@@ -268,17 +274,19 @@ export async function loader({ request }) {
     try {
         const response = await admin.graphql(`
       query getProducts {
-        products(first: 50) {
+                products(first: 50, query: "status:active") {
           edges {
             node {
               id
               title
+                            handle
               featuredImage {
                 url
               }
               variants(first: 1) {
                 edges {
                   node {
+                                        id
                     price
                   }
                 }
@@ -289,12 +297,21 @@ export async function loader({ request }) {
       }
     `);
         const data = await response.json();
-        products = data.data?.products?.edges?.map(({ node }) => ({
-            id: node.id,
-            title: node.title,
-            image: node.featuredImage?.url || "",
-            price: node.variants.edges[0]?.node?.price || "0.00",
-        })) || [];
+        products = data.data?.products?.edges?.map(({ node }) => {
+            const firstVariant = node?.variants?.edges?.[0]?.node;
+            if (!firstVariant?.id) {
+                return null;
+            }
+
+            return {
+                id: node.id,
+                title: node.title,
+                handle: node.handle,
+                image: node.featuredImage?.url || "",
+                variantId: firstVariant.id,
+                price: firstVariant.price || "0.00",
+            };
+        }).filter(Boolean) || [];
     } catch (e) {
         console.error("Failed to fetch products:", e);
     }
@@ -1928,6 +1945,8 @@ function FBTSection({ config, products, onSave, saving }) {
                     title: item.title,
                     image: item.image,
                     price: item.price || "0.00",
+                    handle: item.handle || "",
+                    variantId: item.variantId || "",
                 }));
                 setRuleFbtProducts(mapped);
             }
@@ -2804,7 +2823,14 @@ function FBTSection({ config, products, onSave, saving }) {
                                 loading={aiLoading}
                                 disabled={aiLoading || products.length < 2}
                             >
-                                Run & Save
+                                Configure AI
+                            </Button>
+
+                            <Button
+                                onClick={handleRunAIForAllProducts}
+                                disabled={aiLoading || products.length < 2}
+                            >
+                                Regenerate Suggestions
                             </Button>
                         </InlineStack>
 
@@ -2901,7 +2927,14 @@ export default function ProductWidgetPage() {
             // Handle legacy trigger (single product ID)
             if (triggers.length === 0 && rule.triggerProductId) {
                 const p = products.find(prod => prod.id === rule.triggerProductId);
-                if (p) triggers = [{ id: p.id, title: p.title, image: p.image }];
+                if (p) {
+                    triggers = [{
+                        id: p.id,
+                        title: p.title,
+                        image: p.image,
+                        handle: p.handle,
+                    }];
+                }
                 else triggers = [{ id: rule.triggerProductId, title: "Unknown Product" }];
 
                 if (!scope) scope = "legacy";
@@ -2911,7 +2944,16 @@ export default function ProductWidgetPage() {
             if (fbts.length === 0 && rule.upsellProductIds && rule.upsellProductIds.length > 0) {
                 fbts = rule.upsellProductIds.map(id => {
                     const p = products.find(prod => prod.id === id);
-                    if (p) return { id: p.id, title: p.title, image: p.image, price: p.price };
+                    if (p) {
+                        return {
+                            id: p.id,
+                            title: p.title,
+                            image: p.image,
+                            price: p.price,
+                            handle: p.handle,
+                            variantId: p.variantId,
+                        };
+                    }
                     return { id, title: "Unknown Product" };
                 });
             }

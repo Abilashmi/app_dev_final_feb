@@ -342,6 +342,176 @@
         .replace(/'/g, '&#39;');
     }
 
+    function extractNumericId(value) {
+      const source = String(value || '');
+      const match = source.match(/(\d+)(?!.*\d)/);
+      return match ? match[1] : '';
+    }
+
+    function normalizeVariantId(value) {
+      const normalized = extractNumericId(value);
+      return normalized || '';
+    }
+
+    async function buildVariantLookup(products) {
+      const variantByProductId = new Map();
+
+      (products || []).forEach((product) => {
+        const explicitVariant = normalizeVariantId(
+          product?.variantId || product?.variant_id || product?.variant?.id
+        );
+
+        const idFromGid = String(product?.id || '').includes('ProductVariant')
+          ? normalizeVariantId(product?.id)
+          : '';
+
+        const variantId = explicitVariant || idFromGid;
+        if (variantId) {
+          variantByProductId.set(String(product.id), variantId);
+        }
+      });
+
+      let unresolved = (products || []).filter((product) => !variantByProductId.has(String(product.id)));
+
+      if (unresolved.length) {
+        try {
+          const productsRes = await fetch('/products.json?limit=250');
+          if (productsRes.ok) {
+            const productsJson = await productsRes.json();
+            const ajaxProducts = Array.isArray(productsJson?.products) ? productsJson.products : [];
+
+            const firstVariantByProductNumericId = new Map();
+            ajaxProducts.forEach((ajaxProduct) => {
+              const productId = String(ajaxProduct?.id || '');
+              const variants = Array.isArray(ajaxProduct?.variants) ? ajaxProduct.variants : [];
+              const firstAvailableVariant = variants.find((variant) => variant?.available) || variants[0];
+              const firstVariantId = normalizeVariantId(firstAvailableVariant?.id);
+              if (productId && firstVariantId) {
+                firstVariantByProductNumericId.set(productId, firstVariantId);
+              }
+            });
+
+            unresolved.forEach((product) => {
+              const numericProductId = extractNumericId(product?.id);
+              const resolvedVariantId = firstVariantByProductNumericId.get(numericProductId);
+              if (resolvedVariantId) {
+                variantByProductId.set(String(product.id), resolvedVariantId);
+              }
+            });
+          }
+        } catch (error) {
+          console.warn('[FBT] /products.json lookup failed:', error);
+        }
+      }
+
+      unresolved = (products || []).filter((product) => !variantByProductId.has(String(product.id)));
+      for (const product of unresolved) {
+        const handle = String(product?.handle || '').trim();
+        if (!handle) continue;
+
+        try {
+          const handleRes = await fetch('/products/' + encodeURIComponent(handle) + '.js');
+          if (!handleRes.ok) continue;
+
+          const handleJson = await handleRes.json();
+          const variants = Array.isArray(handleJson?.variants) ? handleJson.variants : [];
+          const firstAvailableVariant = variants.find((variant) => variant?.available) || variants[0];
+          const resolvedVariantId = normalizeVariantId(firstAvailableVariant?.id);
+          if (resolvedVariantId) {
+            variantByProductId.set(String(product.id), resolvedVariantId);
+          }
+        } catch (error) {
+          console.warn('[FBT] handle lookup failed for', handle, error);
+        }
+      }
+
+      return variantByProductId;
+    }
+
+    function notifyCartUpdated(detail) {
+      [
+        'cart:item-added',
+        'cart:updated',
+        'cart:add',
+        'cart:refresh',
+        'on:cart:add',
+        'shopify:cart:added',
+        'theme:cart:open',
+        'cart:open',
+      ].forEach((eventName) => {
+        try {
+          document.dispatchEvent(new CustomEvent(eventName, { detail }));
+          window.dispatchEvent(new CustomEvent(eventName, { detail }));
+        } catch {}
+      });
+    }
+
+    async function getCartAddErrorMessage(response) {
+      const fallback = 'Failed to add selected products to cart.';
+
+      try {
+        const body = await response.clone().json();
+        return body?.description || body?.message || fallback;
+      } catch {}
+
+      try {
+        const text = await response.text();
+        return text || fallback;
+      } catch {}
+
+      return fallback;
+    }
+
+    async function postCartAdd(items) {
+      const response = await fetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+
+      if (!response.ok) {
+        const message = await getCartAddErrorMessage(response);
+        throw new Error(message);
+      }
+
+      return response;
+    }
+
+    async function addItemsWithFallback(items) {
+      try {
+        await postCartAdd(items);
+        return { addedItems: items, failedItems: [] };
+      } catch (batchError) {
+        const settled = await Promise.all(
+          items.map(async (item) => {
+            try {
+              await postCartAdd([{ id: item.id, quantity: item.quantity }]);
+              return { ok: true, item };
+            } catch (itemError) {
+              return {
+                ok: false,
+                item,
+                error: itemError?.message || batchError?.message || 'Failed to add item.',
+              };
+            }
+          })
+        );
+
+        const addedItems = settled
+          .filter((entry) => entry.ok)
+          .map((entry) => entry.item);
+
+        const failedItems = settled
+          .filter((entry) => !entry.ok)
+          .map((entry) => ({
+            ...entry.item,
+            error: entry.error,
+          }));
+
+        return { addedItems, failedItems };
+      }
+    }
+
     function renderFBT(container, config, products) {
       container.innerHTML = `
       <div class="ps-fbt-wrapper"
@@ -546,24 +716,87 @@
       updateTotal();
 
       if (addBtn) {
-        addBtn.onclick = () => {
-          let items = [];
-          selected.forEach((qty, id) => {
-            if (qty > 0) {
+        addBtn.onclick = async () => {
+          const defaultLabel = 'Add to Cart';
+          addBtn.disabled = true;
+          addBtn.textContent = 'Adding...';
+
+          try {
+            const variantLookup = await buildVariantLookup(products);
+            const items = [];
+            const productById = new Map((products || []).map((product) => [String(product.id), product]));
+
+            selected.forEach((qty, id) => {
+              if (qty <= 0) return;
+              const variantId = variantLookup.get(String(id));
+              if (!variantId) return;
+
+              const product = productById.get(String(id));
+
               items.push({
-                id: id.split('/').pop(),
+                id: String(variantId),
                 quantity: qty,
+                productId: String(id),
+                productTitle: product?.title || 'Product',
               });
+            });
+
+            if (!items.length) {
+              throw new Error('Unable to resolve variant IDs for selected products. Please re-save your FBT rule and try again.');
             }
-          });
 
-          if (!items.length) return;
+            const { addedItems, failedItems } = await addItemsWithFallback(items);
 
-          fetch('/cart/add.js', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ items }),
-          }).then(() => (window.location.href = '/cart'));
+            if (!addedItems.length) {
+              const failedTitles = failedItems
+                .map((item) => item.productTitle)
+                .filter(Boolean)
+                .slice(0, 3)
+                .join(', ');
+              const moreLabel = failedItems.length > 3 ? ', and more' : '';
+              const detail = failedTitles
+                ? `None of the selected products are currently available: ${failedTitles}${moreLabel}.`
+                : (failedItems[0]?.error || 'Failed to add selected products to cart.');
+              throw new Error(detail);
+            }
+
+            let cart = null;
+            try {
+              const cartRes = await fetch('/cart.js');
+              if (cartRes.ok) {
+                cart = await cartRes.json();
+              }
+            } catch {}
+
+            notifyCartUpdated({
+              source: 'fbt',
+              items: addedItems,
+              cart,
+            });
+
+            const totalAddedQty = addedItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+            addBtn.textContent = totalAddedQty > 1 ? `Added ${totalAddedQty}` : 'Added ✓';
+
+            if (failedItems.length > 0) {
+              const failedTitles = failedItems
+                .map((item) => item.productTitle)
+                .filter(Boolean)
+                .slice(0, 3)
+                .join(', ');
+              const moreLabel = failedItems.length > 3 ? ', and more' : '';
+              alert(`${totalAddedQty} item(s) added. ${failedItems.length} item(s) could not be added: ${failedTitles}${moreLabel}.`);
+            }
+
+            setTimeout(() => {
+              addBtn.textContent = defaultLabel;
+            }, 1200);
+          } catch (error) {
+            console.error('[FBT] add to cart failed:', error);
+            alert(error?.message || 'Failed to add selected products to cart.');
+            addBtn.textContent = defaultLabel;
+          } finally {
+            addBtn.disabled = false;
+          }
         };
       }
     }
