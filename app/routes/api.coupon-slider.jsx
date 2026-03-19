@@ -208,19 +208,18 @@ function transformFromDB(dbData) {
 
     // ── Build selectedCoupons list (merge from all sources for active template) ──
     const activeIdsFromStyles = Object.keys(activeOverrides);
-    const allFullIds = [...new Set(activeIdsFromStyles)];
 
+    // Only include coupons that were explicitly selected and saved, or have overrides if we really want to append (We should just use explicit selections)
     const reconciledSelected = idsFromSelected.map(rawId => {
         const id = normalizeId(rawId);
-        const match = allFullIds.find(f => normalizeId(f).startsWith(id) || id.startsWith(normalizeId(f)));
-        return match || id;
+        return id;
     });
 
     // Deduplicate by numeric tail (GID suffix) to handle double-slash vs single-slash variants
     const seen = new Map();
-    for (const id of [...reconciledSelected, ...allFullIds]) {
+    for (const id of reconciledSelected) {
         const tail = id.split('/').pop();
-        if (!seen.has(tail)) seen.set(tail, id);
+        if (!seen.has(tail) && tail) seen.set(tail, id);
     }
     const selectedCoupons = [...seen.values()];
 
