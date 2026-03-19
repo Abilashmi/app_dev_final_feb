@@ -217,7 +217,22 @@ function renderSlider(el,data,ctx){
   var def=r.def,map=r.map,conds=r.conds||[];
   var normalizedMap={};
   Object.keys(map||{}).forEach(function(k){normalizedMap[normalizeId(k)]=map[k];});
-  var ids=data.selectedTemplateCoupon||[];
+  var explicitCoupons=asArray(
+    data&&Array.isArray(data.selectedCouponsGlobal)&&data.selectedCouponsGlobal.length
+      ?data.selectedCouponsGlobal
+      :data.selectedTemplateCoupon
+  );
+  var ids=[];
+  var seenIds={};
+  explicitCoupons.forEach(function(item){
+    var idObj = item&&typeof item==='object'?item.id:item;
+    if(!idObj) return;
+    var nId = normalizeId(idObj);
+    if(nId && !seenIds[nId]){
+      seenIds[nId] = true;
+      ids.push(item);
+    }
+  });
   if(!ids.length){el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons configured.</p>';return;}
 
   var itemsToRender=[];
