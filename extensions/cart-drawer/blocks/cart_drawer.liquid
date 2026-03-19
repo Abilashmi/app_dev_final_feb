@@ -1,5 +1,5 @@
 ﻿{% if shop.permanent_domain != blank %}
-  <div id="cc-root" data-shop="{{ shop.permanent_domain }}"></div>
+  <div id="cc-root" data-shop="{{ shop.permanent_domain }}" data-currency="{{ shop.currency }}"></div>
 
   {{ 'cart_drawer_inline.css' | asset_url | stylesheet_tag }}
   <script src="{{ 'cart_drawer_inline.js' | asset_url }}" defer></script>

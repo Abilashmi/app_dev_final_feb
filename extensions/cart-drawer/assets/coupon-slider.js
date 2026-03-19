@@ -1,6 +1,3 @@
-﻿{% schema %}{"name":"Coupon Slider","target":"section","settings":[]}{% endschema %}
-<ps-coupon-slider id="ps-coupon-slider-{{ block.id }}" data-shop="{{ shop.permanent_domain }}" data-product-handle="{{ product.handle | default: '' | downcase | escape }}" data-collection-handles="{% if product %}{% for c in product.collections %}{{ c.handle | downcase | escape }}{% unless forloop.last %},{% endunless %}{% endfor %}{% endif %}" data-product-tags="{{ product.tags | join: ',' | downcase | escape }}"><div>Loading coupons...</div></ps-coupon-slider>
-<script>
 (function(){
 if(customElements.get('ps-coupon-slider'))return;
 var _cache={};
@@ -220,18 +217,7 @@ function renderSlider(el,data,ctx){
   var def=r.def,map=r.map,conds=r.conds||[];
   var normalizedMap={};
   Object.keys(map||{}).forEach(function(k){normalizedMap[normalizeId(k)]=map[k];});
-  var explicitIds=asArray(
-    data&&Array.isArray(data.selectedCouponsGlobal)&&data.selectedCouponsGlobal.length
-      ?data.selectedCouponsGlobal
-      :data.selectedTemplateCoupon
-  ).map(function(id){return normalizeId(id);}).filter(Boolean);
-  var styleIds=Object.keys(map||{})
-    .map(function(key){return normalizeId(key);})
-    .filter(function(key){return key&&!/^\d+$/.test(key);});
-  var conditionIds=(conds||[])
-    .map(function(cond){return normalizeId(cond&&cond.couponId);})
-    .filter(Boolean);
-  var ids=unique([].concat(explicitIds,styleIds,conditionIds));
+  var ids=data.selectedTemplateCoupon||[];
   if(!ids.length){el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons configured.</p>';return;}
 
   var itemsToRender=[];
@@ -326,32 +312,14 @@ function renderSlider(el,data,ctx){
 
 customElements.define('ps-coupon-slider',class extends HTMLElement{
   connectedCallback(){
-    var el=this,shop=normalizeText(el.dataset.shop||(window.Shopify&&window.Shopify.shop));
-    if(!shop){
-      el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons available.</p>';
-      return;
-    }
+    var el=this,shop=el.dataset.shop;
     if(_cache[shop]){
       getDisplayContext(el).then(function(ctx){renderSlider(el,_cache[shop],ctx);});
       return;
     }
-    var encodedShop=encodeURIComponent(shop);
-    var proxyAPI='/apps/cart-app/save_coupon_slider_widget.php?shopdomain='+encodedShop;
-    var directAPI='https://blueviolet-clam-512487.hostingersite.com/save_coupon_slider_widget.php?shopdomain='+encodedShop;
-
-    function requestJson(url){
-      return fetch(url,{headers:{'ngrok-skip-browser-warning':'true'}})
-        .then(function(r){
-          if(!r.ok)throw new Error('HTTP '+r.status);
-          return r.text();
-        })
-        .then(function(body){
-          try{return JSON.parse(body);}catch(_e){throw new Error('Invalid JSON response');}
-        });
-    }
-
-    requestJson(proxyAPI)
-      .catch(function(){return requestJson(directAPI);})
+    var API='/apps/cart-app/save_coupon_slider_widget.php?shopdomain='+shop;
+    fetch(API,{headers:{'ngrok-skip-browser-warning':'true'}})
+      .then(function(r){return r.json();})
       .then(function(res){
         if(!res||res.status!=='success'){el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons available.</p>';return;}
         _cache[shop]=res.data;
@@ -359,26 +327,7 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
           renderSlider(el,res.data,ctx);
         });
       })
-      .catch(function(err){
-        console.error('[Coupon Slider] load failed:',err&&err.message?err.message:err);
-        el.innerHTML='<p style="color:#ef4444;font-size:14px;padding:16px;">Error loading coupons.</p>';
-      });
+      .catch(function(){el.innerHTML='<p style="color:#ef4444;font-size:14px;padding:16px;">Error loading coupons.</p>';});
   }
 });
 })();
-</script>
-<style>
-.ps-slider{position:relative;width:100%}
-.ps-slider-header{display:flex;justify-content:flex-end;margin-bottom:10px}
-.ps-nav-group{display:flex;gap:10px}
-.ps-coupon-wrapper{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:16px;padding:10px 0;scroll-behavior:smooth;scrollbar-width:none;-ms-overflow-style:none}
-.ps-coupon-wrapper::-webkit-scrollbar{display:none}
-.ps-nav{width:36px;height:36px;border-radius:50%;border:1px solid #e2e8f0;background:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .2s;box-shadow:0 1px 3px rgba(0,0,0,0.06)}
-.ps-nav:hover{background:#f8fafc;border-color:#cbd5e1}
-.ps-card{box-shadow:0 4px 16px rgba(0,0,0,.08)}
-@media(max-width:768px){
-  .ps-coupon-wrapper{gap:12px}
-  .ps-nav{width:32px;height:32px}
-  .ps-card{flex:0 0 85vw!important;min-width:0!important}
-}
-</style>

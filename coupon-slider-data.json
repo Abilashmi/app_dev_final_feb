@@ -18,7 +18,7 @@
     "template2": {
       "name": "Minimal Card",
       "headingText": "SPECIAL OFFER",
-      "subtextText": "Free shipping on orders over ₹500",
+      "subtextText": "Free shipping on qualifying orders",
       "bgColor": "#f9fafb",
       "textColor": "#374151",
       "accentColor": "#10b981",
@@ -30,8 +30,8 @@
     }
   },
   "selectedActiveCoupons": [
-    "gid://shopify/DiscountRedeemCode/26805031010371",
-    "gid://shopify/DiscountRedeemCode/26833535139907"
+    "gid:/shopify/DiscountRedeemCode/26805031010371",
+    "gid:/shopify/DiscountRedeemCode/26833535139907"
   ],
   "shop": "cartapp-2.myshopify.com",
   "templates": {
@@ -57,7 +57,7 @@
     "template2": {
       "name": "Minimal Card",
       "headingText": "SPECIAL OFFER",
-      "subtextText": "Free shipping on orders over ₹500",
+      "subtextText": "Free shipping on qualifying orders",
       "bgColor": "#f9fafb",
       "textColor": "#374151",
       "accentColor": "#10b981",
@@ -95,7 +95,7 @@
     "template4": {
       "name": "Modern Gradient",
       "headingText": "Inherit",
-      "subtextText": "Free shipping on orders over ₹500",
+      "subtextText": "Free shipping on qualifying orders",
       "bgColor": "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
       "textColor": "#ffffff",
       "accentColor": "#fbbf24",
@@ -127,51 +127,22 @@
   },
   "allTemplateOverrides": {
     "template1": {},
-    "template2": {
-      "gid:/shopify/DiscountRedeemCode/26805030813763": {
-        "buttonTextColor": "#b73737",
-        "buttonColor": "#040404",
-        "accentColor": "#000000",
-        "textColor": "#000000",
-        "bgColor": "#467099",
-        "fontSize": 12,
-        "padding": 23,
-        "borderRadius": 6,
-        "couponCode": "J62ZTBU1",
-        "headingText": "Hello Code ",
-        "subtextText": "offer 2%",
-        "displayCondition": "product_handle",
-        "productHandles": [
-          "the-collection-snowboard-liquid"
-        ]
-      },
+    "template2": {},
+    "template3": {
       "gid:/shopify/DiscountRedeemCode/26805031010371": {
         "couponCode": "velwo",
-        "headingText": "SPECIAL OFFER",
-        "subtextText": "Free shipping on orders over ₹500",
+        "headingText": "Velwo",
+        "subtextText": "Heloo",
         "displayCondition": "all"
       },
       "gid:/shopify/DiscountRedeemCode/26833535139907": {
         "couponCode": "PSQEP5W9",
-        "headingText": "SPECIAL OFFER",
-        "subtextText": "Free shipping on orders over ₹500",
-        "displayCondition": "all"
-      }
-    },
-    "template3": {
-      "gid://shopify/DiscountRedeemCode/26805031010371": {
-        "couponCode": "velwo",
         "headingText": "FLASH SALE!",
-        "subtextText": "Use code: BOLD25 for extra 25% OFF"
-      },
-      "gid://shopify/DiscountRedeemCode/26833535139907": {
+        "subtextText": "Use code: BOLD25 for extra 25% OFF",
         "displayCondition": "product_handle",
         "productHandles": [
           "the-3p-fulfilled-snowboard"
-        ],
-        "couponCode": "PSQEP5W9",
-        "headingText": "FLASH SALE!",
-        "subtextText": "Use code: BOLD25 for extra 25% OFF"
+        ]
       }
     }
   }

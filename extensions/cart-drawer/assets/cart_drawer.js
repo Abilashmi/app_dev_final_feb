@@ -4,9 +4,24 @@
     const container = document.getElementById('cc-root');
     if (!container) return;
     const SHOP = container.dataset.shop;
+    const CURRENCY_CODE = container.dataset.currency || 'USD';
     const API_BASE = '/apps/cart-app/';
     const CONFIG_API = API_BASE + '/save_cart_drawer.php?shopdomain=' + SHOP;
     const COUPON_API = API_BASE + '/save_coupon.php?shopdomain=' + SHOP;
+
+    // Utility: Get currency symbol from code
+    function getCurrencySymbol(code) {
+      const symbols = {
+        USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', AUD: 'A$', CAD: 'C$',
+        CHF: 'CHF', CNY: '¥', SEK: 'kr', NZD: 'NZ$', MXN: '$', SGD: 'S$', HKD: 'HK$',
+        NOK: 'kr', KRW: '₩', TRY: '₺', RUB: '₽', BRL: 'R$', ZAR: 'R', THB: '฿',
+        MYR: 'RM', PHP: '₱', IDR: 'Rp', VND: '₫', KES: 'KSh', NGN: '₦', PKR: '₨',
+        BDT: '৳', AED: 'د.إ', SAR: '﷼', QAR: '﷼'
+      };
+      return symbols[code] || code;
+    }
+
+    const CURRENCY_SYMBOL = getCurrencySymbol(CURRENCY_CODE);
 
     let CONFIG = null;
     let COUPONS = [];
@@ -262,7 +277,25 @@
 
     /* =================== DEBOUNCED OPEN =================== */
     let _ccOpenTimer = null;
+    let _ccLastImmediateOpenAt = 0;
+
+    function openDrawerNow() {
+        _ccLastImmediateOpenAt = Date.now();
+        if (_ccOpenTimer) {
+            clearTimeout(_ccOpenTimer);
+            _ccOpenTimer = null;
+        }
+        openDrawer();
+    }
+
+    try {
+        window.__CC_DRAWER_API = window.__CC_DRAWER_API || {};
+        window.__CC_DRAWER_API.openNow = openDrawerNow;
+        window.__CC_DRAWER_API.open = openDrawer;
+    } catch (e) { }
+
     function scheduleOpenDrawer(delay) {
+        if (Date.now() - _ccLastImmediateOpenAt < 300) return;
         if (_ccOpenTimer) clearTimeout(_ccOpenTimer);
         _ccOpenTimer = setTimeout(function () {
             _ccOpenTimer = null;
@@ -300,6 +333,9 @@
             scheduleOpenDrawer(500);
         }
     });
+
+    document.addEventListener('cc:open-now', function () { openDrawerNow(); });
+    window.addEventListener('cc:open-now', function () { openDrawerNow(); });
 
     [
         'cart:item-added',
@@ -488,7 +524,7 @@
             drawerHtml += `<div style="padding:24px 16px;background:#fff;border-radius:16px;box-shadow:0 4px 20px -5px rgba(0,0,0,0.05);margin-bottom:20px;position:relative;border:1px solid #f1f5f9;">
         <div style="text-align:center;margin-bottom:28px;">`;
             if (pInfo.upcoming) {
-                const amountLeft = pInfo.mode === 'quantity' ? `${Math.round(pInfo.nextAmount)} items` : `₹${Math.round(pInfo.nextAmount)}`;
+                const amountLeft = pInfo.mode === 'quantity' ? `${Math.round(pInfo.nextAmount)} items` : `${CURRENCY_SYMBOL}${Math.round(pInfo.nextAmount)}`;
                 drawerHtml += `<p style="margin:0 0 4px 0;font-size:15px;font-weight:500;color:#64748b;">You're <span style="color:#0f172a;font-weight:700;">${amountLeft}</span> away</p>
                        <p style="margin:0;font-size:14px;font-weight:700;color:${fgColor};">Unlock: ${pInfo.upcoming.rewardText}</p>`;
             } else {
@@ -549,7 +585,7 @@
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto;">
               <div style="display:flex;align-items:center;gap:6px;">
-                <span style="font-size:14px;font-weight:700;color:#0f172a;">₹${unitPrice.toFixed(0)}</span>
+                <span style="font-size:14px;font-weight:700;color:#0f172a;">${CURRENCY_SYMBOL}${unitPrice.toFixed(0)}</span>
                 <span style="font-size:12px;color:#64748b;font-weight:500;">(${item.quantity})</span>
               </div>
               <div style="display:flex;align-items:center;gap:12px;">
@@ -558,7 +594,7 @@
                   <span style="width:24px;text-align:center;font-size:13px;font-weight:700;color:#1e293b;">${item.quantity}</span>
                   <button class="cc-qty-btn" onclick="ccUpdateQty('${item.key}',${item.quantity + 1})">+</button>
                 </div>
-                <div style="text-align:right;min-width:60px;"><span style="font-weight:800;font-size:15px;color:#0f172a;">₹${lineTotal.toFixed(0)}</span></div>
+                <div style="text-align:right;min-width:60px;"><span style="font-weight:800;font-size:15px;color:#0f172a;">${CURRENCY_SYMBOL}${lineTotal.toFixed(0)}</span></div>
               </div>
             </div>
           </div>
@@ -599,9 +635,9 @@
 
         drawerHtml += `<div style="padding:20px;background:#fff;border-top:1px solid #f1f5f9;box-shadow:0 -4px 6px -1px rgba(0,0,0,0.05);flex-shrink:0;">
       <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;color:#64748b;font-weight:500;">Subtotal</span><span style="font-size:14px;color:#0f172a;font-weight:700;">₹${subtotal.toFixed(0)}</span></div>
-        ${totalDiscount > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;color:#10b981;"><span style="font-size:14px;font-weight:500;">Discounts</span><span style="font-size:14px;font-weight:700;">-₹${totalDiscount.toFixed(0)}</span></div>` : ''}
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:10px;border-top:1px solid #f1f5f9;"><span style="font-size:16px;color:#0f172a;font-weight:800;">Total</span><span style="font-size:18px;color:#0f172a;font-weight:900;">₹${finalTotal.toFixed(0)}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="font-size:14px;color:#64748b;font-weight:500;">Subtotal</span><span style="font-size:14px;color:#0f172a;font-weight:700;">${CURRENCY_SYMBOL}${subtotal.toFixed(0)}</span></div>
+        ${totalDiscount > 0 ? `<div style="display:flex;justify-content:space-between;align-items:center;color:#10b981;"><span style="font-size:14px;font-weight:500;">Discounts</span><span style="font-size:14px;font-weight:700;">-${CURRENCY_SYMBOL}${totalDiscount.toFixed(0)}</span></div>` : ''}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:10px;border-top:1px solid #f1f5f9;"><span style="font-size:16px;color:#0f172a;font-weight:800;">Total</span><span style="font-size:18px;color:#0f172a;font-weight:900;">${CURRENCY_SYMBOL}${finalTotal.toFixed(0)}</span></div>
       </div>
       <a href="/checkout" style="text-decoration:none;"><button style="width:100%;padding:16px;background:#111827;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;">Checkout Now →</button></a>
     </div>`;
@@ -713,7 +749,7 @@
         <div style="flex:1;display:flex;flex-direction:column;justify-content:center;">
           <p style="margin:0;font-size:13px;font-weight:700;">${escapeHtml(d.title || 'Product')}</p>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
-            <span style="font-weight:800;color:#10b981;">₹${parseFloat(d.price || 0).toFixed(0)}</span>
+            <span style="font-weight:800;color:#10b981;">${CURRENCY_SYMBOL}${parseFloat(d.price || 0).toFixed(0)}</span>
             <button onclick="ccAddToCart('${d.variantId || productId}')" class="cc-add-btn">Add</button>
           </div>
         </div>

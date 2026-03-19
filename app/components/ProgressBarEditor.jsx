@@ -25,6 +25,7 @@ import {
   SettingsIcon,
   ColorIcon,
 } from '@shopify/polaris-icons';
+import { useCurrency } from './CurrencyContext';
 
 // --- UTILITY FUNCTIONS (Local copies for simplicity or import if available) ---
 function hsbToHex(hsb) {
@@ -167,6 +168,7 @@ export default function ProgressBarEditor({
   handleOpenProductPicker,
   loadedShopifyProducts,
 }) {
+  const { symbol: currencySymbol } = useCurrency();
   const productsList = loadedShopifyProducts;
 
   return (
@@ -323,7 +325,7 @@ export default function ProgressBarEditor({
                         <InlineStack gap="400">
                           <div style={{ flex: 1 }}>
                             <TextField
-                              label={progressMode === 'amount' ? 'Target Amount (₹)' : 'Target Quantity'}
+                              label={progressMode === 'amount' ? `Target Amount (${currencySymbol})` : 'Target Quantity'}
                               type="number"
                               value={String(progressBarSettings.tiers[activeTierIndex].minValue)}
                               onChange={(value) => updateTierSetting(activeTierIndex, 'minValue', parseInt(value) || 0)}

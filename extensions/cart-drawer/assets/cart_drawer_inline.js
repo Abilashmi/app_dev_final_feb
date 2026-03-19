@@ -1,11 +1,27 @@
 (function () {
   console.log('[CartDrawer] Script loaded ✓');
 
-  const SHOP = document.getElementById('cc-root').getAttribute('data-shop');
+  const container = document.getElementById('cc-root');
+  const SHOP = container.getAttribute('data-shop');
+  const CURRENCY_CODE = container.getAttribute('data-currency') || 'USD';
   const API_BASE = '/apps/cart-app';
   const CONFIG_API = API_BASE + '/save_cart_drawer.php?shopdomain=' + SHOP;
   const COUPON_API = API_BASE + '/save_coupon.php?shopdomain=' + SHOP;
   const CLICK_API = API_BASE + '/click.php';
+
+  // Utility: Get currency symbol from code
+  function getCurrencySymbol(code) {
+    const symbols = {
+      USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', AUD: 'A$', CAD: 'C$',
+      CHF: 'CHF', CNY: '¥', SEK: 'kr', NZD: 'NZ$', MXN: '$', SGD: 'S$', HKD: 'HK$',
+      NOK: 'kr', KRW: '₩', TRY: '₺', RUB: '₽', BRL: 'R$', ZAR: 'R', THB: '฿',
+      MYR: 'RM', PHP: '₱', IDR: 'Rp', VND: '₫', KES: 'KSh', NGN: '₦', PKR: '₨',
+      BDT: '৳', AED: 'د.إ', SAR: '﷼', QAR: '﷼'
+    };
+    return symbols[code] || code;
+  }
+
+  const CURRENCY_SYMBOL = getCurrencySymbol(CURRENCY_CODE);
 
   let CONFIG = null;
   let COUPONS = [];
@@ -848,7 +864,7 @@
       drawerHtml += `<div style="text-align:center;margin-bottom:28px;">`;
       if (pInfo.upcoming) {
         const amountLeft =
-          pInfo.mode === 'quantity' ? `${Math.round(pInfo.nextAmount)} items` : `₹${Math.round(pInfo.nextAmount)}`;
+          pInfo.mode === 'quantity' ? `${Math.round(pInfo.nextAmount)} items` : `${CURRENCY_SYMBOL}${Math.round(pInfo.nextAmount)}`;
         drawerHtml += `
     <p style="margin:0 0 4px 0;font-size:15px;font-weight:500;color:#64748b;">
       You're <span style="color:#0f172a;font-weight:700;">${amountLeft}</span> away
@@ -920,7 +936,7 @@
         if (isCompleted) {
           drawerHtml += `<span style="color:${fgColor};">${ms.rewardText}</span>`;
         } else {
-          drawerHtml += `<span>${pInfo.mode === 'amount' ? '₹' + Math.round(ms.target) : ms.target}</span>`;
+          drawerHtml += `<span>${pInfo.mode === 'amount' ? CURRENCY_SYMBOL + Math.round(ms.target) : ms.target}</span>`;
         }
         drawerHtml += `</div></div>`;
       });
@@ -995,8 +1011,8 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto;">
           <div style="display:flex;flex-direction:column;">
             <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-size:14px;font-weight:700;color:#0f172a;">₹${unitPrice.toFixed(0)}</span>
-              <span style="font-size:12px;color:#64748b;font-weight:500;">(${item.quantity} × ₹${unitPrice.toFixed(
+              <span style="font-size:14px;font-weight:700;color:#0f172a;">${CURRENCY_SYMBOL}${unitPrice.toFixed(0)}</span>
+              <span style="font-size:12px;color:#64748b;font-weight:500;">(${item.quantity} × ${CURRENCY_SYMBOL}${unitPrice.toFixed(
             0
           )})</span>
             </div>
@@ -1009,7 +1025,7 @@
               <button class="cc-qty-btn" onclick="ccUpdateQty('${item.key}',${item.quantity + 1})">+</button>
             </div>
             <div style="text-align:right;min-width:60px;">
-              <span style="font-weight:800;font-size:15px;color:#0f172a;">₹${lineTotal.toFixed(0)}</span>
+              <span style="font-weight:800;font-size:15px;color:#0f172a;">${CURRENCY_SYMBOL}${lineTotal.toFixed(0)}</span>
             </div>
           </div>
         </div>
@@ -1070,7 +1086,7 @@
   <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <span style="font-size:14px;color:#64748b;font-weight:500;">Subtotal</span>
-      <span style="font-size:14px;color:#0f172a;font-weight:700;">₹${subtotal.toFixed(0)}</span>
+      <span style="font-size:14px;color:#0f172a;font-weight:700;">${CURRENCY_SYMBOL}${subtotal.toFixed(0)}</span>
     </div>
 `;
 
@@ -1078,7 +1094,7 @@
       drawerHtml += `
     <div style="display:flex;justify-content:space-between;align-items:center;color:#10b981;">
       <span style="font-size:14px;font-weight:500;">Discounts</span>
-      <span style="font-size:14px;font-weight:700;">-₹${totalDiscount.toFixed(0)}</span>
+      <span style="font-size:14px;font-weight:700;">-${CURRENCY_SYMBOL}${totalDiscount.toFixed(0)}</span>
     </div>
 `;
     }
@@ -1086,7 +1102,7 @@
     drawerHtml += `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-top:10px;border-top:1px solid #f1f5f9;">
       <span style="font-size:16px;color:#0f172a;font-weight:800;">Total</span>
-      <span style="font-size:18px;color:#0f172a;font-weight:900;">₹${finalTotal.toFixed(0)}</span>
+      <span style="font-size:18px;color:#0f172a;font-weight:900;">${CURRENCY_SYMBOL}${finalTotal.toFixed(0)}</span>
     </div>
   </div>
   <a href="/checkout" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
@@ -1424,7 +1440,7 @@
           (d) => String(d.id).replace('gid://shopify/Product/', '') === productId
         ) || {};
       const title = detail.title || 'Product';
-      const priceText = detail.price ? '₹' + parseFloat(detail.price).toFixed(0) : '';
+      const priceText = detail.price ? CURRENCY_SYMBOL + parseFloat(detail.price).toFixed(0) : '';
       const imageHtml =
         detail.image && detail.image !== '📦' && detail.image !== null
           ? `<img src="${detail.image}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">`

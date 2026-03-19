@@ -4,6 +4,9 @@
  * OpenAI key is stored server-side — never exposed to the client.
  */
 
+import { authenticate } from "../shopify.server";
+import { getCurrencySymbolFromCode } from "../utils/currency.server";
+
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_MODEL = "gpt-4o-mini";
 const DEFAULT_PRODUCTS_PER_TRIGGER = 3;
@@ -28,6 +31,29 @@ export async function action({ request }) {
             JSON.stringify({ error: "OpenAI API key not configured on the server." }),
             { status: 500, headers: { "Content-Type": "application/json" } }
         );
+    }
+
+    // Try to get the currency symbol
+    let currencySymbol = "$";
+    try {
+        const { admin } = await authenticate.admin(request);
+        if (admin) {
+            const response = await admin.graphql(`
+                query {
+                    shop {
+                        currencyCode
+                    }
+                }
+            `);
+            const data = await response.json();
+            const currencyCode = data?.data?.shop?.currencyCode;
+            if (currencyCode) {
+                currencySymbol = getCurrencySymbolFromCode(currencyCode);
+            }
+        }
+    } catch (error) {
+        console.error("[FBT-AI] Error fetching currency:", error);
+        // Continue with default $ symbol
     }
 
     let body;
@@ -66,7 +92,7 @@ export async function action({ request }) {
         : "";
 
     // Build a compact product list for the prompt (title + price only — no IDs sent to OpenAI)
-    const productIndex = products.map((p, i) => `${i + 1}. ${p.title} ($${p.price})`).join("\n");
+    const productIndex = products.map((p, i) => `${i + 1}. ${p.title} (${currencySymbol}${p.price})`).join("\n");
 
     const customInstructionBlock = customPrompt
         ? `\nAdditional merchant instruction:\n${customPrompt}\n`

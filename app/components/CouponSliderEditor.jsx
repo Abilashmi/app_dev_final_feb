@@ -22,6 +22,7 @@ import {
   LayoutIcon,
 } from '@shopify/polaris-icons';
 import { COUPON_STYLES } from '../services/api.cart-settings.shared';
+import { useCurrency } from './CurrencyContext';
 
 export default function CouponSliderEditor({
   featureStates,
@@ -47,6 +48,7 @@ export default function CouponSliderEditor({
   handleSaveCoupon,
   handleCancelCoupon,
 }) {
+  const { symbol: currencySymbol } = useCurrency();
   const tabs = [
     {
       id: 'global-style',
@@ -274,7 +276,7 @@ export default function CouponSliderEditor({
                                 label="Discount Type"
                                 options={[
                                   { label: 'Percentage (%)', value: 'percentage' },
-                                  { label: 'Fixed Amount (₹)', value: 'fixed' },
+                                  { label: `Fixed Amount (${currencySymbol})`, value: 'fixed' },
                                 ]}
                                 value={editingCoupon.discountType}
                                 onChange={(val) => updateCouponField('discountType', val)}

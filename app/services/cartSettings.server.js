@@ -57,13 +57,13 @@ let COUPONS = [
   {
     id: "co-1",
     coupon_code_text: "SAVE10",
-    description_text: "Save 10% on orders over ₹500",
+    description_text: "Save 10% on qualifying orders",
     is_enabled: true,
   },
   {
     id: "co-2",
     coupon_code_text: "FLAT75",
-    description_text: "Flat ₹75 off on your first order",
+    description_text: "Special discount on your first order",
     is_enabled: true,
   },
 ];

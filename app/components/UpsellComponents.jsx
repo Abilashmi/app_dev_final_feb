@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { useCurrency } from './CurrencyContext';
 
 /**
  * Add to Cart Button Component
@@ -63,6 +64,7 @@ export function UpsellProductCard({
   layout = 'slider',
   loading = false,
 }) {
+  const { symbol: currencySymbol } = useCurrency();
   if (!product) return null;
 
   return (
@@ -149,7 +151,7 @@ export function UpsellProductCard({
               fontWeight: '500',
             }}
           >
-            ₹{product.price.toFixed(2)}
+            {currencySymbol}{product.price.toFixed(2)}
           </p>
         )}
 

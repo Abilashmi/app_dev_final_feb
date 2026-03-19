@@ -42,6 +42,8 @@ import {
   Line
 } from 'recharts';
 import { authenticate } from "../shopify.server";
+import { useCurrency } from "../components/CurrencyContext";
+import { formatAmount, getLocaleForCurrency } from "../utils/currency.shared";
 
 const DEFAULT_ANALYTICS = {
   checkout_click: 0,
@@ -69,12 +71,7 @@ function toAmount(value) {
   return Number.isFinite(numeric) ? Math.max(0, numeric) : 0;
 }
 
-function formatINR(value) {
-  return `₹${toAmount(value).toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
+// Note: formatDynamicCurrency is now called within the component using useCurrency hook
 
 function normalizeAnalyticsState(payload = {}) {
   return {
@@ -138,6 +135,7 @@ const COLORS = ['#008060', '#005ea2', '#9c6ade', '#e29100'];
 
 export default function AppAnalytics() {
   const { shop, initialAnalytics, initialAnalyticsError } = useLoaderData();
+  const { symbol: currencySymbol, code: currencyCode } = useCurrency();
 
   const navigate = useNavigate();
   const [popoverActive, setPopoverActive] = useState(false);
@@ -198,7 +196,7 @@ export default function AppAnalytics() {
       let url = `/api/analytics?shop=${encodeURIComponent(shop)}`;
       
       if (start && end) {
-        // Format dates as YYYY-MM-DD for the backend
+        // Format dates as YYYY-MM-DD for the backend8
        function formatLocalDate(date) {
   const d = new Date(date);
   const year = d.getFullYear();
@@ -365,7 +363,7 @@ const endStr = formatLocalDate(end);
                 <ComposedChart data={FEATURE_DATA}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E1E3E5" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6D7175' }} />
-                  <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6D7175' }} label={{ value: 'Revenue (₹)', angle: -90, position: 'insideLeft', fill: '#6D7175' }} />
+                  <YAxis yAxisId="left" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6D7175' }} label={{ value: `Revenue (${currencySymbol})`, angle: -90, position: 'insideLeft', fill: '#6D7175' }} />
                   <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6D7175' }} label={{ value: 'CTR %', angle: 90, position: 'insideRight', fill: '#6D7175' }} />
                   <Tooltip
                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
@@ -396,7 +394,7 @@ const endStr = formatLocalDate(end);
         <Card padding="400">
           <BlockStack gap="100">
             <Text variant="bodySm" tone="subdued">Average Order Value Lift</Text>
-            <Text variant="headingXl" fontWeight="bold">₹850.40</Text>
+            <Text variant="headingXl" fontWeight="bold">{formatAmount(850.40, currencySymbol, currencyCode)}</Text>
             <Text variant="bodySm" tone="success">+18.2% boost</Text>
           </BlockStack>
         </Card>
@@ -822,14 +820,14 @@ const endStr = formatLocalDate(end);
             <Card padding="400">
               <BlockStack gap="100">
                 <Text variant="bodySm" tone="subdued">Revenue Generated From Upsell</Text>
-                <Text variant="headingXl" fontWeight="bold">{formatINR(analytics.upsell_revenue_generated)}</Text>
+                <Text variant="headingXl" fontWeight="bold">{formatAmount(toAmount(analytics.upsell_revenue_generated), currencySymbol, currencyCode)}</Text>
                 <Text variant="bodySm" tone="success">Real-time status</Text>
               </BlockStack>
             </Card>
             <Card padding="400">
               <BlockStack gap="100">
                 <Text variant="bodySm" tone="subdued">Total Revenue From Cart Drawer</Text>
-                <Text variant="headingXl" fontWeight="bold">{formatINR(analytics.cartdrawer_total_revenue)}</Text>
+                <Text variant="headingXl" fontWeight="bold">{formatAmount(toAmount(analytics.cartdrawer_total_revenue), currencySymbol, currencyCode)}</Text>
                 <Text variant="bodySm" tone="success">Real-time status</Text>
               </BlockStack>
             </Card>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Text, Badge, Tooltip } from '@shopify/polaris';
+import { useCurrency } from './CurrencyContext';
 
 /**
  * MilestoneProgressBarPreview Component
@@ -24,6 +25,8 @@ export default function MilestoneProgressBarPreview({
   barColor = '#93D3FF',
   backgroundColor = '#e5e7eb',
 }) {
+  const { symbol: currencySymbol } = useCurrency();
+  
   if (!milestones || milestones.length === 0) {
     return null;
   }
@@ -51,7 +54,7 @@ export default function MilestoneProgressBarPreview({
 
   const getTooltipText = (state, milestone, index) => {
     const remaining = milestone.targetValue - currentValue;
-    const prefix = valueType === 'amount' ? '₹' : '';
+    const prefix = valueType === 'amount' ? currencySymbol : '';
     const suffix = valueType === 'quantity' ? ' items' : '';
 
     switch (state) {
@@ -76,7 +79,7 @@ export default function MilestoneProgressBarPreview({
       {/* Progress Text */}
       <div style={{ marginBottom: '12px', textAlign: 'center' }}>
         <Text variant="bodySm" as="p" tone="subdued">
-          {valueType === 'amount' ? `₹${currentValue}` : `${currentValue} items`} of {valueType === 'amount' ? `₹${milestones[milestones.length - 1].targetValue}` : `${milestones[milestones.length - 1].targetValue} items`}
+          {valueType === 'amount' ? `${currencySymbol}${currentValue}` : `${currentValue} items`} of {valueType === 'amount' ? `${currencySymbol}${milestones[milestones.length - 1].targetValue}` : `${milestones[milestones.length - 1].targetValue} items`}
         </Text>
       </div>
 
@@ -221,7 +224,7 @@ export default function MilestoneProgressBarPreview({
             }}>
               <Text variant="bodySm" as="p">
                 {valueType === 'amount' 
-                  ? `Add ₹${remaining} more to unlock ${nextMilestone.label}` 
+                  ? `Add ${currencySymbol}${remaining} more to unlock ${nextMilestone.label}` 
                   : `Add ${remaining} more items to unlock ${nextMilestone.label}`}
               </Text>
             </div>
