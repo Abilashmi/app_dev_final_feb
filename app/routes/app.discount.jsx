@@ -32,6 +32,8 @@ import { useLoaderData, useNavigate, useSubmit, useActionData, useNavigation } f
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 
+import { useCurrency } from "../components/CurrencyContext";
+
 /* ---------------- LOADER & ACTION ---------------- */
 export { loader } from "./api.shopify-coupons";
 
@@ -114,12 +116,12 @@ function discountTypeLabel(type) {
   return type;
 }
 
-function formatDiscountValue(coupon) {
+function formatDiscountValue(coupon, currencySymbol) {
   if (coupon.discountType === "percentage" && coupon.discountValue) {
     return `${coupon.discountValue}% off`;
   }
   if (coupon.discountType === "fixed" && coupon.discountValue) {
-    return `₹${coupon.discountValue} off`;
+    return `${currencySymbol}${coupon.discountValue} off`;
   }
   if (coupon.discountType === "free_shipping") return "Free shipping";
   if (coupon.discountType === "bxgy") return "BXGY";
@@ -135,13 +137,13 @@ function formatDate(dateStr) {
   });
 }
 
-function buildCSV(coupons, format) {
+function buildCSV(coupons, format, currencySymbol) {
   const headers = ["Title", "Code", "Type", "Discount", "Status", "Used", "Limit", "Start Date", "End Date"];
   const rows = coupons.map((c) => [
     c.heading || c.code || "",
     c.code || "",
     discountTypeLabel(c.type),
-    formatDiscountValue(c),
+    formatDiscountValue(c, currencySymbol),
     c.status || "",
     c.used ?? 0,
     c.limit ?? "Unlimited",
@@ -174,6 +176,7 @@ function buildCSV(coupons, format) {
 /* ========================================== */
 
 export default function AppDiscounts() {
+  const { currencySymbol } = useCurrency();
   const navigate = useNavigate();
   const submit = useSubmit();
   const data = useLoaderData();
@@ -434,9 +437,9 @@ export default function AppDiscounts() {
         dataToExport = filteredCoupons;
         break;
     }
-    buildCSV(dataToExport, exportFormat);
+    buildCSV(dataToExport, exportFormat, currencySymbol);
     setExportModalOpen(false);
-  }, [exportScope, exportFormat, coupons, filteredCoupons, selectedResources]);
+  }, [exportScope, exportFormat, coupons, filteredCoupons, selectedResources, currencySymbol]);
 
   // ── Row markup ──
   const rowMarkup = filteredCoupons.map(
@@ -474,7 +477,7 @@ export default function AppDiscounts() {
         </IndexTable.Cell>
         <IndexTable.Cell>
           <Text as="span" variant="bodyMd" fontWeight="bold">
-            {formatDiscountValue(coupon)}
+            {formatDiscountValue(coupon, currencySymbol)}
           </Text>
         </IndexTable.Cell>
         <IndexTable.Cell>{statusBadge(coupon.status)}</IndexTable.Cell>

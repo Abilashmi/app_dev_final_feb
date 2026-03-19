@@ -243,7 +243,7 @@ export const MOCK_MILESTONES = [
     targetType: "amount",
     targetValue: 300,
     rewardType: "product",
-    label: "₹300",
+    label: "300",
     icon: "gift"
   },
   {
@@ -251,7 +251,7 @@ export const MOCK_MILESTONES = [
     targetType: "amount",
     targetValue: 600,
     rewardType: "free_shipping",
-    label: "₹600",
+    label: "600",
     icon: "truck"
   },
   {
@@ -259,7 +259,7 @@ export const MOCK_MILESTONES = [
     targetType: "amount",
     targetValue: 1000,
     rewardType: "discount",
-    label: "₹1000",
+    label: "1000",
     icon: "star"
   }
 ];

@@ -36,6 +36,7 @@ import { useCallback, useState, useMemo, useEffect } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
 import { getStoredCoupons } from "./api.create_coupon-sample";
+import { useCurrency } from "../components/CurrencyContext";
 
 const COUNTRIES = [
     { label: "India", value: "IN", flag: "🇮🇳" },
@@ -320,6 +321,7 @@ export const loader = async ({ request }) => {
 /* ---------------- COMPONENT ---------------- */
 
 export default function CreateDiscount() {
+    const { currencySymbol } = useCurrency();
     const navigate = useNavigate();
     const actionData = useActionData();
     const { coupons } = useLoaderData() || { coupons: [] };
@@ -487,14 +489,14 @@ export default function CreateDiscount() {
         items.push(`Type: ${typeLabels[type[0]]}`);
 
         if (type[0] === "bxgy") {
-            items.push(`Buy ${bxgyBuysQuantity} get ${bxgyGetsQuantity} ${bxgyGetsValueType === "free" ? "free" : bxgyGetsValueType === "percentage" ? bxgyGetsValue + "% off" : "₹" + bxgyGetsValue + " off"}`);
+            items.push(`Buy ${bxgyBuysQuantity} get ${bxgyGetsQuantity} ${bxgyGetsValueType === "free" ? "free" : bxgyGetsValueType === "percentage" ? bxgyGetsValue + "% off" : currencySymbol + bxgyGetsValue + " off"}`);
         } else if (type[0] === "free_shipping") {
             items.push("Free shipping");
         } else {
             if (discountValueType === "percentage" && value) {
                 items.push(`${value}% off`);
             } else if (value) {
-                items.push(`₹${value} off`);
+                items.push(`${currencySymbol}${value} off`);
             }
         }
 
@@ -670,13 +672,13 @@ export default function CreateDiscount() {
                                                     type="number"
                                                     value={value}
                                                     onChange={setValue}
-                                                    prefix="₹"
+                                                    prefix={currencySymbol}
                                                     autoComplete="off"
                                                 />
                                                 {type[0] === "amount_off_products" ? (
                                                     <>
                                                         <Text variant="bodySm" tone="subdued">
-                                                            Applies a fixed discount to each eligible product. Example: ₹100 off means ₹100 is deducted from every qualifying product.
+                                                            Applies a fixed discount to each eligible product. Example: {currencySymbol}100 off means {currencySymbol}100 is deducted from every qualifying product.
                                                         </Text>
                                                         <Checkbox
                                                             label="Once per order"
@@ -691,7 +693,7 @@ export default function CreateDiscount() {
                                                             Applies a fixed discount to the total order value.
                                                         </Text>
                                                         <Text variant="bodySm" tone="subdued">
-                                                            Example: ₹200 off means ₹200 is deducted from the cart total at checkout.
+                                                            Example: {currencySymbol}200 off means {currencySymbol}200 is deducted from the cart total at checkout.
                                                         </Text>
                                                     </BlockStack>
                                                 ) : null}
@@ -825,7 +827,7 @@ export default function CreateDiscount() {
                                                 value={bxgyGetsValue}
                                                 onChange={setBxgyGetsValue}
                                                 suffix={bxgyGetsValueType === "percentage" ? "%" : null}
-                                                prefix={bxgyGetsValueType === "fixed_amount" ? "₹" : null}
+                                                prefix={bxgyGetsValueType === "fixed_amount" ? currencySymbol : null}
                                                 autoComplete="off"
                                             />
                                         )}

@@ -26,7 +26,7 @@ const DEFAULT_COUPON_DATA = {
         template2: {
             name: "Minimal Card",
             headingText: "SPECIAL OFFER",
-            subtextText: "Free shipping on orders over ₹500",
+            subtextText: "Free shipping on orders over your minimum",
             bgColor: "#f9fafb",
             textColor: "#374151",
             accentColor: "#10b981",

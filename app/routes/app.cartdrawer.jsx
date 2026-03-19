@@ -1,3 +1,4 @@
+import { useCurrency } from '../components/CurrencyContext';
 import React, { useState, useEffect } from 'react';
 import {
   Page,
@@ -346,7 +347,7 @@ function ProductPicker({
                 </Text>
               </div>
               <Text tone="subdued" variant="bodySm">
-                ₹{product.price}
+                {currencySymbol}{product.price}
               </Text>
             </BlockStack>
 
@@ -631,7 +632,7 @@ function SelectedProductsDisplay({ productIds, label, products }) {
                 </Text>
               </div>
               <InlineStack gap="200" align="center">
-                <Text tone="subdued" variant="bodySm">₹{product.price}</Text>
+                <Text tone="subdued" variant="bodySm">{currencySymbol}{product.price}</Text>
                 <Badge tone="success">Selected</Badge>
               </InlineStack>
             </BlockStack>
@@ -669,6 +670,7 @@ const isEnabled = (val) => {
 
 
 export default function CartDrawerAdmin() {
+  const { symbol: currencySymbol } = useCurrency();
   // ==========================================
   // STATE MANAGEMENT
   // ==========================================
@@ -2212,7 +2214,7 @@ export default function CartDrawerAdmin() {
         return {
           id: tier.id,
           target: target,
-          label: progressMode === 'quantity' ? `${target} items` : `₹${target}`,
+          label: progressMode === 'quantity' ? `${target} items` : `${currencySymbol}${target}`,
           rewardText: tier.description,
           associatedProducts: tier.products || []
         };
@@ -2421,7 +2423,7 @@ export default function CartDrawerAdmin() {
                         color: progressMode === 'amount' ? '#0369a1' : '#64748b'
                       }}
                     >
-                      Cart Amount (₹)
+                      Cart Amount ({currencySymbol})
                     </button>
                     <button
                       onClick={() => {
@@ -2480,7 +2482,7 @@ export default function CartDrawerAdmin() {
                           type="number"
                           value={activeTier.minValue}
                           onChange={(value) => updateTierSetting(activeTierIndex, 'minValue', Number(value))}
-                          prefix="₹"
+                          prefix={currencySymbol}
                           autoComplete="off"
                         />
                       ) : (
@@ -3043,7 +3045,7 @@ export default function CartDrawerAdmin() {
                                       <BlockStack gap="050">
                                         <Text variant="bodyMd" fontWeight="semibold">{coupon.code}</Text>
                                         <Text variant="bodySm" tone="subdued">
-                                          {coupon.discountType === 'percentage' ? `${coupon.discountValue}% off` : `₹${coupon.discountValue} off`}
+                                          {coupon.discountType === 'percentage' ? `${coupon.discountValue}% off` : `${currencySymbol}${coupon.discountValue} off`}
                                         </Text>
                                       </BlockStack>
                                     </div>
@@ -3600,7 +3602,7 @@ export default function CartDrawerAdmin() {
       return {
         id: tier.id,
         target: target,
-        label: currentProgressMode === 'quantity' ? `${target} items` : `₹${target}`,
+        label: currentProgressMode === 'quantity' ? `${target} items` : `${currencySymbol}${target}`,
         rewardText: tier.description,
         associatedProducts: tier.products || []
       };
@@ -3826,7 +3828,7 @@ export default function CartDrawerAdmin() {
                     }}>
                       {product.title}
                     </p>
-                    <span style={{ fontSize: '15px', fontWeight: '800', color: '#10b981' }}>₹{product.price}</span>
+                    <span style={{ fontSize: '15px', fontWeight: '800', color: '#10b981' }}>{currencySymbol}{product.price}</span>
                   </div>
 
                   <button
@@ -3945,7 +3947,7 @@ export default function CartDrawerAdmin() {
                       return (
                         <div>
                           <p style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: '500', color: '#64748b' }}>
-                            You're <span style={{ color: '#0f172a', fontWeight: '700' }}>{currentProgressMode === 'amount' ? `₹${amountLeft}` : `${amountLeft} items`}</span> away
+                            You're <span style={{ color: '#0f172a', fontWeight: '700' }}>{currentProgressMode === 'amount' ? `${currencySymbol}${amountLeft}` : `${amountLeft} items`}</span> away
                           </p>
                           <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: progressBarSettings.barForegroundColor || '#2563eb' }}>
                             Unlock: {rewardText}
@@ -4219,7 +4221,7 @@ export default function CartDrawerAdmin() {
                                 </span>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                   <span style={{ fontSize: '8px', fontWeight: '800', backgroundColor: '#e2e8f0', color: '#64748b', padding: '1px 3px', borderRadius: '2px' }}>ADDED</span>
-                                  <span style={{ fontSize: '9px', fontWeight: '700', color: '#10b981' }}>₹{Number(product.price || 0).toFixed(0)}</span>
+                                  <span style={{ fontSize: '9px', fontWeight: '700', color: '#10b981' }}>{currencySymbol}{Number(product.price || 0).toFixed(0)}</span>
                                 </div>
                               </div>
                             </div>
@@ -4307,8 +4309,8 @@ export default function CartDrawerAdmin() {
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto' }}>
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <span style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>₹{(Number(item.price) || 0).toFixed(0)}</span>
-                              <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>({item.quantity} × ₹{(Number(item.price) || 0).toFixed(0)})</span>
+                              <span style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>{currencySymbol}{(Number(item.price) || 0).toFixed(0)}</span>
+                              <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>({item.quantity} × {currencySymbol}{(Number(item.price) || 0).toFixed(0)})</span>
                             </div>
                             {isReward && <span style={{ fontSize: '10px', fontWeight: '700', color: '#10b981' }}>FREE REWARD</span>}
                           </div>
@@ -4345,7 +4347,7 @@ export default function CartDrawerAdmin() {
                               </div>
                               <div style={{ textAlign: 'right', minWidth: '60px' }}>
                                 <span style={{ fontWeight: '800', fontSize: '15px', color: '#0f172a' }}>
-                                  ₹{((Number(item.price) || 0) * item.quantity).toFixed(0)}
+                                  {currencySymbol}{((Number(item.price) || 0) * item.quantity).toFixed(0)}
                                 </span>
                               </div>
                             </div>
@@ -4537,19 +4539,19 @@ export default function CartDrawerAdmin() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontSize: '14px', color: '#64748b', fontWeight: '500' }}>Subtotal</span>
-                  <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '700' }}>₹{totalWithRewards.toFixed(0)}</span>
+                  <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '700' }}>{currencySymbol}{totalWithRewards.toFixed(0)}</span>
                 </div>
 
                 {appliedCouponIds.length > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', color: '#10b981' }}>
                     <span style={{ fontSize: '14px', fontWeight: '500' }}>Discounts</span>
-                    <span style={{ fontSize: '14px', fontWeight: '700' }}>-₹{previewTotalDiscount.toFixed(0)}</span>
+                    <span style={{ fontSize: '14px', fontWeight: '700' }}>-{currencySymbol}{previewTotalDiscount.toFixed(0)}</span>
                   </div>
                 )}
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
                   <span style={{ fontSize: '16px', color: '#0f172a', fontWeight: '800' }}>Total</span>
-                  <span style={{ fontSize: '18px', color: '#0f172a', fontWeight: '900' }}>₹{previewFinalTotal.toFixed(0)}</span>
+                  <span style={{ fontSize: '18px', color: '#0f172a', fontWeight: '900' }}>{currencySymbol}{previewFinalTotal.toFixed(0)}</span>
                 </div>
               </div>
 
@@ -4677,7 +4679,7 @@ export default function CartDrawerAdmin() {
                             </div>
                             <BlockStack gap="050">
                               <Text variant="headingSm" as="h3">{product.title}</Text>
-                              <Text as="p" tone="subdued" variant="bodySm">₹{Number(product.price || 0).toFixed(0)}</Text>
+                              <Text as="p" tone="subdued" variant="bodySm">{currencySymbol}{Number(product.price || 0).toFixed(0)}</Text>
                             </BlockStack>
                           </InlineStack>
                           <Badge tone="info">Automatic</Badge>
@@ -4891,7 +4893,7 @@ export default function CartDrawerAdmin() {
                     .map(prod => (
                       <Checkbox
                         key={prod.id}
-                        label={`${prod.title} (₹${prod.price})`}
+                        label={`${prod.title} (${currencySymbol}${prod.price})`}
                         checked={tempSelectedProductIds.includes(prod.id)}
                         onChange={(checked) => {
                           if (checked) {
