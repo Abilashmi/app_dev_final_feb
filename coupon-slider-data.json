@@ -68,7 +68,6 @@
   "selectedActiveCoupons": [
     "gid://shopify/DiscountRedeemCode/26805031010371",
     "gid://shopify/DiscountRedeemCode/26805030813763",
-    "gid://shopify/DiscountRedeemCode/26800703766595",
     "gid://shopify/DiscountRedeemCode/26799448817731",
     "gid://shopify/DiscountRedeemCode/26833535139907"
   ],
@@ -82,11 +81,6 @@
       },
       "gid://shopify/DiscountRedeemCode/26805030813763": {
         "couponCode": "J62ZTBU1",
-        "headingText": "SPECIAL OFFER",
-        "subtextText": "Free shipping on orders over ₹500"
-      },
-      "gid://shopify/DiscountRedeemCode/26800703766595": {
-        "couponCode": "3E3OHTM4",
         "headingText": "SPECIAL OFFER",
         "subtextText": "Free shipping on orders over ₹500"
       },

@@ -322,39 +322,38 @@ export async function loader({ request }) {
         console.error("Failed to fetch products:", e);
     }
 
-    // Fetch configurations from separate APIs
-    let couponConfig = FAKE_COUPON_CONFIG;
-    let fbtConfig = FAKE_FBT_CONFIG;
-    const url = new URL(request.url);
 
+    // Fetch coupon config from PHP backend for the current shop
+    let couponConfig = null;
+    const url = new URL(request.url);
     try {
-        // 1. Fetch Coupon Config
-        const couponRes = await fetch(`${url.origin}/api/coupon-slider?shop=${encodeURIComponent(shop)}`);
+        const couponRes = await fetch(`${url.origin}/php/save_coupon_slider_widget.php?shopdomain=${encodeURIComponent(shop)}`);
         const couponData = await couponRes.json();
-        if (couponData.success && couponData.config) {
-            console.log("Fetched coupon data successfully");
-            couponConfig = couponData.config;
+        if (couponData.status === 'success' && couponData.data) {
+            couponConfig = couponData.data;
         }
     } catch (e) {
-        console.error("Failed to fetch coupon settings:", e);
+        console.error("Failed to fetch coupon settings from PHP backend:", e);
+    }
+    // Fallback to FAKE_COUPON_CONFIG if no data found
+    if (!couponConfig) {
+        couponConfig = { ...FAKE_COUPON_CONFIG, selectedActiveCoupons: [], templates: { ...FAKE_COUPON_CONFIG.templates } };
     }
 
+    // Fetch FBT config from PHP backend for the current shop
+    let fbtConfig = null;
     try {
-        // 2. Fetch FBT Config
-        const fbtRes = await fetch(`${url.origin}/api/product-sample`);
+        const fbtRes = await fetch(`${url.origin}/php/save_fbt_widget.php?shopdomain=${encodeURIComponent(shop)}`);
         const fbtData = await fbtRes.json();
-
-        // Handle both old nested structure and new structure if api.product-sample is updated
-        if (fbtData.success) {
-            if (fbtData.settings?.productWidgetConfig?.fbt) {
-                fbtConfig = fbtData.settings.productWidgetConfig.fbt;
-            } else if (fbtData.fbt) {
-                fbtConfig = fbtData.fbt;
-            }
-            console.log("Fetched FBT data successfully");
+        if (fbtData.status === 'success' && fbtData.data) {
+            fbtConfig = fbtData.data;
         }
     } catch (e) {
-        console.error("Failed to fetch FBT settings:", e);
+        console.error("Failed to fetch FBT settings from PHP backend:", e);
+    }
+    // Fallback to FAKE_FBT_CONFIG if no data found
+    if (!fbtConfig) {
+        fbtConfig = { ...FAKE_FBT_CONFIG, templates: { ...FAKE_FBT_CONFIG.templates } };
     }
 
     return {
