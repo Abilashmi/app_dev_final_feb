@@ -7,6 +7,7 @@
   const API_BASE = '/apps/cart-app';
   const CONFIG_API = API_BASE + '/save_cart_drawer.php?shopdomain=' + SHOP;
   const COUPON_API = API_BASE + '/save_coupon.php?shopdomain=' + SHOP;
+  const AI_UPSELL_API = API_BASE + '/ai_upsell.php?shopdomain=' + SHOP;
   const CLICK_API = API_BASE + '/click.php';
 
   // Utility: Get currency symbol from code
@@ -27,6 +28,13 @@
   let COUPONS = [];
   let appliedCouponCodes = [];
   let _ccConfigLoading = false;
+
+  const CC_AI_UPSELL_CACHE_TTL_MS = 60 * 1000;
+  let _ccAiUpsellCache = { key: null, ts: 0, recommendations: [] };
+
+  const CC_STORE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
+  let _ccStoreCatalogCache = { ts: 0, candidateCatalog: [], detailsById: {} };
+  let _ccStoreCatalogPromise = null;
 
   /* =================== LOAD CONFIG =================== */
 
@@ -112,6 +120,40 @@
     return val == 1 || val == '1' || val === true || val === 'true' || val === 'active' || val === 'enabled';
   }
 
+  function coerceBoolean(val, defaultValue) {
+    if (val === undefined || val === null) return defaultValue;
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'number') return val === 1;
+    if (typeof val === 'string') {
+      const s = val.trim().toLowerCase();
+      if (s === 'true' || s === '1' || s === 'yes' || s === 'enabled' || s === 'active') return true;
+      if (s === 'false' || s === '0' || s === 'no' || s === 'disabled' || s === 'inactive') return false;
+    }
+    return defaultValue;
+  }
+
+  function normalizeUpsellDirection(raw) {
+    const s = String(raw ?? '').trim().toLowerCase();
+    if (s === 'horizontal' || s === 'row') return 'horizontal';
+    if (s === 'vertical' || s === 'column' || s === 'block') return 'vertical';
+    return 'vertical';
+  }
+
+  function normalizeUpsellLayout(raw) {
+    const s = String(raw ?? '').trim().toLowerCase();
+    if (s === 'grid') return 'grid';
+    if (s === 'carousel') return 'carousel';
+    return 'carousel';
+  }
+
+  function ccExtractNumericId(value) {
+    if (value === undefined || value === null) return '';
+    const s = String(value).trim();
+    if (!s) return '';
+    const match = s.match(/(\d+)(?:\?.*)?$/);
+    return match ? match[1] : '';
+  }
+
   function parseProgressData(d) {
     const data = parseJSON(d.progress_data || d.progressData);
     const enabled = isEnabled(d.progress_status) || isEnabled(d.progressStatus) || isEnabled(data.enabled);
@@ -188,21 +230,21 @@
   function parseUpsellData(d) {
     const data = parseJSON(d.upsell_data || d.upsellData);
     const enabled = isEnabled(d.upsell_status) || isEnabled(d.upsellStatus) || isEnabled(data.enabled);
+    const direction = normalizeUpsellDirection(data.direction);
+    const layout = normalizeUpsellLayout(data.layout);
+    const limitRaw = Number.parseInt(String(data.limit ?? 3), 10);
+    const limit = Number.isFinite(limitRaw) ? limitRaw : 3;
+
     return {
       enabled,
       upsellMode: data.upsellMode || 'manual',
-      useAI: data.useAI !== false,
-      showIfInCart: data.showIfInCart || false,
-      limit: data.limit || 3,
-      showReviews: data.showReviews || false,
+      useAI: coerceBoolean(data.useAI, true),
+      showIfInCart: coerceBoolean(data.showIfInCart, false),
+      limit: limit,
+      showReviews: coerceBoolean(data.showReviews, false),
       position: data.position || 'bottom',
-      direction:
-        data.direction === 'block'
-          ? 'vertical'
-          : data.direction === 'row'
-            ? 'horizontal'
-            : data.direction || 'vertical',
-      showOnEmptyCart: data.showOnEmptyCart !== false,
+      direction,
+      showOnEmptyCart: coerceBoolean(data.showOnEmptyCart, true),
       buttonText: data.buttonText || 'Add to cart',
       upsellTitle: {
         text: data.upsellTitle?.text || 'Recommended for you',
@@ -213,7 +255,7 @@
       },
       manualRules: data.manualRules || [],
       activeTemplate: data.activeTemplate || 'grid',
-      layout: data.layout || 'carousel', // 'carousel' or 'grid'
+      layout, // 'carousel' or 'grid'
     };
   }
 
@@ -237,7 +279,7 @@
 
       for (const rule of upsell.manualRules || []) {
         rule.upsellProductDetails = (rule.upsellProductDetails || []).map((detail) => {
-          const numId = String(detail.id || '').replace('gid://shopify/Product/', '');
+          const numId = ccExtractNumericId(detail.id) || String(detail.id || '').replace('gid://shopify/Product/', '');
           const sp = productMap[numId];
           if (sp) {
             return {
@@ -246,7 +288,7 @@
               price: detail.price || sp.variants?.[0]?.price || sp.price_min || '',
               image: detail.image || sp.images?.[0]?.src || sp.featured_image || null,
               handle: sp.handle,
-              variantId: detail.variantId || sp.variants?.[0]?.id,
+              variantId: ccExtractNumericId(detail.variantId) || detail.variantId || sp.variants?.[0]?.id,
             };
           }
           return detail;
@@ -332,6 +374,65 @@
 
   // 1. Fetch intercept — catches AJAX add-to-cart calls (only on success)
   const originalFetch = window.fetch;
+
+  async function ccGetStoreCatalog() {
+    const now = Date.now();
+    if (
+      _ccStoreCatalogCache.ts &&
+      now - _ccStoreCatalogCache.ts < CC_STORE_CATALOG_CACHE_TTL_MS &&
+      Array.isArray(_ccStoreCatalogCache.candidateCatalog) &&
+      _ccStoreCatalogCache.candidateCatalog.length > 0
+    ) {
+      return _ccStoreCatalogCache;
+    }
+
+    if (_ccStoreCatalogPromise) {
+      return _ccStoreCatalogPromise;
+    }
+
+    _ccStoreCatalogPromise = (async () => {
+      try {
+        const res = await originalFetch('/products.json?limit=250');
+        if (!res.ok) return null;
+        const data = await res.json().catch(() => null);
+        const products = Array.isArray(data?.products) ? data.products : [];
+
+        const candidateCatalog = [];
+        const detailsById = {};
+
+        products.forEach((p) => {
+          const id = p && p.id != null ? String(p.id) : '';
+          const title = p && p.title != null ? String(p.title) : '';
+          if (!id || !title) return;
+
+          candidateCatalog.push({ id, title });
+          detailsById[id] = {
+            id,
+            title,
+            price: p?.variants?.[0]?.price || p?.price_min || '',
+            image: p?.images?.[0]?.src || p?.featured_image || null,
+            handle: p?.handle || '',
+            variantId: p?.variants?.[0]?.id || null,
+          };
+        });
+
+        _ccStoreCatalogCache = {
+          ts: Date.now(),
+          candidateCatalog,
+          detailsById,
+        };
+
+        return _ccStoreCatalogCache;
+      } catch (e) {
+        return null;
+      } finally {
+        _ccStoreCatalogPromise = null;
+      }
+    })();
+
+    return _ccStoreCatalogPromise;
+  }
+
   window.fetch = async function (...args) {
     const response = await originalFetch.apply(this, args);
     try {
@@ -689,10 +790,8 @@
 
   async function addToCart(variantId, quantity) {
     try {
-      // If variantId looks like a product ID (no variant), try to resolve it
-      let resolvedId = variantId;
-      if (!resolvedId || String(resolvedId).length < 10) {
-      }
+      const rawId = String(variantId || '').trim();
+      const resolvedId = ccExtractNumericId(rawId) || rawId;
       const res = await originalFetch('/cart/add.js', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -705,9 +804,17 @@
         setTimeout(() => renderDrawer(), 800);
       } else {
         const errData = await res.json().catch(() => ({}));
-        // If it failed because it's a product ID and not a variant, try resolving
-        if (errData.description && errData.description.includes('not found')) {
-          await resolveAndAddVariant(variantId, quantity);
+        const msg = String(errData?.description || errData?.message || '').toLowerCase();
+        const shouldResolve =
+          res.status === 400 ||
+          res.status === 404 ||
+          msg.includes('not found') ||
+          msg.includes('cannot find') ||
+          msg.includes('no variant') ||
+          rawId.includes('gid://shopify/Product/');
+
+        if (shouldResolve) {
+          await resolveAndAddVariant(rawId, quantity);
         }
       }
     } catch (e) {
@@ -716,9 +823,11 @@
 
   async function resolveAndAddVariant(productId, quantity) {
     try {
+      const normalizedProductId = ccExtractNumericId(productId) || String(productId || '').trim();
+      if (!normalizedProductId) return;
       const res = await originalFetch('/products.json?limit=250');
       const data = await res.json();
-      const product = (data.products || []).find((p) => String(p.id) === String(productId));
+      const product = (data.products || []).find((p) => String(p.id) === String(normalizedProductId));
       if (product && product.variants && product.variants.length > 0) {
         const resolvedVariantId = product.variants[0].id;
         const addRes = await originalFetch('/cart/add.js', {
@@ -730,7 +839,18 @@
           setTimeout(() => renderDrawer(), 300);
           setTimeout(() => renderDrawer(), 800);
         }
-      } else {
+        return;
+      }
+
+      // Fallback: if the ID wasn't a product id, try it as a variant id.
+      const addRes = await originalFetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [{ id: normalizedProductId, quantity: quantity || 1 }] }),
+      });
+      if (addRes.ok) {
+        setTimeout(() => renderDrawer(), 300);
+        setTimeout(() => renderDrawer(), 800);
       }
     } catch (e) {
     }
@@ -753,8 +873,34 @@
   function ccScrollContainer(containerId, direction) {
     const el = document.getElementById(containerId);
     if (!el) return;
-    const scrollAmount = 290;
-    el.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
+
+    const computed = window.getComputedStyle(el);
+    const gapRaw = computed.gap || computed.columnGap || computed.rowGap || '0px';
+    const gap = parseFloat(String(gapRaw).split(' ')[0]) || 0;
+
+    const canScrollX = el.scrollWidth - el.clientWidth > 5;
+    const canScrollY = el.scrollHeight - el.clientHeight > 5;
+
+    const firstCard = el.querySelector('.cc-upsell-card');
+
+    // Vertical (column) carousel uses the same left/right buttons for up/down.
+    if (canScrollY && !canScrollX) {
+      let delta = 280;
+      if (firstCard) {
+        const h = firstCard.getBoundingClientRect().height;
+        delta = Math.max(40, Math.round(h + gap));
+      }
+      el.scrollBy({ top: direction === 'left' ? -delta : delta, behavior: 'smooth' });
+      return;
+    }
+
+    // Horizontal (row) carousel
+    let delta = 290;
+    if (firstCard) {
+      const w = firstCard.getBoundingClientRect().width;
+      delta = Math.max(40, Math.round(w + gap));
+    }
+    el.scrollBy({ left: direction === 'left' ? -delta : delta, behavior: 'smooth' });
   }
 
   /* ---- Coupon carousel: move exactly one card per click ---- */
@@ -1013,7 +1159,7 @@
       </div>
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-          <p style="margin:0;font-size:14px;font-weight:700;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escapeHtml(
+          <p style="margin:0;font-size:14px;font-weight:700;color:#0f172a;white-space:normal;overflow-wrap:anywhere;word-break:break-word;flex:1;">${escapeHtml(
             item.product_title
           )}</p>
           <button onclick="ccRemoveItem('${item.key}')"
@@ -1354,33 +1500,97 @@
     let upsellProducts = [];
     let matchedUpsellDetails = [];
 
-    if (upsellConfig.useAI && upsellConfig.aiApiKey) {
-      // Wait for AI recommendations
-      try {
-        const aiRes = await originalFetch('https://blueviolet-clam-512487.hostingersite.com/ai_upsell.php', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            apiKey: upsellConfig.aiApiKey,
-            cartProducts: cart.items.map(i => ({ title: i.product_title, id: i.product_id })),
-            // Pass available manual rules pool as catalog to choose from, or a limited catalog
-            allProducts: (upsellConfig.manualRules || []).flatMap(r => r.upsellProductDetails || [])
-          })
+    if (upsellConfig.useAI) {
+      const allDetails = (upsellConfig.manualRules || []).flatMap((r) => r.upsellProductDetails || []);
+      let candidateCatalog = allDetails
+        .filter((d) => d && d.id && d.title)
+        .map((d) => ({ id: ccExtractNumericId(d.id) || d.id, title: d.title }))
+        .filter((d) => d && ccExtractNumericId(d.id));
+
+      let storeDetailsById = null;
+      if (candidateCatalog.length === 0) {
+        const storeCatalog = await ccGetStoreCatalog();
+        if (storeCatalog && Array.isArray(storeCatalog.candidateCatalog)) {
+          candidateCatalog = storeCatalog.candidateCatalog;
+          storeDetailsById = storeCatalog.detailsById || null;
+        }
+      }
+
+      const cartProducts = cart.items.map((i) => ({
+        title: i.product_title,
+        id: i.product_id,
+      }));
+
+      const rawLimit = Number.parseInt(String(upsellConfig.limit || 3), 10);
+      const limit = Number.isFinite(rawLimit) ? Math.max(3, Math.min(5, rawLimit)) : 3;
+
+      if (cartProducts.length > 0 && candidateCatalog.length > 0) {
+        const cacheKey = JSON.stringify({
+          cart: cart.items.map((i) => [String(i.product_id), i.quantity]),
+          candidates: candidateCatalog.map((p) => String(p.id)),
+          limit,
         });
 
-        if (aiRes.ok) {
-          const aiData = await aiRes.json();
-          if (aiData.success && aiData.recommendations) {
-            upsellProducts = aiData.recommendations;
-            // Build matched details from the existing details
-            const allDetails = (upsellConfig.manualRules || []).flatMap(r => r.upsellProductDetails || []);
-            upsellProducts.forEach(id => {
-              const detail = allDetails.find(d => String(d.id).includes(id) || String(d.variantId) == String(id));
-              if (detail) matchedUpsellDetails.push(detail);
+        const now = Date.now();
+        if (
+          _ccAiUpsellCache.key === cacheKey &&
+          now - _ccAiUpsellCache.ts < CC_AI_UPSELL_CACHE_TTL_MS
+        ) {
+          upsellProducts = Array.isArray(_ccAiUpsellCache.recommendations)
+            ? _ccAiUpsellCache.recommendations
+            : [];
+        } else {
+          try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 6000);
+
+            const aiRes = await originalFetch(AI_UPSELL_API, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              signal: controller.signal,
+              body: JSON.stringify({
+                cartProducts,
+                allProducts: candidateCatalog,
+                limit,
+              }),
             });
+
+            clearTimeout(timeout);
+
+            if (aiRes.ok) {
+              const aiData = await aiRes.json();
+              if (aiData && aiData.success && Array.isArray(aiData.recommendations)) {
+                upsellProducts = aiData.recommendations
+                  .map((id) => ccExtractNumericId(id) || String(id || '').trim())
+                  .map((id) => ccExtractNumericId(id) || id)
+                  .filter((id) => id);
+                _ccAiUpsellCache = {
+                  key: cacheKey,
+                  ts: now,
+                  recommendations: upsellProducts,
+                };
+              }
+            }
+          } catch (e) {
+            // Ignore and fall back to manual rules.
           }
         }
-      } catch (e) { console.warn('AI Upsell failed:', e); }
+
+        if (upsellProducts.length > 0) {
+          upsellProducts.forEach((id) => {
+            if (allDetails.length > 0) {
+              const detail = allDetails.find(
+                (d) => String(d.id).includes(id) || String(d.variantId) == String(id)
+              );
+              if (detail) matchedUpsellDetails.push(detail);
+              return;
+            }
+
+            const storeDetail = storeDetailsById ? storeDetailsById[String(id)] : null;
+            if (storeDetail) matchedUpsellDetails.push(storeDetail);
+          });
+        }
+      }
     }
 
     if (upsellProducts.length === 0 && upsellConfig.manualRules) {
@@ -1399,6 +1609,18 @@
       }
     }
 
+    // Apply storefront conditions (match cart_drawer.js behavior)
+    if (!upsellConfig.showIfInCart) {
+      upsellProducts = upsellProducts.filter((id) => !cartProductIds.includes(String(id)));
+    }
+    if (upsellConfig.limit) {
+      const parsedLimit = Number.parseInt(String(upsellConfig.limit), 10);
+      if (Number.isFinite(parsedLimit) && parsedLimit > 0) {
+        upsellProducts = upsellProducts.slice(0, parsedLimit);
+      }
+    }
+    if (upsellProducts.length === 0) return '';
+
     const dir = upsellConfig.direction || 'vertical';
     const layout = upsellConfig.layout || 'carousel';
     const titleStyle = `
@@ -1415,6 +1637,11 @@
     const isCarousel = layout === 'carousel';
     const isGrid = layout === 'grid';
     const showUpsellNav = upsellProducts.length >= 2 && isCarousel;
+
+    const navPrevSymbol = isHorizontal ? '←' : '↑';
+    const navNextSymbol = isHorizontal ? '→' : '↓';
+    const navPrevTitle = isHorizontal ? 'Scroll left' : 'Scroll up';
+    const navNextTitle = isHorizontal ? 'Scroll right' : 'Scroll down';
 
     // --- Container Styles based on Layout AND Direction ---
     let listStyle = `display: ${isGrid ? 'grid' : 'flex'}; gap: 12px; scroll-behavior: smooth;`;
@@ -1442,8 +1669,8 @@
     <p style="margin:0;${titleStyle}">${escapeHtml(upsellConfig.upsellTitle.text)}</p>
     ${showUpsellNav
         ? `<div style="display:flex;gap:6px;">
-      <button id="upsell-nav-left" class="cc-nav-btn" onclick="ccScrollContainer('cc-upsell-list','left')" title="Scroll left" style="display:none;">←</button>
-      <button id="upsell-nav-right" class="cc-nav-btn" onclick="ccScrollContainer('cc-upsell-list','right')" title="Scroll right" style="display:none;">→</button>
+      <button id="upsell-nav-left" class="cc-nav-btn" onclick="ccScrollContainer('cc-upsell-list','left')" title="${navPrevTitle}" style="display:none;">${navPrevSymbol}</button>
+      <button id="upsell-nav-right" class="cc-nav-btn" onclick="ccScrollContainer('cc-upsell-list','right')" title="${navNextTitle}" style="display:none;">${navNextSymbol}</button>
     </div>`
         : ''
       }
@@ -1463,22 +1690,25 @@
           ? `<img src="${detail.image}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">`
           : `<span style="font-size:20px;color:#94a3b8;">📦</span>`;
 
-      const addToCartId = detail.variantId || productId;
+      const hasVariantId = detail.variantId !== undefined && detail.variantId !== null && String(detail.variantId).trim() !== '';
+      const addToCartId = hasVariantId ? detail.variantId : productId;
+      const safeAddToCartId = ccExtractNumericId(addToCartId) || addToCartId;
+      const addIsProductId = hasVariantId ? 'false' : 'true';
 
       if (isGrid) {
         // GRID CARD: Always Square Design (Image on Top, Content Below)
-        const gridCardStyle = isVertical ? 'max-width: calc(50% - 8px);' : '';
+        const gridCardStyle = '';
         html += `
           <div class="cc-upsell-card cc-layout-grid" style="${gridCardStyle}">
             <div class="cc-upsell-image-wrapper">
               ${imageHtml}
             </div>
             <div class="cc-upsell-content">
-              <p style="margin:0 0 6px 0;font-size:11px;font-weight:700;color:#1e293b;
+              <p class="cc-upsell-title cc-upsell-title--grid" style="margin:0 0 6px 0;font-size:11px;font-weight:700;color:#1e293b;
                 line-height:1.2;width:100%;text-align:left;">${escapeHtml(title)}</p>
               <div style="display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;margin-top:auto;">
                 <span style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
-                <button onclick="ccAddToCart('${addToCartId}', true)" class="cc-add-btn" style="padding:4px 10px;font-size:10px;">Add</button>
+                <button onclick="ccAddToCart('${safeAddToCartId}', true, ${addIsProductId})" class="cc-add-btn" style="padding:4px 10px;font-size:10px;">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
               </div>
             </div>
           </div>
@@ -1495,12 +1725,12 @@
             </div>
             <div class="cc-upsell-content">
               <div class="cc-carousel-info" style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0; text-align: left;">
-                <p style="margin:0;font-size:14px;font-weight:700;color:#0f172a;line-height:1.3;word-break: break-word;">${escapeHtml(
+                <p class="cc-upsell-title cc-upsell-title--carousel" style="margin:0;font-size:14px;font-weight:700;color:#0f172a;line-height:1.3;word-break: break-word;">${escapeHtml(
           title
         )}</p>
                 <span style="font-size:15px;font-weight:800;color:#10b981;">${priceText}</span>
               </div>
-              <button onclick="ccAddToCart('${addToCartId}', true)" class="cc-add-btn" style="padding:10px 24px; font-size:12px; border-radius: 30px; letter-spacing: 0.5px; margin-left:8px;">ADD</button>
+              <button onclick="ccAddToCart('${safeAddToCartId}', true, ${addIsProductId})" class="cc-add-btn" style="padding:10px 24px; font-size:12px; border-radius: 30px; letter-spacing: 0.5px; margin-left:8px;">${escapeHtml((upsellConfig.buttonText || 'ADD').toUpperCase())}</button>
             </div>
           </div>
         `;
@@ -1517,35 +1747,26 @@
         if (!list || !leftBtn || !rightBtn) return;
 
         const updateArrows = () => {
-          const scrollLeft = list.scrollLeft;
-          const scrollTop = list.scrollTop;
-          const items = list.querySelectorAll('.cc-upsell-card');
-          if (items.length === 0) return;
-
           if (isHorizontal) {
-            leftBtn.style.display = scrollLeft > 5 ? 'flex' : 'none';
-            const lastItem = items[items.length - 1];
-            const rect = lastItem.getBoundingClientRect();
-            const listRect = list.getBoundingClientRect();
-            const visibleWidth = Math.max(
-              0,
-              Math.min(rect.right, listRect.right) - Math.max(rect.left, listRect.left)
-            );
-            const visibilityRatio = visibleWidth / rect.width;
-            rightBtn.style.display = visibilityRatio < 0.5 ? 'flex' : 'none';
-          } else {
-            // Vertical Carousel navigation
-            leftBtn.style.display = scrollTop > 5 ? 'flex' : 'none';
-            const lastItem = items[items.length - 1];
-            const rect = lastItem.getBoundingClientRect();
-            const listRect = list.getBoundingClientRect();
-            const visibleHeight = Math.max(
-              0,
-              Math.min(rect.bottom, listRect.bottom) - Math.max(rect.top, listRect.top)
-            );
-            const visibilityRatio = visibleHeight / rect.height;
-            rightBtn.style.display = visibilityRatio < 0.5 ? 'flex' : 'none';
+            const maxLeft = list.scrollWidth - list.clientWidth;
+            if (maxLeft <= 5) {
+              leftBtn.style.display = 'none';
+              rightBtn.style.display = 'none';
+              return;
+            }
+            leftBtn.style.display = list.scrollLeft > 5 ? 'flex' : 'none';
+            rightBtn.style.display = list.scrollLeft < maxLeft - 5 ? 'flex' : 'none';
+            return;
           }
+
+          const maxTop = list.scrollHeight - list.clientHeight;
+          if (maxTop <= 5) {
+            leftBtn.style.display = 'none';
+            rightBtn.style.display = 'none';
+            return;
+          }
+          leftBtn.style.display = list.scrollTop > 5 ? 'flex' : 'none';
+          rightBtn.style.display = list.scrollTop < maxTop - 5 ? 'flex' : 'none';
         };
 
         list.addEventListener('scroll', updateArrows);
@@ -1579,9 +1800,13 @@
     removeItem(key);
   };
 
-  window.ccAddToCart = function (variantId, isUpsell) {
+  window.ccAddToCart = function (id, isUpsell, isProductId) {
     if (isUpsell) sendClickEvent('upsell_click');
-    addToCart(variantId, 1);
+    if (isProductId) {
+      resolveAndAddVariant(id, 1);
+      return;
+    }
+    addToCart(id, 1);
   };
 
   window.ccSendClickEvent = function (eventType) {

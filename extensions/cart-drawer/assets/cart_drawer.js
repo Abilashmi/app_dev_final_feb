@@ -8,6 +8,7 @@
     const API_BASE = '/apps/cart-app/';
     const CONFIG_API = API_BASE + '/save_cart_drawer.php?shopdomain=' + SHOP;
     const COUPON_API = API_BASE + '/save_coupon.php?shopdomain=' + SHOP;
+    const AI_UPSELL_API = API_BASE + '/ai_upsell.php?shopdomain=' + SHOP;
 
     // Utility: Get currency symbol from code
     function getCurrencySymbol(code) {
@@ -26,6 +27,13 @@
     let CONFIG = null;
     let COUPONS = [];
     let appliedCouponCodes = [];
+
+    const CC_AI_UPSELL_CACHE_TTL_MS = 60 * 1000;
+    let _ccAiUpsellCache = { key: null, ts: 0, recommendations: [] };
+
+    const CC_STORE_CATALOG_CACHE_TTL_MS = 5 * 60 * 1000;
+    let _ccStoreCatalogCache = { ts: 0, candidateCatalog: [], detailsById: {} };
+    let _ccStoreCatalogPromise = null;
 
     /* =================== LOAD CONFIG =================== */
 
@@ -106,6 +114,40 @@
         return val == 1 || val == '1' || val === true || val === 'true' || val === 'active' || val === 'enabled';
     }
 
+    function coerceBoolean(val, defaultValue) {
+        if (val === undefined || val === null) return defaultValue;
+        if (typeof val === 'boolean') return val;
+        if (typeof val === 'number') return val === 1;
+        if (typeof val === 'string') {
+            const s = val.trim().toLowerCase();
+            if (s === 'true' || s === '1' || s === 'yes' || s === 'enabled' || s === 'active') return true;
+            if (s === 'false' || s === '0' || s === 'no' || s === 'disabled' || s === 'inactive') return false;
+        }
+        return defaultValue;
+    }
+
+    function normalizeUpsellDirection(raw) {
+        const s = String(raw ?? '').trim().toLowerCase();
+        if (s === 'horizontal' || s === 'row') return 'horizontal';
+        if (s === 'vertical' || s === 'column' || s === 'block') return 'vertical';
+        return 'vertical';
+    }
+
+    function normalizeUpsellLayout(raw) {
+        const s = String(raw ?? '').trim().toLowerCase();
+        if (s === 'grid') return 'grid';
+        if (s === 'carousel') return 'carousel';
+        return 'carousel';
+    }
+
+    function ccExtractNumericId(value) {
+        if (value === undefined || value === null) return '';
+        const s = String(value).trim();
+        if (!s) return '';
+        const match = s.match(/(\d+)(?:\?.*)?$/);
+        return match ? match[1] : '';
+    }
+
     function parseProgressData(d) {
         const data = parseJSON(d.progress_data || d.progressData);
         const enabled = isEnabled(d.progress_status) || isEnabled(d.progressStatus) || isEnabled(data.enabled);
@@ -178,21 +220,20 @@
     function parseUpsellData(d) {
         const data = parseJSON(d.upsell_data || d.upsellData);
         const enabled = isEnabled(d.upsell_status) || isEnabled(d.upsellStatus) || isEnabled(data.enabled);
+        const direction = normalizeUpsellDirection(data.direction);
+        const layout = normalizeUpsellLayout(data.layout);
+        const limitRaw = Number.parseInt(String(data.limit ?? 3), 10);
+        const limit = Number.isFinite(limitRaw) ? limitRaw : 3;
         return {
             enabled,
             upsellMode: data.upsellMode || 'manual',
-            useAI: data.useAI !== false,
-            showIfInCart: data.showIfInCart || false,
-            limit: data.limit || 3,
-            showReviews: data.showReviews || false,
+            useAI: coerceBoolean(data.useAI, true),
+            showIfInCart: coerceBoolean(data.showIfInCart, false),
+            limit: limit,
+            showReviews: coerceBoolean(data.showReviews, false),
             position: data.position || 'bottom',
-            direction:
-                data.direction === 'block'
-                    ? 'vertical'
-                    : data.direction === 'row'
-                        ? 'horizontal'
-                        : data.direction || 'vertical',
-            showOnEmptyCart: data.showOnEmptyCart !== false,
+            direction,
+            showOnEmptyCart: coerceBoolean(data.showOnEmptyCart, true),
             buttonText: data.buttonText || 'Add to cart',
             upsellTitle: {
                 text: data.upsellTitle?.text || 'Recommended for you',
@@ -203,7 +244,7 @@
             },
             manualRules: data.manualRules || [],
             activeTemplate: data.activeTemplate || 'grid',
-            layout: data.layout || 'carousel', // 'carousel' or 'grid'
+            layout, // 'carousel' or 'grid'
         };
     }
 
@@ -225,7 +266,7 @@
 
             for (const rule of upsell.manualRules || []) {
                 rule.upsellProductDetails = (rule.upsellProductDetails || []).map((detail) => {
-                    const numId = String(detail.id || '').replace('gid://shopify/Product/', '');
+                    const numId = ccExtractNumericId(detail.id) || String(detail.id || '').replace('gid://shopify/Product/', '');
                     const sp = productMap[numId];
                     if (sp) {
                         return {
@@ -234,7 +275,7 @@
                             price: detail.price || sp.variants?.[0]?.price || sp.price_min || '',
                             image: detail.image || sp.images?.[0]?.src || sp.featured_image || null,
                             handle: sp.handle,
-                            variantId: detail.variantId || sp.variants?.[0]?.id,
+                            variantId: ccExtractNumericId(detail.variantId) || detail.variantId || sp.variants?.[0]?.id,
                         };
                     }
                     return detail;
@@ -317,6 +358,65 @@
     /* =================== CART ACTION INTERCEPTS =================== */
 
     const originalFetch = window.fetch;
+
+    async function ccGetStoreCatalog() {
+        const now = Date.now();
+        if (
+            _ccStoreCatalogCache.ts &&
+            now - _ccStoreCatalogCache.ts < CC_STORE_CATALOG_CACHE_TTL_MS &&
+            Array.isArray(_ccStoreCatalogCache.candidateCatalog) &&
+            _ccStoreCatalogCache.candidateCatalog.length > 0
+        ) {
+            return _ccStoreCatalogCache;
+        }
+
+        if (_ccStoreCatalogPromise) {
+            return _ccStoreCatalogPromise;
+        }
+
+        _ccStoreCatalogPromise = (async () => {
+            try {
+                const res = await originalFetch('/products.json?limit=250');
+                if (!res.ok) return null;
+                const data = await res.json().catch(() => null);
+                const products = Array.isArray(data?.products) ? data.products : [];
+
+                const candidateCatalog = [];
+                const detailsById = {};
+
+                products.forEach((p) => {
+                    const id = p && p.id != null ? String(p.id) : '';
+                    const title = p && p.title != null ? String(p.title) : '';
+                    if (!id || !title) return;
+
+                    candidateCatalog.push({ id, title });
+                    detailsById[id] = {
+                        id,
+                        title,
+                        price: p?.variants?.[0]?.price || p?.price_min || '',
+                        image: p?.images?.[0]?.src || p?.featured_image || null,
+                        handle: p?.handle || '',
+                        variantId: p?.variants?.[0]?.id || null,
+                    };
+                });
+
+                _ccStoreCatalogCache = {
+                    ts: Date.now(),
+                    candidateCatalog,
+                    detailsById,
+                };
+
+                return _ccStoreCatalogCache;
+            } catch (e) {
+                return null;
+            } finally {
+                _ccStoreCatalogPromise = null;
+            }
+        })();
+
+        return _ccStoreCatalogPromise;
+    }
+
     window.fetch = async function (...args) {
         const response = await originalFetch.apply(this, args);
         try {
@@ -418,12 +518,63 @@
 
     async function addToCart(variantId, quantity) {
         try {
+            const rawId = String(variantId || '').trim();
+            const resolvedId = ccExtractNumericId(rawId) || rawId;
             const res = await originalFetch('/cart/add.js', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ items: [{ id: variantId, quantity: quantity || 1 }] }),
+                body: JSON.stringify({ items: [{ id: resolvedId, quantity: quantity || 1 }] }),
             });
             if (res.ok) {
+                setTimeout(() => renderDrawer(), 300);
+                setTimeout(() => renderDrawer(), 800);
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                const msg = String(errData?.description || errData?.message || '').toLowerCase();
+                const shouldResolve =
+                    res.status === 400 ||
+                    res.status === 404 ||
+                    msg.includes('not found') ||
+                    msg.includes('cannot find') ||
+                    msg.includes('no variant') ||
+                    rawId.includes('gid://shopify/Product/');
+
+                if (shouldResolve) {
+                    await resolveAndAddVariant(rawId, quantity);
+                }
+            }
+        } catch (e) { }
+    }
+
+    async function resolveAndAddVariant(productId, quantity) {
+        try {
+            const normalizedProductId = ccExtractNumericId(productId) || String(productId || '').trim();
+            if (!normalizedProductId) return;
+
+            const res = await originalFetch('/products.json?limit=250');
+            const data = await res.json();
+            const product = (data.products || []).find((p) => String(p.id) === String(normalizedProductId));
+            if (product && product.variants && product.variants.length > 0) {
+                const resolvedVariantId = product.variants[0].id;
+                const addRes = await originalFetch('/cart/add.js', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ items: [{ id: resolvedVariantId, quantity: quantity || 1 }] }),
+                });
+                if (addRes.ok) {
+                    setTimeout(() => renderDrawer(), 300);
+                    setTimeout(() => renderDrawer(), 800);
+                }
+                return;
+            }
+
+            // Fallback: if the ID wasn't a product id, try it as a variant id.
+            const addRes = await originalFetch('/cart/add.js', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: [{ id: normalizedProductId, quantity: quantity || 1 }] }),
+            });
+            if (addRes.ok) {
                 setTimeout(() => renderDrawer(), 300);
                 setTimeout(() => renderDrawer(), 800);
             }
@@ -444,8 +595,32 @@
     function ccScrollContainer(containerId, direction) {
         const el = document.getElementById(containerId);
         if (!el) return;
-        const scrollAmount = 290;
-        el.scrollBy({ left: direction === 'left' ? -scrollAmount : scrollAmount, behavior: 'smooth' });
+
+        const computed = window.getComputedStyle(el);
+        const gapRaw = computed.gap || computed.columnGap || computed.rowGap || '0px';
+        const gap = parseFloat(String(gapRaw).split(' ')[0]) || 0;
+
+        const canScrollX = el.scrollWidth - el.clientWidth > 5;
+        const canScrollY = el.scrollHeight - el.clientHeight > 5;
+
+        const firstCard = el.querySelector('.cc-upsell-card');
+
+        if (canScrollY && !canScrollX) {
+            let delta = 280;
+            if (firstCard) {
+                const h = firstCard.getBoundingClientRect().height;
+                delta = Math.max(40, Math.round(h + gap));
+            }
+            el.scrollBy({ top: direction === 'left' ? -delta : delta, behavior: 'smooth' });
+            return;
+        }
+
+        let delta = 290;
+        if (firstCard) {
+            const w = firstCard.getBoundingClientRect().width;
+            delta = Math.max(40, Math.round(w + gap));
+        }
+        el.scrollBy({ left: direction === 'left' ? -delta : delta, behavior: 'smooth' });
     }
 
     function ccCouponNav(direction) {
@@ -591,7 +766,7 @@
           </div>
           <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px;">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-              <p style="margin:0;font-size:14px;font-weight:700;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${escapeHtml(item.product_title)}</p>
+              <p style="margin:0;font-size:14px;font-weight:700;color:#0f172a;white-space:normal;overflow-wrap:anywhere;word-break:break-word;flex:1;">${escapeHtml(item.product_title)}</p>
               <button onclick="ccRemoveItem('${item.key}')" style="background:none;border:none;padding:4px;cursor:pointer;color:#94a3b8;font-size:16px;">✕</button>
             </div>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:auto;">
@@ -709,33 +884,83 @@
         let upsellProducts = [];
         let matchedUpsellDetails = [];
 
-        if (upsellConfig.useAI && upsellConfig.aiApiKey) {
-            // Wait for AI recommendations
-            try {
-                const aiRes = await originalFetch('https://blueviolet-clam-512487.hostingersite.com/ai_upsell.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        apiKey: upsellConfig.aiApiKey,
-                        cartProducts: cart.items.map(i => ({ title: i.product_title, id: i.product_id })),
-                        // Pass available manual rules pool as catalog to choose from, or a limited catalog
-                        allProducts: (upsellConfig.manualRules || []).flatMap(r => r.upsellProductDetails || [])
-                    })
+        if (upsellConfig.useAI) {
+            const allDetails = (upsellConfig.manualRules || []).flatMap((r) => r.upsellProductDetails || []);
+            let candidateCatalog = allDetails
+                .filter((d) => d && d.id && d.title)
+                .map((d) => ({ id: d.id, title: d.title }));
+
+            let storeDetailsById = null;
+            if (candidateCatalog.length === 0) {
+                const storeCatalog = await ccGetStoreCatalog();
+                if (storeCatalog && Array.isArray(storeCatalog.candidateCatalog)) {
+                    candidateCatalog = storeCatalog.candidateCatalog;
+                    storeDetailsById = storeCatalog.detailsById || null;
+                }
+            }
+
+            const cartProducts = cart.items.map((i) => ({ title: i.product_title, id: i.product_id }));
+
+            const rawLimit = Number.parseInt(String(upsellConfig.limit || 3), 10);
+            const limit = Number.isFinite(rawLimit) ? Math.max(3, Math.min(5, rawLimit)) : 3;
+
+            if (cartProducts.length > 0 && candidateCatalog.length > 0) {
+                const cacheKey = JSON.stringify({
+                    cart: cart.items.map((i) => [String(i.product_id), i.quantity]),
+                    candidates: candidateCatalog.map((p) => String(p.id)),
+                    limit,
                 });
 
-                if (aiRes.ok) {
-                    const aiData = await aiRes.json();
-                    if (aiData.success && aiData.recommendations) {
-                        upsellProducts = aiData.recommendations;
-                        // Build matched details from the existing details
-                        const allDetails = (upsellConfig.manualRules || []).flatMap(r => r.upsellProductDetails || []);
-                        upsellProducts.forEach(id => {
-                            const detail = allDetails.find(d => String(d.id).includes(id) || String(d.variantId) == String(id));
-                            if (detail) matchedUpsellDetails.push(detail);
+                const now = Date.now();
+                if (_ccAiUpsellCache.key === cacheKey && now - _ccAiUpsellCache.ts < CC_AI_UPSELL_CACHE_TTL_MS) {
+                    upsellProducts = Array.isArray(_ccAiUpsellCache.recommendations)
+                        ? _ccAiUpsellCache.recommendations
+                        : [];
+                } else {
+                    try {
+                        const controller = new AbortController();
+                        const timeout = setTimeout(() => controller.abort(), 6000);
+
+                        const aiRes = await originalFetch(AI_UPSELL_API, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            signal: controller.signal,
+                            body: JSON.stringify({
+                                cartProducts,
+                                allProducts: candidateCatalog,
+                                limit,
+                            }),
                         });
+
+                        clearTimeout(timeout);
+
+                        if (aiRes.ok) {
+                            const aiData = await aiRes.json();
+                            if (aiData && aiData.success && Array.isArray(aiData.recommendations)) {
+                                upsellProducts = aiData.recommendations;
+                                _ccAiUpsellCache = { key: cacheKey, ts: now, recommendations: upsellProducts };
+                            }
+                        }
+                    } catch (e) {
+                        // Ignore and fall back to manual rules.
                     }
                 }
-            } catch (e) { console.warn('AI Upsell failed:', e); }
+
+                if (upsellProducts.length > 0) {
+                    upsellProducts.forEach((id) => {
+                        if (allDetails.length > 0) {
+                            const detail = allDetails.find(
+                                (d) => String(d.id).includes(id) || String(d.variantId) == String(id)
+                            );
+                            if (detail) matchedUpsellDetails.push(detail);
+                            return;
+                        }
+
+                        const storeDetail = storeDetailsById ? storeDetailsById[String(id)] : null;
+                        if (storeDetail) matchedUpsellDetails.push(storeDetail);
+                    });
+                }
+            }
         }
 
         if (upsellProducts.length === 0 && upsellConfig.manualRules) {

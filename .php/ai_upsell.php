@@ -2,7 +2,7 @@
 header('Content-Type: application/json');
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-OpenAI-Key, OpenAI-API-Key");
+header("Access-Control-Allow-Headers: Content-Type");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
@@ -236,6 +236,105 @@ function extractApiKeyFromEnvFiles() {
     return extractEnvFileValue(['OPENAI_API_KEY', 'OPENAI_KEY']);
 }
 
+function extractShopifyAppSecretFromEnvironment() {
+    return firstNonEmptyString(
+        getenv('SHOPIFY_API_SECRET') ?: null,
+        $_ENV['SHOPIFY_API_SECRET'] ?? null,
+        $_SERVER['SHOPIFY_API_SECRET'] ?? null,
+        getenv('SHOPIFY_API_SECRET_KEY') ?: null,
+        $_ENV['SHOPIFY_API_SECRET_KEY'] ?? null,
+        $_SERVER['SHOPIFY_API_SECRET_KEY'] ?? null,
+        getenv('SHOPIFY_APP_SECRET') ?: null,
+        $_ENV['SHOPIFY_APP_SECRET'] ?? null,
+        $_SERVER['SHOPIFY_APP_SECRET'] ?? null,
+        extractEnvFileValue(['SHOPIFY_API_SECRET', 'SHOPIFY_API_SECRET_KEY', 'SHOPIFY_APP_SECRET'])
+    );
+}
+
+function parseQueryStringWithDuplicates($queryString) {
+    $params = [];
+
+    if (!is_string($queryString) || $queryString === '') {
+        return $params;
+    }
+
+    $pairs = explode('&', $queryString);
+    foreach ($pairs as $pair) {
+        if ($pair === '') {
+            continue;
+        }
+
+        $kv = explode('=', $pair, 2);
+        $rawKey = $kv[0] ?? '';
+        $rawValue = $kv[1] ?? '';
+
+        $key = urldecode($rawKey);
+        $value = urldecode($rawValue);
+
+        if ($key === '') {
+            continue;
+        }
+
+        if (!array_key_exists($key, $params)) {
+            $params[$key] = [];
+        }
+
+        $params[$key][] = $value;
+    }
+
+    return $params;
+}
+
+function calculateShopifyAppProxySignature($params, $sharedSecret) {
+    if (!is_array($params) || $sharedSecret === '') {
+        return '';
+    }
+
+    $signatureValues = $params['signature'] ?? [];
+    $signature = is_array($signatureValues) ? ($signatureValues[0] ?? '') : '';
+    if (!is_string($signature) || $signature === '') {
+        return '';
+    }
+
+    unset($params['signature']);
+
+    $parts = [];
+    foreach ($params as $key => $values) {
+        if (!is_string($key) || $key === '') {
+            continue;
+        }
+
+        if (!is_array($values)) {
+            $values = [$values];
+        }
+
+        $parts[] = $key . '=' . implode(',', $values);
+    }
+
+    sort($parts, SORT_STRING);
+    $message = implode('', $parts);
+
+    return hash_hmac('sha256', $message, $sharedSecret);
+}
+
+function verifyShopifyAppProxyRequest($sharedSecret) {
+    $queryString = $_SERVER['QUERY_STRING'] ?? '';
+    $params = parseQueryStringWithDuplicates($queryString);
+
+    $signatureValues = $params['signature'] ?? [];
+    $signature = is_array($signatureValues) ? ($signatureValues[0] ?? '') : '';
+    if (!is_string($signature) || $signature === '') {
+        return false;
+    }
+
+    $calculated = calculateShopifyAppProxySignature($params, $sharedSecret);
+    if ($calculated === '') {
+        return false;
+    }
+
+    return hash_equals($signature, $calculated);
+}
+
 function normalizeMyShopifyDomain($candidate) {
     if (!is_string($candidate)) {
         return '';
@@ -418,14 +517,26 @@ if (!is_array($payload)) {
     exit();
 }
 
-$apiKey = extractApiKeyFromPayload($payload);
-
-// 1. Check environment variables
-if (empty($apiKey)) {
-    $apiKey = extractApiKeyFromEnvironment();
+$shopifyAppSecret = extractShopifyAppSecretFromEnvironment();
+if ($shopifyAppSecret === '') {
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Shopify app secret not configured on the server (SHOPIFY_API_SECRET).',
+    ]);
+    exit();
 }
 
-// 2. Read from .env file if it exists
+if (!verifyShopifyAppProxyRequest($shopifyAppSecret)) {
+    http_response_code(401);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Unauthorized (invalid Shopify App Proxy signature).',
+    ]);
+    exit();
+}
+
+$apiKey = extractApiKeyFromEnvironment();
 if (empty($apiKey)) {
     $apiKey = extractApiKeyFromEnvFiles();
 }
@@ -445,6 +556,10 @@ $allProducts = normalizeArrayValue(
 $shopDomain = extractShopDomain($payload);
 $shopifyAccessToken = extractShopifyAccessToken($payload);
 $allProductsSource = empty($allProducts) ? 'payload_empty' : 'payload';
+
+$rawLimit = $payload['limit'] ?? null;
+$limit = is_numeric($rawLimit) ? (int)$rawLimit : 3;
+$limit = max(3, min(5, $limit));
 
 if (empty($allProducts) && $shopDomain !== '') {
     $fetchedProducts = fetchShopifyProducts($shopDomain, $shopifyAccessToken);
@@ -511,7 +626,7 @@ foreach ($allProducts as $p) {
 $catalogString = implode("\n", $storeCatalog);
 
 $prompt = "The customer currently has the following items in their cart: $cartString.
-Based on these items, recommend up to 3 complementary products from this store catalog:
+Based on these items, recommend up to $limit complementary products from this store catalog:
 $catalogString
 
 IMPORTANT: Your response MUST be valid JSON. Return an array of recommended product IDs exactly matching the IDs provided in the catalog.
@@ -519,13 +634,13 @@ Example output format:
 [\"123456789\", \"987654321\"]";
 
 $data = [
-    'model' => 'gpt-3.5-turbo',
+    'model' => 'gpt-4o-mini',
     'messages' => [
         ['role' => 'system', 'content' => 'You are an expert e-commerce recommendation engine.'],
         ['role' => 'user', 'content' => $prompt]
     ],
     'temperature' => 0.6,
-    'max_tokens' => 100
+    'max_tokens' => 140
 ];
 
 $ch = curl_init('https://api.openai.com/v1/chat/completions');

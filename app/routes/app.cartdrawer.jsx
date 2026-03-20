@@ -1,4 +1,5 @@
 import { useCurrency } from '../components/CurrencyContext';
+import AiUpsellSection from '../components/AiUpsellSection';
 import React, { useState, useEffect } from 'react';
 import {
   Page,
@@ -1543,20 +1544,21 @@ export default function CartDrawerAdmin() {
     // Now only using sample API as requested
     console.log('[Style] Saving style exclusively to sample API');
 
-    setInitialCouponSettings({
-      style: selectedCouponStyle,
-      position: couponPosition,
-      layout: couponLayout,
-      alignment: couponAlignment,
-      title: {
-        text: couponTitleText,
-        fontSize: couponTitleFontSize,
-        textColor: couponTitleTextColor,
-        alignment: couponTitleAlignment
-      }
-    });
-
-    await handleSaveAll();
+    const saveResult = await handleSaveAll();
+    if (saveResult?.success) {
+      setInitialCouponSettings({
+        style: selectedCouponStyle,
+        position: couponPosition,
+        layout: couponLayout,
+        alignment: couponAlignment,
+        title: {
+          text: couponTitleText,
+          fontSize: couponTitleFontSize,
+          textColor: couponTitleTextColor,
+          alignment: couponTitleAlignment
+        }
+      });
+    }
   };
 
   const handleCancelStyle = () => {
@@ -1696,6 +1698,15 @@ export default function CartDrawerAdmin() {
       };
     });
 
+    // Never persist or transmit any AI API keys from client state.
+    const {
+      aiApiKey: _ignoredAiApiKey,
+      apiKey: _ignoredApiKey,
+      openaiKey: _ignoredOpenaiKey,
+      openai_api_key: _ignoredOpenaiApiKey,
+      ...safeUpsellConfig
+    } = upsellConfig || {};
+
     const sampleData = {
       Id: SHOP_ID,
       shop: SHOP_ID,
@@ -1747,7 +1758,7 @@ export default function CartDrawerAdmin() {
         }),
       }),
       upsell_data: JSON.stringify({
-        ...upsellConfig,
+        ...safeUpsellConfig,
         manualRules: savableManualRules
       }),
       checkoutName,
@@ -1776,11 +1787,11 @@ export default function CartDrawerAdmin() {
       console.log('[Sample API] Response received:', responseBody);
 
       if (response.ok && responseBody.success) {
-        setSaveToastMessage(`✅ Configuration synced (${targetStatus})`);
+        setSaveToastMessage(`✅ Configuration saved to DB (${targetStatus})`);
         setShowSaveToast(true);
         return { success: true, responseBody };
       } else {
-        const errorMsg = responseBody.error || responseBody.message || `Status ${response.status}`;
+        const errorMsg = responseBody.error || responseBody.externalError || responseBody.message || `Status ${response.status}`;
         setSaveToastMessage(`❌ Error: ${errorMsg}`);
         setShowSaveToast(true);
         return { success: false, responseBody };
@@ -1808,9 +1819,11 @@ export default function CartDrawerAdmin() {
 
     // Now only using sample API as requested
     console.log('[Upsell] Saving exclusively to sample API');
-    setInitialUpsellConfig(upsellConfig);
-    setInitialManualUpsellRules(JSON.parse(JSON.stringify(manualUpsellRules)));
-    await handleSaveAll();
+    const saveResult = await handleSaveAll();
+    if (saveResult?.success) {
+      setInitialUpsellConfig(upsellConfig);
+      setInitialManualUpsellRules(JSON.parse(JSON.stringify(manualUpsellRules)));
+    }
   };
 
   const handleCancelUpsellRules = () => {
@@ -1929,11 +1942,12 @@ export default function CartDrawerAdmin() {
     setUpsellSaving(true);
     try {
       console.log('[Upsell Builder] Saving exclusively to sample API');
+      const saveResult = await handleSaveAll();
+      if (!saveResult?.success) {
+        return;
+      }
+
       setInitialManualUpsellRules(JSON.parse(JSON.stringify(manualUpsellRules)));
-
-      // Also sync to sample API for the overall payload
-      await handleSaveAll();
-
       setSaveToastMessage('✅ Upsell rules saved successfully');
       setShowSaveToast(true);
       setShowManualUpsellBuilder(false);
@@ -3365,19 +3379,15 @@ export default function CartDrawerAdmin() {
                   checked={upsellConfig.useAI}
                   onChange={(checked) => setUpsellConfig({ ...upsellConfig, useAI: checked })}
                 />
-                {upsellConfig.useAI && (
-                  <TextField
-                    label="OpenAI API Key"
-                    value={upsellConfig.aiApiKey || ''}
-                    onChange={(val) => setUpsellConfig({ ...upsellConfig, aiApiKey: val })}
-                    autoComplete="off"
-                    helpText="Required to fetch product recommendations. Keep this key secure."
-                    placeholder="sk-..."
-                    type="password"
-                  />
-                )}
               </BlockStack>
             </Card>
+
+            {upsellConfig.useAI && (
+              <AiUpsellSection
+                currentProduct={loadedShopifyProducts?.[0] || null}
+                limit={upsellConfig.limit}
+              />
+            )}
 
             {/* Manual Product Selection (only if AI is off) */}
             {!upsellConfig.useAI && (

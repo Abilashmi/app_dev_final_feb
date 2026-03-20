@@ -227,6 +227,15 @@
   text-align: left;
 }
 
+/* ========== UPSELL TITLE ========== */
+/* Show full product names (no "...") while keeping wrapping safe. */
+.cc-upsell-title {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 /* ========== MOBILE ========== */
 @media (max-width: 480px) {
   #cc-drawer {
