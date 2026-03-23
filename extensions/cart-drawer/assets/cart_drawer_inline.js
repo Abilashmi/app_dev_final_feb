@@ -1355,7 +1355,10 @@
             label: override.label || apiCoupon.title || apiCoupon.code || 'Coupon',
             description:
               override.description ||
-              (apiCoupon.type === 'amount_off_order' ? 'Order Discount' : 'Product Discount'),
+              apiCoupon.discount_config?.description ||
+              (apiCoupon.type === 'amount_off_order' || apiCoupon.discount_config?.type === 'amount_off_order'
+                ? 'Order Discount'
+                : 'Product Discount'),
             discountType: apiCoupon.valueType === 'percentage' ? 'percentage' : 'fixed',
             discountValue: parseFloat(override.discountValue || apiCoupon.value || 0),
             backgroundColor: override.backgroundColor || apiCoupon.backgroundColor || '#6366f1',
@@ -1365,6 +1368,7 @@
               override['button.text'] ??
               override.button?.text ??
               apiCoupon.buttonText ??
+              apiCoupon.discount_config?.button?.text ??
               apiCoupon.button?.text ??
               'Apply',
             buttonBackgroundColor:
@@ -1436,7 +1440,8 @@
       <div style="width:42px;height:42px;border-radius:8px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${coupon.iconUrl}</div>
       <div style="flex:1;min-width:0;">
         <p style="margin:0 0 2px 0;font-size:14px;font-weight:700;color:#1e293b;">${escapeHtml(coupon.code)}</p>
-        <p style="margin:0;font-size:12px;color:#64748b;">${escapeHtml(coupon.label)}</p>
+        <p style="margin:0 0 4px 0;font-size:12px;font-weight:600;color:#64748b;">${escapeHtml(coupon.label)}</p>
+        <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.2;">${escapeHtml(coupon.description)}</p>
       </div>
       <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 14px;background:${
           isApplied ? coupon.backgroundColor : 'transparent'
@@ -1477,6 +1482,9 @@
         </div>
         <div style="background:rgba(255,255,255,0.2);padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;">${coupon.discountValue
           }% OFF</div>
+      </div>
+      <div style="padding:8px 14px 4px 14px;">
+        <p style="margin:0;font-size:11px;color:#64748b;">${escapeHtml(coupon.description)}</p>
       </div>
       <div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
         <div style="flex:1;border:1px dashed #cbd5e1;border-radius:6px;padding:5px 10px;background:#f8fafc;">
