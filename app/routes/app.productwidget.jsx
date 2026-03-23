@@ -323,33 +323,33 @@ export async function loader({ request }) {
     }
 
 
-    // Fetch coupon config from PHP backend for the current shop
+    // Fetch coupon config from internal API for the current shop
     let couponConfig = null;
     const url = new URL(request.url);
     try {
-        const couponRes = await fetch(`${url.origin}/php/save_coupon_slider_widget.php?shopdomain=${encodeURIComponent(shop)}`);
+        const couponRes = await fetch(`${url.origin}/api/coupon-slider?shopdomain=${encodeURIComponent(shop)}`);
         const couponData = await couponRes.json();
-        if (couponData.status === 'success' && couponData.data) {
-            couponConfig = couponData.data;
+        if (couponData.success && couponData.config) {
+            couponConfig = couponData.config;
         }
     } catch (e) {
-        console.error("Failed to fetch coupon settings from PHP backend:", e);
+        console.error("Failed to fetch coupon settings from internal API:", e);
     }
     // Fallback to FAKE_COUPON_CONFIG if no data found
     if (!couponConfig) {
         couponConfig = { ...FAKE_COUPON_CONFIG, selectedActiveCoupons: [], templates: { ...FAKE_COUPON_CONFIG.templates } };
     }
 
-    // Fetch FBT config from PHP backend for the current shop
+    // Fetch FBT config from internal API for the current shop
     let fbtConfig = null;
     try {
-        const fbtRes = await fetch(`${url.origin}/php/save_fbt_widget.php?shopdomain=${encodeURIComponent(shop)}`);
+        const fbtRes = await fetch(`${url.origin}/api/product-sample?shopdomain=${encodeURIComponent(shop)}`);
         const fbtData = await fbtRes.json();
-        if (fbtData.status === 'success' && fbtData.data) {
-            fbtConfig = fbtData.data;
+        if (fbtData.success && fbtData.fbt) {
+            fbtConfig = fbtData.fbt;
         }
     } catch (e) {
-        console.error("Failed to fetch FBT settings from PHP backend:", e);
+        console.error("Failed to fetch FBT settings from internal API:", e);
     }
     // Fallback to FAKE_FBT_CONFIG if no data found
     if (!fbtConfig) {

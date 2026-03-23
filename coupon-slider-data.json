@@ -1,20 +1,20 @@
 {
-  "activeTemplate": "template2",
+  "activeTemplate": "template3",
   "title": {
     "text": "Apply Coupon",
-    "fontSize": 12,
-    "textColor": "#4d83f8",
-    "alignment": "center"
+    "fontSize": 14,
+    "textColor": "#111827",
+    "alignment": "left"
   },
   "templates": {
     "template1": {
       "name": "Classic Banner",
       "headingText": "GET 10% OFF!",
-      "subtextText": "Use code: SAVE10 at checkout",
+      "subtextText": "Apply at checkout for savings",
       "bgColor": "#ffffff",
-      "textColor": "#1a1a1a",
-      "accentColor": "#2563eb",
-      "buttonColor": "#2563eb",
+      "textColor": "#111827",
+      "accentColor": "#3b82f6",
+      "buttonColor": "#3b82f6",
       "buttonTextColor": "#ffffff",
       "borderRadius": 12,
       "fontSize": 16,
@@ -24,7 +24,13 @@
       "showPrices": true,
       "showAddAllButton": false,
       "interactionType": "copy",
-      "layout": "horizontal"
+      "layout": "horizontal",
+      "title": {
+        "text": "Apply Coupon",
+        "fontSize": 14,
+        "textColor": "#111827",
+        "alignment": "left"
+      }
     },
     "template2": {
       "name": "Minimal Card",
@@ -43,7 +49,13 @@
       "showPrices": true,
       "showAddAllButton": false,
       "interactionType": "copy",
-      "layout": "horizontal"
+      "layout": "horizontal",
+      "title": {
+        "text": "Apply Coupon",
+        "fontSize": 14,
+        "textColor": "#111827",
+        "alignment": "left"
+      }
     },
     "template3": {
       "name": "Bold & Vibrant",
@@ -62,68 +74,27 @@
       "showPrices": true,
       "showAddAllButton": false,
       "interactionType": "copy",
-      "layout": "horizontal"
+      "layout": "horizontal",
+      "title": {
+        "text": "Apply Coupon",
+        "fontSize": 14,
+        "textColor": "#111827",
+        "alignment": "left"
+      }
     }
   },
   "selectedActiveCoupons": [
-    "gid://shopify/DiscountRedeemCode/26805031010371",
-    "gid://shopify/DiscountRedeemCode/26805030813763",
-    "gid://shopify/DiscountRedeemCode/26799448817731",
-    "gid://shopify/DiscountRedeemCode/26833535139907"
+    "gid:/shopify/DiscountAutomaticNode/1161690120399"
   ],
   "allTemplateOverrides": {
     "template1": {},
-    "template2": {
-      "gid://shopify/DiscountRedeemCode/26805031010371": {
-        "couponCode": "velwo",
-        "headingText": "SPECIAL OFFER",
-        "subtextText": "Free shipping on orders over ₹500"
-      },
-      "gid://shopify/DiscountRedeemCode/26805030813763": {
-        "couponCode": "J62ZTBU1",
-        "headingText": "SPECIAL OFFER",
-        "subtextText": "Free shipping on orders over ₹500"
-      },
-      "gid://shopify/DiscountRedeemCode/26799448817731": {
-        "couponCode": "9Y39OK68",
-        "headingText": "SPECIAL OFFER",
-        "subtextText": "Free shipping on orders over ₹500"
-      },
-      "gid://shopify/DiscountRedeemCode/26833535139907": {
-        "displayCondition": "product_handle",
-        "productHandles": [
-          "the-3p-fulfilled-snowboard"
-        ],
-        "couponCode": "PSQEP5W9",
-        "headingText": "SPECIAL OFFER",
-        "subtextText": "Free shipping on orders over ₹500"
-      }
-    },
+    "template2": {},
     "template3": {
-      "gid://shopify/DiscountRedeemCode/26805031010371": {
-        "couponCode": "velwo",
-        "headingText": "how are you",
-        "subtextText": "hello"
-      },
-      "gid://shopify/DiscountRedeemCode/26805030813763": {
-        "couponCode": "J62ZTBU1",
-        "headingText": "FLASH SALE!",
-        "subtextText": "Use code: BOLD25 for extra 25% OFF"
-      },
-      "gid://shopify/DiscountRedeemCode/26800703766595": {
-        "couponCode": "3E3OHTM4",
-        "headingText": "FLASH SALE!",
-        "subtextText": "Use code: BOLD25 for extra 25% OFF"
-      },
-      "gid://shopify/DiscountRedeemCode/26799448817731": {
-        "couponCode": "9Y39OK68",
-        "headingText": "FLASH SALE!",
-        "subtextText": "Use code: BOLD25 for extra 25% OFF"
-      },
-      "gid://shopify/DiscountRedeemCode/26833535139907": {
-        "couponCode": "PSQEP5W9",
-        "headingText": "FLASH SALE!",
-        "subtextText": "Use code: BOLD25 for extra 25% OFF"
+      "gid:/shopify/DiscountAutomaticNode/1161690120399": {
+        "couponCode": "Buy three, get 30 percent off",
+        "headingText": "Grab Now!",
+        "subtextText": "Offfer Ends Soon",
+        "displayCondition": "all"
       }
     }
   },

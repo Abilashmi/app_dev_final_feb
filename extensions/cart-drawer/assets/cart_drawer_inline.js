@@ -1407,7 +1407,7 @@
 
     /* -- Coupon list is always a horizontal carousel so nav arrows work -- */
     const couponListStyle =
-      'display:flex;flex-direction:row;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-ms-overflow-style:none;scrollbar-width:none;padding-bottom:4px;';
+      'display:flex;flex-direction:row;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;-ms-overflow-style:none;scrollbar-width:none;padding:0 4px 4px 4px;';
 
     let html = `
 <div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -1 : 999};">
@@ -1427,62 +1427,65 @@
       if (style === 'style-1') {
         // Style 1: White card with colored left accent bar, grey icon box, dark text, outlined button
         html += `
-    <div data-coupon-card style="min-width:240px;flex:0 0 auto;scroll-snap-align:start;padding:12px 16px;background:#fff;border-radius:8px;border:${isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
-          };box-shadow:${isApplied ? '0 2px 8px ' + coupon.backgroundColor + '30' : '0 2px 4px rgba(0,0,0,0.02)'
-          };display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:all 0.2s ease;">
+    <div data-coupon-card class="cc-coupon-card" style="padding:12px 16px;background:#fff;border:${
+          isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
+          };box-shadow:${
+          isApplied ? '0 2px 8px ' + coupon.backgroundColor + '30' : '0 2px 4px rgba(0,0,0,0.04)'
+          };display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;">
       <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${coupon.backgroundColor};"></div>
-      <div style="width:46px;height:46px;border-radius:8px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;">${coupon.iconUrl
-          }</div>
+      <div style="width:42px;height:42px;border-radius:8px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${coupon.iconUrl}</div>
       <div style="flex:1;min-width:0;">
-        <p style="margin:0 0 2px 0;font-size:15px;font-weight:700;color:#1e293b;">${escapeHtml(coupon.code)}</p>
-        <p style="margin:0;font-size:13px;color:#64748b;">${escapeHtml(coupon.label)}</p>
+        <p style="margin:0 0 2px 0;font-size:14px;font-weight:700;color:#1e293b;">${escapeHtml(coupon.code)}</p>
+        <p style="margin:0;font-size:12px;color:#64748b;">${escapeHtml(coupon.label)}</p>
       </div>
-      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 14px;background:${isApplied ? coupon.backgroundColor : 'transparent'
-          };color:${isApplied ? '#fff' : '#475569'};border:${isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #cbd5e1'
-          };border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;">${isApplied ? 'Applied' : 'Apply'
-          }</button>
+      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 14px;background:${
+          isApplied ? coupon.backgroundColor : 'transparent'
+          };color:${isApplied ? '#fff' : '#475569'};border:${
+          isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #cbd5e1'
+          };border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;">${
+          isApplied ? 'Applied' : 'Apply'}</button>
     </div>
   `;
       } else if (style === 'style-2') {
         // Style 2: White card, filled colored icon box, dark text, black Apply Coupon button
         html += `
-    <div data-coupon-card style="min-width:180px;flex:0 0 auto;scroll-snap-align:start;padding:16px;background:#fff;border-radius:16px;border:${isApplied ? '2px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
-          };box-shadow:0 4px 12px rgba(0,0,0,0.08);display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;position:relative;">
-      <div style="width:56px;height:56px;border-radius:16px;background:${coupon.backgroundColor
-          };display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;box-shadow:0 4px 10px ${coupon.backgroundColor
-          }60;">${coupon.iconUrl}</div>
+    <div data-coupon-card class="cc-coupon-card" style="padding:14px;background:#fff;border:${
+          isApplied ? '2px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
+          };box-shadow:0 4px 12px rgba(0,0,0,0.06);display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;position:relative;">
+      <div style="width:48px;height:48px;border-radius:14px;background:${coupon.backgroundColor
+          };display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;box-shadow:0 4px 10px ${coupon.backgroundColor
+          }40;">${coupon.iconUrl}</div>
       <div>
-        <p style="margin:0 0 2px 0;font-size:15px;font-weight:800;color:#1e293b;">${escapeHtml(coupon.code)}</p>
+        <p style="margin:0 0 2px 0;font-size:14px;font-weight:800;color:#1e293b;">${escapeHtml(coupon.code)}</p>
         <p style="margin:0;font-size:11px;color:#64748b;">${escapeHtml(coupon.description)}</p>
       </div>
-      <button onclick="ccApplyCoupon('${escapeHtml(
-            coupon.code
-          )}')" style="width:100%;padding:8px;margin-top:4px;background:${isApplied ? '#10b981' : '#1e293b'
-          };color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">${isApplied ? '✓ Applied' : 'Apply Coupon'
-          }</button>
+      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="width:100%;padding:8px;margin-top:2px;background:${
+          isApplied ? '#10b981' : '#1e293b'
+          };color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">${
+          isApplied ? '✓ Applied' : 'Apply Coupon'}</button>
     </div>
   `;
       } else {
         // Style 3: Colored header + white body with dashed code box + text-link apply button
         html += `
-    <div data-coupon-card style="min-width:280px;flex:0 0 auto;scroll-snap-align:start;padding:0;background:#fff;border-radius:12px;border:1px solid #e2e8f0;box-shadow:0 2px 6px rgba(0,0,0,0.04);display:flex;flex-direction:column;overflow:hidden;">
+    <div data-coupon-card class="cc-coupon-card" style="padding:0;background:#fff;border:1px solid #e2e8f0;box-shadow:0 2px 6px rgba(0,0,0,0.04);display:flex;flex-direction:column;overflow:hidden;">
       <div style="background:${coupon.backgroundColor
-          };padding:12px 16px;display:flex;align-items:center;justify-content:space-between;color:${coupon.textColor};">
+          };padding:10px 14px;display:flex;align-items:center;justify-content:space-between;color:${coupon.textColor};">
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:18px;">${coupon.iconUrl}</span>
-          <span style="font-size:14px;font-weight:700;">${escapeHtml(coupon.label)}</span>
+          <span style="font-size:16px;">${coupon.iconUrl}</span>
+          <span style="font-size:13px;font-weight:700;">${escapeHtml(coupon.label)}</span>
         </div>
-        <div style="background:rgba(255,255,255,0.2);padding:4px 8px;border-radius:6px;font-size:11px;font-weight:600;">${coupon.discountValue
+        <div style="background:rgba(255,255,255,0.2);padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;">${coupon.discountValue
           }% OFF</div>
       </div>
-      <div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
-        <div style="flex:1;border:1px dashed #cbd5e1;border-radius:6px;padding:6px 10px;background:#f8fafc;">
-          <p style="margin:0;font-size:13px;font-weight:700;color:#334155;font-family:monospace;">${escapeHtml(
-            coupon.code
-          )}</p>
+      <div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div style="flex:1;border:1px dashed #cbd5e1;border-radius:6px;padding:5px 10px;background:#f8fafc;">
+          <p style="margin:0;font-size:12px;font-weight:700;color:#334155;font-family:monospace;">${escapeHtml(coupon.code)}</p>
         </div>
-        <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${isApplied ? '#10b981' : '#2563eb'
-          };font-size:12px;font-weight:700;cursor:pointer;padding:4px;">${isApplied ? 'REMOVE' : 'APPLY'}</button>
+        <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${
+          isApplied ? '#10b981' : '#2563eb'
+          };font-size:12px;font-weight:700;cursor:pointer;padding:4px;">${
+          isApplied ? 'REMOVE' : 'APPLY'}</button>
       </div>
     </div>
   `;
@@ -1624,12 +1627,11 @@
     const dir = upsellConfig.direction || 'vertical';
     const layout = upsellConfig.layout || 'carousel';
     const titleStyle = `
-      font-size:12px;
-      font-weight:${upsellConfig.upsellTitle.bold ? 900 : 800};
+      font-size:16px;
+      font-weight:${upsellConfig.upsellTitle.bold ? 900 : 600};
       font-style:${upsellConfig.upsellTitle.italic ? 'italic' : 'normal'};
       text-decoration:${upsellConfig.upsellTitle.underline ? 'underline' : 'none'};
       color:${upsellConfig.upsellTitle.color};
-      text-transform:uppercase;letter-spacing:.05em;
     `;
 
     const isHorizontal = dir === 'horizontal';
@@ -1663,10 +1665,10 @@
     }
 
     let html = `
-<div style="padding:10px 16px;background:#f8fafc;border-bottom:1px solid #e5e7eb;${upsellConfig.position === 'top' ? 'border-top:1px solid #e5e7eb;margin-top:8px;' : ''
+<div style="padding:16px 20px;background:#f8fafc;border-bottom:1px solid #e5e7eb;${upsellConfig.position === 'top' ? 'border-top:1px solid #e5e7eb;margin-top:8px;' : ''
       }flex-shrink:0;">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-    <p style="margin:0;${titleStyle}">${escapeHtml(upsellConfig.upsellTitle.text)}</p>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <p style="margin:0;${titleStyle}">${escapeHtml(upsellConfig.upsellTitle.text || 'Product Recommendations')}</p>
     ${showUpsellNav
         ? `<div style="display:flex;gap:6px;">
       <button id="upsell-nav-left" class="cc-nav-btn" onclick="ccScrollContainer('cc-upsell-list','left')" title="${navPrevTitle}" style="display:none;">${navPrevSymbol}</button>
@@ -1719,18 +1721,16 @@
           ? 'min-width: 320px; max-width: 320px; scroll-snap-align: start;'
           : '';
         html += `
-          <div class="cc-upsell-card cc-layout-carousel" style="${cardSpecialStyle} border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+          <div class="cc-upsell-card cc-layout-carousel" style="${cardSpecialStyle}">
             <div class="cc-upsell-image-wrapper">
               ${imageHtml}
             </div>
             <div class="cc-upsell-content">
-              <div class="cc-carousel-info" style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0; text-align: left;">
-                <p class="cc-upsell-title cc-upsell-title--carousel" style="margin:0;font-size:14px;font-weight:700;color:#0f172a;line-height:1.3;word-break: break-word;">${escapeHtml(
-          title
-        )}</p>
+              <p class="cc-upsell-title cc-upsell-title--carousel" style="margin:0;font-size:14px;font-weight:600;color:#0f172a;line-height:1.4;width:100%;">${escapeHtml(title)}</p>
+              <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:8px;">
                 <span style="font-size:15px;font-weight:800;color:#10b981;">${priceText}</span>
+                <button onclick="ccAddToCart('${safeAddToCartId}', true, ${addIsProductId})" class="cc-add-btn">${escapeHtml((upsellConfig.buttonText || 'ADD TO CART').toUpperCase())}</button>
               </div>
-              <button onclick="ccAddToCart('${safeAddToCartId}', true, ${addIsProductId})" class="cc-add-btn" style="padding:10px 24px; font-size:12px; border-radius: 30px; letter-spacing: 0.5px; margin-left:8px;">${escapeHtml((upsellConfig.buttonText || 'ADD').toUpperCase())}</button>
             </div>
           </div>
         `;
