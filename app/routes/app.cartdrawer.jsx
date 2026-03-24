@@ -703,6 +703,8 @@ export default function CartDrawerAdmin() {
     fill_gradient: '',
     borderRadius: 8,
     completionText: 'Free shipping unlocked!',
+    completionTextColor: '#10b981',
+    enableConfetti: true,
     rewardsCalculation: ['cartTotal'], // 'cartTotal' or 'cartQuantity'
     maxTarget: 1000,
     mode: 'amount', // 'amount' or 'quantity'
@@ -712,6 +714,7 @@ export default function CartDrawerAdmin() {
         rewardType: 'product',
         minValue: 50,
         minQuantity: 3,
+        title: '',
         description: 'Cool Product',
         titleBeforeAchieving: "You're {COUNT} away from product ____",
         products: [],
@@ -904,7 +907,7 @@ export default function CartDrawerAdmin() {
 
           // 3. Update Progress Bar - Ensure defaults exist
           if (settings.progressBar) {
-            const pbData = settings.progressBar;
+            const pbData = settings.progressBar || {};
             const normalizedPB = {
               enabled: isEnabled(pbData.enabled),
               mode: pbData.mode || 'amount',
@@ -914,11 +917,15 @@ export default function CartDrawerAdmin() {
               fill_gradient: pbData.fill_gradient || '',
               borderRadius: pbData.borderRadius || 8,
               completionText: pbData.completionText || '🎉 All Rewards Unlocked!',
+              completionTextColor: pbData.completionTextColor || '#10b981',
+              enableConfetti: pbData.enableConfetti === undefined ? true : !!pbData.enableConfetti,
               maxTarget: pbData.maxTarget || 1000,
               placement: pbData.placement || 'top',
               tiers: (pbData.tiers || []).map(t => ({
                 id: t.id,
                 minValue: t.minValue || 0,
+                minQuantity: t.minQuantity || 1,
+                title: t.title || '',
                 description: t.description || 'Reward',
                 products: t.products || [],
                 rewardType: t.rewardType || 'product',
@@ -1124,6 +1131,7 @@ export default function CartDrawerAdmin() {
       rewardType: 'product',
       minValue: 100,
       minQuantity: 1,
+      title: '',
       description: '',
       titleBeforeAchieving: "You're {COUNT} away from ____",
       products: [],
@@ -2396,20 +2404,32 @@ export default function CartDrawerAdmin() {
                       onChange={(value) => updateProgressBarSetting('barForegroundColor', value)}
                     />
                   </div>
-                  <TextField
-                    label="Border radius"
-                    type="number"
-                    value={progressBarSettings.borderRadius}
-                    onChange={(value) => updateProgressBarSetting('borderRadius', Number(value))}
-                    suffix="px"
-                    autoComplete="off"
-                  />
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <TextField
+                      label="Border radius"
+                      type="number"
+                      value={progressBarSettings.borderRadius}
+                      onChange={(value) => updateProgressBarSetting('borderRadius', Number(value))}
+                      suffix="px"
+                      autoComplete="off"
+                    />
+                    <ColorPickerField
+                      label="Message Color"
+                      value={progressBarSettings.completionTextColor || '#10b981'}
+                      onChange={(value) => updateProgressBarSetting('completionTextColor', value)}
+                    />
+                  </div>
                   <TextField
                     label="Completion message"
                     value={progressBarSettings.completionText}
                     onChange={(value) => updateProgressBarSetting('completionText', value)}
                     autoComplete="off"
                     placeholder="e.g. All rewards unlocked!"
+                  />
+                  <Checkbox
+                    label="Enable confetti popup on completion"
+                    checked={progressBarSettings.enableConfetti ?? true}
+                    onChange={(checked) => updateProgressBarSetting('enableConfetti', checked)}
                   />
                 </BlockStack>
               </div>
@@ -2563,11 +2583,22 @@ export default function CartDrawerAdmin() {
                         />
                       )}
                       <TextField
-                        label="Reward name"
-                        value={activeTier.description}
-                        onChange={(value) => updateTierSetting(activeTierIndex, 'description', value)}
+                        label="Milestone Title (Optional)"
+                        value={activeTier.title || ''}
+                        onChange={(value) => updateTierSetting(activeTierIndex, 'title', value)}
                         placeholder="e.g., Free Shipping"
                         autoComplete="off"
+                      />
+                    </div>
+
+                    <div style={{ marginTop: '16px' }}>
+                      <TextField
+                        label="Milestone Description (Required)"
+                        value={activeTier.description || ''}
+                        onChange={(value) => updateTierSetting(activeTierIndex, 'description', value)}
+                        placeholder="Enter description..."
+                        autoComplete="off"
+                        multiline={3}
                       />
                     </div>
 
@@ -4059,7 +4090,7 @@ export default function CartDrawerAdmin() {
                       );
                     }
                     return (
-                      <div style={{ color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                      <div style={{ color: progressBarSettings.completionTextColor || '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                         <span style={{ fontSize: '20px' }}>🎉</span>
                         <span style={{ fontSize: '15px', fontWeight: '700' }}>{progressBarSettings.completionText || 'All Rewards Unlocked!'}</span>
                       </div>

@@ -36,6 +36,45 @@
   let _ccStoreCatalogCache = { ts: 0, candidateCatalog: [], detailsById: {} };
   let _ccStoreCatalogPromise = null;
 
+  /* =================== CONFETTI POPUP =================== */
+  function triggerConfetti() {
+    setTimeout(() => {
+      const drawerBody = document.getElementById('cc-drawer-body');
+      if (!drawerBody) return;
+
+      let canvas = document.getElementById('cc-confetti-canvas');
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.id = 'cc-confetti-canvas';
+        canvas.style.position = 'absolute';
+        canvas.style.top = '0';
+        canvas.style.left = '0';
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        canvas.style.pointerEvents = 'none';
+        canvas.style.zIndex = '2147483647';
+        // Append to the drawer root context instead of document body
+        const root = document.getElementById('cc-root');
+        if (root) root.appendChild(canvas);
+      }
+
+      const runConfetti = () => {
+        const myConfetti = window.confetti.create(canvas, { resize: true, useWorker: true });
+        myConfetti({ particleCount: 120, spread: 80, origin: { y: 0.4 } })
+          .then(() => { if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas); });
+      };
+
+      if (window.confetti) {
+        runConfetti();
+      } else {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js';
+        script.onload = runConfetti;
+        document.head.appendChild(script);
+      }
+    }, 150); // slight delay to perfectly sync with the cc-pop text animation bounce
+  }
+
   /* =================== LOAD CONFIG =================== */
 
   async function loadConfig() {
@@ -173,6 +212,7 @@
         return {
           id: t.id,
           target: target,
+          title: t.title || '',
           rewardText: t.description || 'Reward',
           products: t.products || [],
           rewardType: t.rewardType || 'product',
@@ -196,6 +236,8 @@
       barForegroundColor: data.barForegroundColor || data.fill_color || '#2563eb',
       borderRadius: data.borderRadius || 8,
       completionText: data.completionText || '🎉 All Rewards Unlocked!',
+      completionTextColor: data.completionTextColor || '#10b981',
+      enableConfetti: data.enableConfetti ?? true,
       maxTarget: maxTarget,
       tiers: parsedTiers,
     };
@@ -1032,16 +1074,15 @@
   `;
       } else {
         drawerHtml += `
-    <div style="color:#10b981;display:flex;align-items:center;justify-content:center;gap:8px;">
-      <span style="font-size:20px;">🎉</span>
-      <span style="font-size:15px;font-weight:700;">${progress.completionText}</span>
+    <div style="color:${progress.completionTextColor || '#10b981'};display:flex;align-items:center;justify-content:center;gap:8px;animation:cc-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;">
+      <span style="font-size:16px;font-weight:800;">${progress.completionText}</span>
     </div>
   `;
       }
       drawerHtml += `</div>`;
 
       // ---- PROGRESS TRACK with outline ----
-      drawerHtml += `<div style="position:relative;width:calc(100% - 40px);height:10px;margin:24px 20px 48px 20px;background:${progress.barBackgroundColor || '#e2e8f0'
+      drawerHtml += `<div style="position:relative;width:calc(100% - 40px);height:10px;margin:24px 20px 80px 20px;background:${progress.barBackgroundColor || '#e2e8f0'
         };border-radius:99px;border:1.5px solid ${fgColor}22;box-shadow:inset 0 1px 3px rgba(0,0,0,0.06);">`;
 
       // 1. The progress bar filler
@@ -1085,21 +1126,34 @@
         }
         drawerHtml += `</div>`;
 
-        // Tooltip label
-        const tooltipBottom = isCompleted ? '-48px' : '-32px';
-        drawerHtml += `<div style="position:absolute;bottom:${tooltipBottom};left:50%;transform:translateX(-50%);white-space:nowrap;font-size:${isCompleted ? 12 : 11
-          }px;font-weight:700;color:${isCompleted ? fgColor : '#64748b'};opacity:${isCompleted || isNext ? 1 : 0.7
-          };pointer-events:none;z-index:10;display:flex;flex-direction:column;align-items:center;transition:all .3s ease;">`;
-        if (isCompleted) {
-          drawerHtml += `<span style="color:${fgColor};">${ms.rewardText}</span>`;
-        } else {
-          drawerHtml += `<span>${pInfo.mode === 'amount' ? CURRENCY_SYMBOL + Math.round(ms.target) : ms.target}</span>`;
+        // Description label below node
+        const amountDisplay = pInfo.mode === 'amount' ? CURRENCY_SYMBOL + Math.round(ms.target) : ms.target + ' items';
+        
+        drawerHtml += `<div style="position:absolute;top:100%;margin-top:8px;width:120px;left:50%;transform:translateX(-50%);text-align:center;font-size:11px;line-height:1.2;pointer-events:none;z-index:10;display:flex;flex-direction:column;align-items:center;transition:all .3s ease;color:${isCompleted ? fgColor : '#64748b'};opacity:${isCompleted || isNext ? 1 : 0.7};word-wrap:break-word;">`;
+        
+        drawerHtml += `<span style="font-weight:800;font-size:12px;margin-bottom:2px;">${amountDisplay}</span>`;
+        
+        if (ms.title) {
+          drawerHtml += `<span style="font-weight:700;margin-bottom:2px;">${ms.title}</span>`;
+        }
+        if (ms.rewardText) {
+          drawerHtml += `<span style="font-weight:500;opacity:0.9;">${ms.rewardText}</span>`;
         }
         drawerHtml += `</div></div>`;
       });
 
       drawerHtml += `</div>`; // end progress track
       drawerHtml += `</div>`; // end progress container
+      
+      // Trigger Confetti "Paper Popup" when fully unlocked
+      if (!pInfo.upcoming) {
+        if (!window._ccConfettiShown && progress.enableConfetti) {
+          window._ccConfettiShown = true;
+          triggerConfetti();
+        }
+      } else {
+        window._ccConfettiShown = false; // Reset if cart drops below target
+      }
     }
 
     /* ---- EMPTY STATE ---- */
@@ -1431,10 +1485,8 @@
       if (style === 'style-1') {
         // Style 1: White card with colored left accent bar, grey icon box, dark text, outlined button
         html += `
-    <div data-coupon-card class="cc-coupon-card" style="padding:12px 16px;background:#fff;border:${
-          isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
-          };box-shadow:${
-          isApplied ? '0 2px 8px ' + coupon.backgroundColor + '30' : '0 2px 4px rgba(0,0,0,0.04)'
+    <div data-coupon-card class="cc-coupon-card" style="padding:12px 16px;background:#fff;border:${isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
+          };box-shadow:${isApplied ? '0 2px 8px ' + coupon.backgroundColor + '30' : '0 2px 4px rgba(0,0,0,0.04)'
           };display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;">
       <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${coupon.backgroundColor};"></div>
       <div style="width:42px;height:42px;border-radius:8px;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${coupon.iconUrl}</div>
@@ -1443,19 +1495,15 @@
         <p style="margin:0 0 4px 0;font-size:12px;font-weight:600;color:#64748b;">${escapeHtml(coupon.label)}</p>
         <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.2;">${escapeHtml(coupon.description)}</p>
       </div>
-      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 14px;background:${
-          isApplied ? coupon.backgroundColor : 'transparent'
-          };color:${isApplied ? '#fff' : '#475569'};border:${
-          isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #cbd5e1'
-          };border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;">${
-          isApplied ? 'Applied' : 'Apply'}</button>
+      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 14px;background:${isApplied ? coupon.backgroundColor : 'transparent'
+          };color:${isApplied ? '#fff' : '#475569'};border:${isApplied ? '1px solid ' + coupon.backgroundColor : '1px solid #cbd5e1'
+          };border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all 0.2s ease;">${isApplied ? 'Applied' : 'Apply'}</button>
     </div>
   `;
       } else if (style === 'style-2') {
         // Style 2: White card, filled colored icon box, dark text, black Apply Coupon button
         html += `
-    <div data-coupon-card class="cc-coupon-card" style="padding:14px;background:#fff;border:${
-          isApplied ? '2px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
+    <div data-coupon-card class="cc-coupon-card" style="padding:14px;background:#fff;border:${isApplied ? '2px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
           };box-shadow:0 4px 12px rgba(0,0,0,0.06);display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;position:relative;">
       <div style="width:48px;height:48px;border-radius:14px;background:${coupon.backgroundColor
           };display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;box-shadow:0 4px 10px ${coupon.backgroundColor
@@ -1464,10 +1512,8 @@
         <p style="margin:0 0 2px 0;font-size:14px;font-weight:800;color:#1e293b;">${escapeHtml(coupon.code)}</p>
         <p style="margin:0;font-size:11px;color:#64748b;">${escapeHtml(coupon.description)}</p>
       </div>
-      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="width:100%;padding:8px;margin-top:2px;background:${
-          isApplied ? '#10b981' : '#1e293b'
-          };color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">${
-          isApplied ? '✓ Applied' : 'Apply Coupon'}</button>
+      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="width:100%;padding:8px;margin-top:2px;background:${isApplied ? '#10b981' : '#1e293b'
+          };color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">${isApplied ? '✓ Applied' : 'Apply Coupon'}</button>
     </div>
   `;
       } else {
@@ -1490,10 +1536,8 @@
         <div style="flex:1;border:1px dashed #cbd5e1;border-radius:6px;padding:5px 10px;background:#f8fafc;">
           <p style="margin:0;font-size:12px;font-weight:700;color:#334155;font-family:monospace;">${escapeHtml(coupon.code)}</p>
         </div>
-        <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${
-          isApplied ? '#10b981' : '#2563eb'
-          };font-size:12px;font-weight:700;cursor:pointer;padding:4px;">${
-          isApplied ? 'REMOVE' : 'APPLY'}</button>
+        <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${isApplied ? '#10b981' : '#2563eb'
+          };font-size:12px;font-weight:700;cursor:pointer;padding:4px;">${isApplied ? 'REMOVE' : 'APPLY'}</button>
       </div>
     </div>
   `;

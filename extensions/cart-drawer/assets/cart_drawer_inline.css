@@ -2,9 +2,11 @@
 #cc-root {
   position: fixed;
   inset: 0;
-  z-index: 2147483647; /* max possible z-index — escapes any theme stacking context */
+  z-index: 2147483647;
+  /* max possible z-index — escapes any theme stacking context */
   pointer-events: none;
 }
+
 #cc-overlay {
   position: fixed;
   inset: 0;
@@ -13,16 +15,19 @@
   opacity: 0;
   transition: opacity 0.3s ease;
 }
+
 #cc-overlay.active {
   pointer-events: auto;
   opacity: 1;
 }
+
 #cc-backdrop {
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(2px);
 }
+
 #cc-drawer {
   position: absolute;
   right: 0;
@@ -37,36 +42,50 @@
   transform: translateX(100%);
   transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 #cc-overlay.active #cc-drawer {
   transform: translateX(0);
 }
 
 /* ========== ANIMATIONS ========== */
 @keyframes cc-shimmer {
+
   0%,
   100% {
     background-position: 0% 0;
   }
+
   50% {
     background-position: 100% 0;
   }
 }
+
+@keyframes cc-pop {
+  0% { transform: scale(0.8); opacity: 0; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 @keyframes cc-pulse-ring {
   0% {
     box-shadow: 0 0 0 0 var(--cc-fg-color66, rgba(37, 99, 235, 0.4));
   }
+
   70% {
     box-shadow: 0 0 0 6px transparent;
   }
+
   100% {
     box-shadow: 0 0 0 0 transparent;
   }
 }
+
 @keyframes cc-fadeIn {
   from {
     opacity: 0;
     transform: translateY(5px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -77,6 +96,7 @@
 .cc-hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
 .cc-hide-scrollbar {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -101,6 +121,7 @@
   padding: 0;
   line-height: 1;
 }
+
 .cc-nav-btn:hover {
   background: #f8fafc;
   border-color: #cbd5e1;
@@ -122,6 +143,7 @@
   align-items: center;
   justify-content: center;
 }
+
 .cc-qty-btn:hover {
   color: #1e293b;
 }
@@ -143,6 +165,7 @@
   white-space: nowrap;
   flex-shrink: 0;
 }
+
 .cc-add-btn:hover {
   background: #333;
   transform: scale(1.02);
@@ -158,6 +181,7 @@
   display: flex;
   box-sizing: border-box;
 }
+
 .cc-upsell-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1) !important;
@@ -170,6 +194,7 @@
   padding: 12px;
   width: 100%;
 }
+
 .cc-layout-grid .cc-upsell-image-wrapper {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -191,6 +216,7 @@
   padding: 16px 20px;
   width: 100%;
 }
+
 .cc-layout-carousel .cc-upsell-image-wrapper {
   width: 90px;
   height: 90px;
@@ -250,6 +276,7 @@
   border-radius: 14px;
   box-sizing: border-box;
 }
+
 .cc-coupon-card:hover {
   transform: translateY(-1px);
 }
@@ -259,16 +286,19 @@
   #cc-drawer {
     width: 100vw;
   }
+
   .cc-coupon-card {
     width: 82vw !important;
     min-width: 82vw !important;
     max-width: 82vw !important;
     flex: 0 0 82vw !important;
   }
+
   .cc-upsell-card.cc-layout-carousel {
     padding: 14px;
     gap: 12px;
   }
+
   .cc-layout-carousel .cc-upsell-image-wrapper {
     width: 72px;
     height: 72px;
