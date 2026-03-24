@@ -2,8 +2,8 @@
 require_once __DIR__ . '/config.php';
 
 /* ============================================================
-   ======================= GET REQUEST ========================
-   ============================================================ */
+ ======================= GET REQUEST ========================
+ ============================================================ */
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
@@ -39,10 +39,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         echo json_encode([
             "status" => "success",
-            "data"   => $result
+            "data" => $result
         ]);
 
-    } catch (PDOException $e) {
+    }
+    catch (PDOException $e) {
         http_response_code(500);
         echo json_encode([
             "status" => "error",
@@ -54,8 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 }
 
 /* ============================================================
-   ======================= POST REQUEST =======================
-   ============================================================ */
+ ======================= POST REQUEST =======================
+ ============================================================ */
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -122,7 +123,8 @@ if (!$shop) {
     exit;
 }
 
-function normalizeJsonField($value) {
+function normalizeJsonField($value)
+{
     if ($value === null) {
         return null;
     }
@@ -138,7 +140,8 @@ function normalizeJsonField($value) {
     return json_encode($value, JSON_UNESCAPED_UNICODE);
 }
 
-function normalizeFlag($value, $default = 0) {
+function normalizeFlag($value, $default = 0)
+{
     if ($value === null || $value === '') {
         return (int)$default;
     }
@@ -165,30 +168,32 @@ function normalizeFlag($value, $default = 0) {
 }
 
 // ===== MAP DATA =====
-$cartStatus      = normalizeFlag($payload['cartstatus'] ?? ($payload['cartStatus'] ?? 0));
-$progressData    = normalizeJsonField($payload['progress_data'] ?? ($payload['progressData'] ?? null));
-$couponData      = normalizeJsonField($payload['coupon_data'] ?? ($payload['couponData'] ?? null));
-$upsellData      = normalizeJsonField($payload['upsell_data'] ?? ($payload['upsellData'] ?? null));
+$cartStatus = normalizeFlag($payload['cartstatus'] ?? ($payload['cartStatus'] ?? 0));
+$progressData = normalizeJsonField($payload['progress_data'] ?? ($payload['progressData'] ?? null));
+$couponData = normalizeJsonField($payload['coupon_data'] ?? ($payload['couponData'] ?? null));
+$upsellData = normalizeJsonField($payload['upsell_data'] ?? ($payload['upsellData'] ?? null));
 
-$settingsRaw     = $payload['settings_data'] ?? null;
-$settingsData    = [];
+$settingsRaw = $payload['settings_data'] ?? null;
+$settingsData = [];
 
 if (is_array($settingsRaw)) {
     $settingsData = $settingsRaw;
-} elseif (is_string($settingsRaw) && trim($settingsRaw) !== '') {
+}
+elseif (is_string($settingsRaw) && trim($settingsRaw) !== '') {
     $decodedSettings = json_decode($settingsRaw, true);
     if (json_last_error() === JSON_ERROR_NONE && is_array($decodedSettings)) {
         $settingsData = $decodedSettings;
     }
 }
 
-$checkoutName       = $payload['checkoutName'] ?? ($settingsData['checkoutName'] ?? null);
+$checkoutName = $payload['checkoutName'] ?? ($settingsData['checkoutName'] ?? null);
 $checkoutFooterText = $payload['checkoutFooterText'] ?? ($settingsData['checkoutFooterText'] ?? null);
-$customCSS          = $payload['customCSS'] ?? ($settingsData['customCSS'] ?? null);
+$customCSS = $payload['customCSS'] ?? ($settingsData['customCSS'] ?? null);
+$checkoutButtonStyle = normalizeJsonField($payload['checkout_button_style'] ?? ($settingsData['checkout_button_style'] ?? null));
 
-$progressStatus  = normalizeFlag($payload['progress_status'] ?? ($payload['progressStatus'] ?? 0));
-$couponStatus    = normalizeFlag($payload['coupon_status'] ?? ($payload['couponStatus'] ?? 0));
-$upsellStatus    = normalizeFlag($payload['upsell_status'] ?? ($payload['upsellStatus'] ?? 0));
+$progressStatus = normalizeFlag($payload['progress_status'] ?? ($payload['progressStatus'] ?? 0));
+$couponStatus = normalizeFlag($payload['coupon_status'] ?? ($payload['couponStatus'] ?? 0));
+$upsellStatus = normalizeFlag($payload['upsell_status'] ?? ($payload['upsellStatus'] ?? 0));
 
 // ===== INSERT / UPDATE =====
 $sql = "
@@ -201,6 +206,7 @@ INSERT INTO cart_drawer (
     checkoutName,
     checkoutFooterText,
     customCSS,
+    checkout_button_style,
     progress_status,
     coupon_status,
     upsell_status
@@ -213,6 +219,7 @@ INSERT INTO cart_drawer (
     :checkoutName,
     :checkoutFooterText,
     :customCSS,
+    :checkout_button_style,
     :progress_status,
     :coupon_status,
     :upsell_status
@@ -225,6 +232,7 @@ ON DUPLICATE KEY UPDATE
     checkoutName = VALUES(checkoutName),
     checkoutFooterText = VALUES(checkoutFooterText),
     customCSS = VALUES(customCSS),
+    checkout_button_style = VALUES(checkout_button_style),
     progress_status = VALUES(progress_status),
     coupon_status = VALUES(coupon_status),
     upsell_status = VALUES(upsell_status)
@@ -234,28 +242,30 @@ try {
     $stmt = $pdo->prepare($sql);
 
     $stmt->execute([
-        ':shop'             => $shop,
-        ':cartStatus'       => $cartStatus,
-        ':progress_data'    => $progressData,
-        ':coupon_data'      => $couponData,
-        ':upsell_data'      => $upsellData,
-        ':checkoutName'     => $checkoutName,
-        ':checkoutFooterText'=> $checkoutFooterText,
-        ':customCSS'        => $customCSS,
-        ':progress_status'  => $progressStatus,
-        ':coupon_status'    => $couponStatus,
-        ':upsell_status'    => $upsellStatus
+        ':shop' => $shop,
+        ':cartStatus' => $cartStatus,
+        ':progress_data' => $progressData,
+        ':coupon_data' => $couponData,
+        ':upsell_data' => $upsellData,
+        ':checkoutName' => $checkoutName,
+        ':checkoutFooterText' => $checkoutFooterText,
+        ':customCSS' => $customCSS,
+        ':checkout_button_style' => $checkoutButtonStyle,
+        ':progress_status' => $progressStatus,
+        ':coupon_status' => $couponStatus,
+        ':upsell_status' => $upsellStatus
     ]);
 
     echo json_encode([
-        "status"  => "success",
+        "status" => "success",
         "message" => "Cart drawer data saved successfully"
     ]);
 
-} catch (PDOException $e) {
+}
+catch (PDOException $e) {
     http_response_code(500);
     echo json_encode([
-        "status"  => "error",
+        "status" => "error",
         "message" => "Database save failed: " . $e->getMessage()
     ]);
 } 

@@ -730,6 +730,13 @@ export default function CartDrawerAdmin() {
   const [checkoutFooterText, setCheckoutFooterText] = useState('Shipping and taxes calculated at checkout');
   const [customCSS, setCustomCSS] = useState('');
 
+  // Checkout Button Style State
+  const [checkoutButtonStyle, setCheckoutButtonStyle] = useState({
+    backgroundColor: '#000000',
+    textColor: '#ffffff',
+    borderRadius: 8,
+  });
+
   const [activeTierIndex, setActiveTierIndex] = useState(0);
 
   // Progress Bar Calculation State
@@ -914,6 +921,7 @@ export default function CartDrawerAdmin() {
               showOnEmpty: pbData.showOnEmpty !== false,
               barBackgroundColor: pbData.barBackgroundColor || pbData.track_color || '#e2e8f0',
               barForegroundColor: pbData.barForegroundColor || pbData.fill_color || '#2563eb',
+              iconColor: pbData.iconColor || pbData.icon_color || pbData.barForegroundColor || '#2563eb',
               fill_gradient: pbData.fill_gradient || '',
               borderRadius: pbData.borderRadius || 8,
               completionText: pbData.completionText || '🎉 All Rewards Unlocked!',
@@ -1023,6 +1031,12 @@ export default function CartDrawerAdmin() {
           }
           if (settings.customCSS) {
             setCustomCSS(settings.customCSS);
+          }
+          if (settings.checkout_button_style) {
+            const btnStyle = typeof settings.checkout_button_style === 'string'
+              ? JSON.parse(settings.checkout_button_style)
+              : settings.checkout_button_style;
+            setCheckoutButtonStyle(prev => ({ ...prev, ...btnStyle }));
           }
 
           if (data.cartStatus !== undefined) {
@@ -1725,6 +1739,7 @@ export default function CartDrawerAdmin() {
         // Send both to ensure persistence regardless of DB schema expectations
         track_color: progressBarSettings.barBackgroundColor,
         fill_color: progressBarSettings.barForegroundColor,
+        icon_color: progressBarSettings.iconColor,
         mode: progressMode,
         enabled: isProgressOn, // Critical sync
       }),
@@ -1772,6 +1787,7 @@ export default function CartDrawerAdmin() {
       checkoutName,
       checkoutFooterText,
       customCSS,
+      checkout_button_style: JSON.stringify(checkoutButtonStyle),
       shopDomain: SHOP_ID, // Add shopDomain to match the field shown in user's latest JSON response
       progress_status: isProgressOn ? 1 : 0,
       coupon_status: isCouponOn ? 1 : 0,
@@ -2249,7 +2265,7 @@ export default function CartDrawerAdmin() {
                           </svg>
                         </div>
                         <div>
-                          <Text as="span" variant="bodySm" fontWeight="semibold">Settings</Text>
+                          <Text as="span" variant="bodySm" fontWeight="semibold">Checkout</Text>
                         </div>
                       </div>
                     </InlineStack>
@@ -2392,7 +2408,7 @@ export default function CartDrawerAdmin() {
               </div>
               <div style={{ padding: '20px' }}>
                 <BlockStack gap="400">
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                     <ColorPickerField
                       label="Background Color"
                       value={progressBarSettings.barBackgroundColor}
@@ -2402,6 +2418,11 @@ export default function CartDrawerAdmin() {
                       label="Fill Color"
                       value={progressBarSettings.barForegroundColor}
                       onChange={(value) => updateProgressBarSetting('barForegroundColor', value)}
+                    />
+                    <ColorPickerField
+                      label="Icon Color"
+                      value={progressBarSettings.iconColor}
+                      onChange={(value) => updateProgressBarSetting('iconColor', value)}
                     />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -2663,11 +2684,11 @@ export default function CartDrawerAdmin() {
                             borderRadius: '6px'
                           }}>
                             {activeTier.iconType === 'custom' && activeTier.iconCustomSvg ? (
-                              <div dangerouslySetInnerHTML={{ __html: activeTier.iconCustomSvg }} style={{ width: '24px', height: '24px' }} />
+                              <div dangerouslySetInnerHTML={{ __html: activeTier.iconCustomSvg.replace(/currentColor/g, progressBarSettings.iconColor || progressBarSettings.barForegroundColor || '#2563eb') }} style={{ width: '24px', height: '24px', color: progressBarSettings.iconColor || progressBarSettings.barForegroundColor || '#2563eb' }} />
                             ) : (
                               <div dangerouslySetInnerHTML={{
                                 __html: MILESTONE_ICON_PRESETS.find(p => p.value === (activeTier.iconPreset || 'gift'))?.svg || MILESTONE_ICON_PRESETS[0].svg
-                              }} style={{ width: '24px', height: '24px', color: progressBarSettings.barForegroundColor }} />
+                              }} style={{ width: '24px', height: '24px', color: progressBarSettings.iconColor || progressBarSettings.barForegroundColor || '#2563eb' }} />
                             )}
                           </div>
                         </div>
@@ -3642,6 +3663,44 @@ export default function CartDrawerAdmin() {
               </div>
             </div>
 
+            {/* Checkout Button Style */}
+            <div style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              overflow: 'hidden'
+            }}>
+              <div style={{ padding: '20px', borderBottom: '1px solid #f1f5f9' }}>
+                <Text variant="headingMd" as="h2" fontWeight="bold">Checkout Button Style</Text>
+                <Text variant="bodySm" tone="subdued" style={{ marginTop: '4px' }}>Customize the checkout button appearance</Text>
+              </div>
+              <div style={{ padding: '20px' }}>
+                <BlockStack gap="400">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <ColorPickerField
+                      label="Button Background Color"
+                      value={checkoutButtonStyle.backgroundColor}
+                      onChange={(value) => setCheckoutButtonStyle(prev => ({ ...prev, backgroundColor: value }))}
+                    />
+                    <ColorPickerField
+                      label="Button Text Color"
+                      value={checkoutButtonStyle.textColor}
+                      onChange={(value) => setCheckoutButtonStyle(prev => ({ ...prev, textColor: value }))}
+                    />
+                  </div>
+                  <TextField
+                    label="Button Border Radius"
+                    type="number"
+                    value={String(checkoutButtonStyle.borderRadius)}
+                    onChange={(value) => setCheckoutButtonStyle(prev => ({ ...prev, borderRadius: Number(value) }))}
+                    suffix="px"
+                    autoComplete="off"
+                    helpText="Controls how rounded the checkout button corners are"
+                  />
+                </BlockStack>
+              </div>
+            </div>
+
             {/* Custom CSS */}
             <div style={{
               backgroundColor: '#ffffff',
@@ -4044,14 +4103,10 @@ export default function CartDrawerAdmin() {
             {/* Progress Bar Feature - Integrated Milestones */}
             {isEnabled(featureStates.progressBarEnabled) && (!showEmpty || isEnabled(progressBarSettings.showOnEmpty)) && (
               <div style={{
-                padding: '24px 16px',
+                padding: '8px 16px',
                 order: progressBarSettings.placement === 'bottom' ? 10 : -2,
-                backgroundColor: '#ffffff',
-                borderRadius: '16px',
-                boxShadow: '0 4px 20px -5px rgba(0, 0, 0, 0.05)',
-                marginBottom: '20px',
+                marginBottom: '0',
                 position: 'relative',
-                border: '1px solid #f1f5f9'
               }}>
                 {/* CSS for Animations */}
                 <style>{`
@@ -4071,16 +4126,14 @@ export default function CartDrawerAdmin() {
                 `}</style>
 
                 {/* Header Info */}
-                <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+                <div style={{ textAlign: 'center', marginBottom: '12px' }}>
                   {(() => {
-                    const currentVal = currentProgressMode === 'amount' ? actualCartValue : actualCartQuantity;
-                    const activeMilestone = getActiveMilestone(currentVal, previewMilestones, currentProgressMode);
-                    if (activeMilestone.upcoming) {
-                      const amountLeft = activeMilestone.nextAmount;
-                      const rewardText = activeMilestone.upcoming.rewardText;
+                    const amountLeft = maxTargetSetting - actualCartValue;
+                    const rewardText = previewMilestones.find(ms => actualCartValue < ms.target)?.rewardText || 'Next Reward';
+                    if (actualCartValue < maxTargetSetting) {
                       return (
-                        <div>
-                          <p style={{ margin: '0 0 4px 0', fontSize: '15px', fontWeight: '500', color: '#64748b' }}>
+                        <div style={{ marginBottom: '8px' }}>
+                          <p style={{ margin: 0, fontSize: '15px', fontWeight: '500', color: '#64748b' }}>
                             You're <span style={{ color: '#0f172a', fontWeight: '700' }}>{currentProgressMode === 'amount' ? `${currencySymbol}${amountLeft}` : `${amountLeft} items`}</span> away
                           </p>
                           <p style={{ margin: 0, fontSize: '14px', fontWeight: '700', color: progressBarSettings.barForegroundColor || '#2563eb' }}>
@@ -4099,13 +4152,13 @@ export default function CartDrawerAdmin() {
                 </div>
 
                 {/* Progress Track */}
-                <div style={{ position: 'relative', height: '40px', marginBottom: '8px', padding: '0 10px' }}>
+                <div style={{ position: 'relative', height: '40px', marginBottom: '48px', padding: '0 10px' }}>
                   {/* Background Line */}
                   <div style={{
                     position: 'absolute',
                     top: '50%',
-                    left: '12px',
-                    right: '12px',
+                    left: '5px',
+                    right: '5px',
                     height: '8px',
                     marginTop: '-4px',
                     backgroundColor: progressBarSettings.barBackgroundColor || '#f1f5f9',
@@ -4122,11 +4175,11 @@ export default function CartDrawerAdmin() {
                       <div style={{
                         position: 'absolute',
                         top: '50%',
-                        left: '12px',
+                        left: '5px',
                         height: '8px',
                         marginTop: '-4px',
                         width: `${percentage}%`,
-                        maxWidth: 'calc(100% - 24px)',
+                        maxWidth: 'calc(100% - 10px)',
                         background: progressBarSettings.fill_gradient || `linear-gradient(90deg, ${progressBarSettings.barForegroundColor || '#2563eb'}, #60a5fa, ${progressBarSettings.barForegroundColor || '#2563eb'})`,
                         backgroundSize: '200% 100%',
                         animation: 'shimmer 3s infinite linear',
@@ -4185,19 +4238,15 @@ export default function CartDrawerAdmin() {
                             <div style={{
                               width: isCompleted || isNext ? '40px' : '32px',
                               height: isCompleted || isNext ? '40px' : '32px',
-                              borderRadius: '12px',
-                              backgroundColor: isCompleted ? (progressBarSettings.barForegroundColor || '#2563eb') : '#ffffff',
-                              border: `2px solid ${isCompleted ? (progressBarSettings.barForegroundColor || '#2563eb') : (isNext ? (progressBarSettings.barForegroundColor || '#2563eb') : '#cbd5e1')}`,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center',
-                              fontSize: isCompleted || isNext ? '18px' : '14px',
-                              boxShadow: isCompleted ? `0 4px 12px ${progressBarSettings.barForegroundColor || '#2563eb'}66` : '0 2px 5px rgba(0,0,0,0.05)',
-                              color: isCompleted ? '#fff' : '#94a3b8',
+                              fontSize: isCompleted || isNext ? '28px' : '22px',
+                              color: (progressBarSettings.barForegroundColor || '#2563eb'),
+                              transition: 'all 0.3s ease',
                               animation: isNext ? 'pulse-ring 2s infinite' : 'none',
                               position: 'relative',
-                              overflow: 'hidden',
-                              transition: 'all 0.3s ease'
+                              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))'
                             }}>
                               {(() => {
                                 if (ms.associatedProducts.length > 0) {
@@ -4207,36 +4256,14 @@ export default function CartDrawerAdmin() {
                                   }
                                   return firstProd?.image || (
                                     typeof iconDisplay === 'string' && iconDisplay.startsWith('<svg') ?
-                                      <div dangerouslySetInnerHTML={{ __html: iconDisplay }} style={{ width: '20px', height: '20px', color: isCompleted ? '#fff' : '#94a3b8' }} /> :
+                                      <div dangerouslySetInnerHTML={{ __html: iconDisplay }} style={{ width: '20px', height: '20px' }} /> :
                                       iconDisplay
                                   );
                                 }
                                 return typeof iconDisplay === 'string' && iconDisplay.startsWith('<svg') ?
-                                  <div dangerouslySetInnerHTML={{ __html: iconDisplay }} style={{ width: '20px', height: '20px', color: isCompleted ? '#fff' : '#94a3b8' }} /> :
+                                  <div dangerouslySetInnerHTML={{ __html: iconDisplay }} style={{ width: '20px', height: '20px' }} /> :
                                   iconDisplay;
                               })()}
-
-                              {isCompleted && (
-                                <div style={{
-                                  position: 'absolute',
-                                  inset: 0,
-                                  backgroundColor: (progressBarSettings.barForegroundColor || '#2563eb') + '40',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  zIndex: 1
-                                }}>
-                                  <div style={{
-                                    width: '18px',
-                                    height: '18px',
-                                    backgroundColor: '#10b981',
-                                    borderRadius: '50%',
-                                    border: '2px solid #fff',
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '10px', color: '#fff'
-                                  }}>✓</div>
-                                </div>
-                              )}
                             </div>
                           );
                         })()}
@@ -4694,10 +4721,10 @@ export default function CartDrawerAdmin() {
               <button style={{
                 width: '100%',
                 padding: '16px',
-                backgroundColor: '#111827',
-                color: '#ffffff',
+                backgroundColor: checkoutButtonStyle.backgroundColor,
+                color: checkoutButtonStyle.textColor,
                 border: 'none',
-                borderRadius: '12px',
+                borderRadius: `${checkoutButtonStyle.borderRadius}px`,
                 fontSize: '15px',
                 fontWeight: '700',
                 cursor: 'pointer',

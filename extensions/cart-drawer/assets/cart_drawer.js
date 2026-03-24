@@ -12,14 +12,14 @@
 
     // Utility: Get currency symbol from code
     function getCurrencySymbol(code) {
-      const symbols = {
-        USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', AUD: 'A$', CAD: 'C$',
-        CHF: 'CHF', CNY: '¥', SEK: 'kr', NZD: 'NZ$', MXN: '$', SGD: 'S$', HKD: 'HK$',
-        NOK: 'kr', KRW: '₩', TRY: '₺', RUB: '₽', BRL: 'R$', ZAR: 'R', THB: '฿',
-        MYR: 'RM', PHP: '₱', IDR: 'Rp', VND: '₫', KES: 'KSh', NGN: '₦', PKR: '₨',
-        BDT: '৳', AED: 'د.إ', SAR: '﷼', QAR: '﷼'
-      };
-      return symbols[code] || code;
+        const symbols = {
+            USD: '$', EUR: '€', GBP: '£', INR: '₹', JPY: '¥', AUD: 'A$', CAD: 'C$',
+            CHF: 'CHF', CNY: '¥', SEK: 'kr', NZD: 'NZ$', MXN: '$', SGD: 'S$', HKD: 'HK$',
+            NOK: 'kr', KRW: '₩', TRY: '₺', RUB: '₽', BRL: 'R$', ZAR: 'R', THB: '฿',
+            MYR: 'RM', PHP: '₱', IDR: 'Rp', VND: '₫', KES: 'KSh', NGN: '₦', PKR: '₨',
+            BDT: '৳', AED: 'د.إ', SAR: '﷼', QAR: '﷼'
+        };
+        return symbols[code] || code;
     }
 
     const CURRENCY_SYMBOL = getCurrencySymbol(CURRENCY_CODE);
@@ -863,7 +863,7 @@
         }).filter(c => c);
 
         if (couponsToShow.length === 0) return '';
-                let html = `<div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -1 : 999};">
+        let html = `<div style="padding:16px;background:#fff;order:${couponConfig.position === 'top' ? -1 : 999};">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;"><p style="margin:0;font-size:${titleFontSize}px;font-weight:700;color:${titleTextColor};text-align:${titleAlign};flex:1;">${escapeHtml(titleText)}</p></div>
             <div id="cc-coupon-list" class="cc-hide-scrollbar" style="display:flex;gap:12px;overflow-x:auto;">`;
 

@@ -39,8 +39,8 @@
   /* =================== CONFETTI POPUP =================== */
   function triggerConfetti() {
     setTimeout(() => {
-      const drawerBody = document.getElementById('cc-drawer-body');
-      if (!drawerBody) return;
+      const drawer = document.getElementById('cc-drawer');
+      if (!drawer) return;
 
       let canvas = document.getElementById('cc-confetti-canvas');
       if (!canvas) {
@@ -52,16 +52,31 @@
         canvas.style.width = '100%';
         canvas.style.height = '100%';
         canvas.style.pointerEvents = 'none';
-        canvas.style.zIndex = '2147483647';
-        // Append to the drawer root context instead of document body
-        const root = document.getElementById('cc-root');
-        if (root) root.appendChild(canvas);
+        canvas.style.zIndex = '100'; // High enough to be over items but maybe under overlay text? Actually 100 is safe.
+        drawer.appendChild(canvas);
       }
 
       const runConfetti = () => {
         const myConfetti = window.confetti.create(canvas, { resize: true, useWorker: true });
-        myConfetti({ particleCount: 120, spread: 80, origin: { y: 0.4 } })
-          .then(() => { if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas); });
+        // Double burst from right-side corners
+        myConfetti({
+          particleCount: 100,
+          spread: 60,
+          origin: { x: 1, y: 0.2 }, // Top right area
+          colors: ['#2563eb', '#10b981', '#f59e0b']
+        });
+        myConfetti({
+          particleCount: 100,
+          spread: 60,
+          origin: { x: 1, y: 0.8 }, // Bottom right area
+          colors: ['#ef4444', '#8b5cf6', '#10b981']
+        }).then(() => {
+          // Clean up canvas after a few seconds
+          setTimeout(() => {
+            if (canvas && canvas.parentNode) canvas.parentNode.removeChild(canvas);
+          }, 3000);
+          window._ccConfettiShown = false;
+        });
       };
 
       if (window.confetti) {
@@ -72,7 +87,7 @@
         script.onload = runConfetti;
         document.head.appendChild(script);
       }
-    }, 150); // slight delay to perfectly sync with the cc-pop text animation bounce
+    }, 500); // 500ms delay for a responsive confetti burst
   }
 
   /* =================== LOAD CONFIG =================== */
@@ -116,6 +131,9 @@
           progress: parseProgressData(d),
           coupon: parseCouponData(d),
           upsell: parseUpsellData(d),
+          checkoutButtonStyle: parseCheckoutButtonStyle(d),
+          checkoutName: d.checkoutName || 'Checkout Now',
+          checkoutFooterText: d.checkoutFooterText || 'Shipping and taxes calculated at checkout',
         };
 
         await enrichUpsellProducts(CONFIG.upsell);
@@ -234,12 +252,25 @@
       showOnEmpty: data.showOnEmpty !== false,
       barBackgroundColor: data.barBackgroundColor || '#e2e8f0',
       barForegroundColor: data.barForegroundColor || data.fill_color || '#2563eb',
+      iconColor: data.iconColor || data.icon_color || data.barForegroundColor || data.fill_color || '#2563eb',
       borderRadius: data.borderRadius || 8,
       completionText: data.completionText || '🎉 All Rewards Unlocked!',
       completionTextColor: data.completionTextColor || '#10b981',
       enableConfetti: data.enableConfetti ?? true,
       maxTarget: maxTarget,
       tiers: parsedTiers,
+      placement: data.placement || 'top',
+    };
+  }
+
+  function parseCheckoutButtonStyle(d) {
+    const raw = d.checkout_button_style;
+    if (!raw) return { backgroundColor: '#111827', textColor: '#ffffff', borderRadius: 12 };
+    const data = typeof raw === 'string' ? parseJSON(raw) : raw;
+    return {
+      backgroundColor: data.backgroundColor || '#111827',
+      textColor: data.textColor || '#ffffff',
+      borderRadius: data.borderRadius !== undefined ? parseInt(data.borderRadius, 10) : 12,
     };
   }
 
@@ -1037,6 +1068,8 @@
 
     // Build the drawer inner content (header + body + footer)
     let drawerHtml = '';
+    let topBodyHtml = '';
+    let bottomBodyHtml = '';
 
     /* -------- HEADER -------- */
     drawerHtml += `
@@ -1057,14 +1090,13 @@
 
       const fgColor = progress.barForegroundColor || '#2563eb';
 
-      drawerHtml += `<div style="padding:24px 16px;background:#fff;border-radius:16px;box-shadow:0 4px 20px -5px rgba(0,0,0,0.05);margin-bottom:20px;position:relative;border:1px solid #f1f5f9;">`;
-
+      let pbHtml = `<div style="padding:8px 16px;margin-bottom:0;position:relative;order:${progress.placement === 'top' ? -2 : 998};">`;
       // Header info
-      drawerHtml += `<div style="text-align:center;margin-bottom:28px;">`;
+      pbHtml += `<div style="text-align:center;margin-bottom:12px;">`;
       if (pInfo.upcoming) {
         const amountLeft =
           pInfo.mode === 'quantity' ? `${Math.round(pInfo.nextAmount)} items` : `${CURRENCY_SYMBOL}${Math.round(pInfo.nextAmount)}`;
-        drawerHtml += `
+        pbHtml += `
     <p style="margin:0 0 4px 0;font-size:15px;font-weight:500;color:#64748b;">
       You're <span style="color:#0f172a;font-weight:700;">${amountLeft}</span> away
     </p>
@@ -1073,26 +1105,26 @@
     </p>
   `;
       } else {
-        drawerHtml += `
+        pbHtml += `
     <div style="color:${progress.completionTextColor || '#10b981'};display:flex;align-items:center;justify-content:center;gap:8px;animation:cc-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;">
       <span style="font-size:16px;font-weight:800;">${progress.completionText}</span>
     </div>
   `;
       }
-      drawerHtml += `</div>`;
+      pbHtml += `</div>`;
 
       // ---- PROGRESS TRACK with outline ----
-      drawerHtml += `<div style="position:relative;width:calc(100% - 40px);height:10px;margin:24px 20px 80px 20px;background:${progress.barBackgroundColor || '#e2e8f0'
+      pbHtml += `<div style="position:relative;width:calc(100% - 20px);height:10px;margin:8px 10px 48px 10px;background:${progress.barBackgroundColor || '#e2e8f0'
         };border-radius:99px;border:1.5px solid ${fgColor}22;box-shadow:inset 0 1px 3px rgba(0,0,0,0.06);">`;
 
       // 1. The progress bar filler
-      drawerHtml += `<div style="position:absolute;left:0;top:0;height:100%;width:${pInfo.percentage}%;background:linear-gradient(90deg, ${fgColor}, ${fgColor}dd);border-radius:99px;transition:width 1s cubic-bezier(.4,0,.2,1);box-shadow:0 0 12px ${fgColor}44;z-index:1;display:block !important;overflow:hidden;font-size:0;line-height:0;">&nbsp;</div>`;
+      pbHtml += `<div style="position:absolute;left:0;top:0;height:100%;width:${pInfo.percentage}%;background:linear-gradient(90deg, ${fgColor}, ${fgColor}dd);border-radius:99px;transition:width 1s cubic-bezier(.4,0,.2,1);box-shadow:0 0 12px ${fgColor}44;z-index:1;display:block !important;overflow:hidden;font-size:0;line-height:0;">&nbsp;</div>`;
 
       // 2. Tier segment markers — thin lines on the track showing where each level is
       pInfo.tiers.forEach((ms) => {
         const segPercent = Math.min(97, Math.max(3, (ms.target / pInfo.maxTarget) * 100));
         const reached = pInfo.currentVal >= ms.target;
-        drawerHtml += `<div style="position:absolute;left:${segPercent}%;top:-3px;width:2px;height:calc(100% + 6px);background:${reached ? fgColor : '#cbd5e180'
+        pbHtml += `<div style="position:absolute;left:${segPercent}%;top:-3px;width:2px;height:calc(100% + 6px);background:${reached ? fgColor : '#cbd5e180'
           };border-radius:1px;z-index:0;display:block !important;">&nbsp;</div>`;
       });
 
@@ -1102,49 +1134,40 @@
         const prevTarget = idx > 0 ? pInfo.tiers[idx - 1].target : 0;
         const isNext = !isCompleted && pInfo.currentVal >= prevTarget;
         const percent = Math.min(97, Math.max(3, (ms.target / pInfo.maxTarget) * 100));
-        const iconFill = isCompleted ? '#fff' : fgColor;
+        const iconFill = progress.iconColor || progress.icon_color || fgColor;
         const iconHtml = getMilestoneIconHtml(ms, iconFill);
         const nodeSize = isCompleted || isNext ? 40 : 32;
         const iconSize = isCompleted || isNext ? 20 : 16;
 
-        drawerHtml += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:2;display:flex;flex-direction:column;align-items:center;">`;
+        pbHtml += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:3;display:flex;flex-direction:column;align-items:center;">`;
 
-        // Node circle — filled with fgColor when completed, white with outline when not
-        drawerHtml += `<div style="width:${nodeSize}px;height:${nodeSize}px;border-radius:12px;background:${isCompleted ? fgColor : '#fff'
-          };border:2.5px solid ${isCompleted ? fgColor : isNext ? fgColor : '#cbd5e1'
-          };display:flex;align-items:center;justify-content:center;box-shadow:${isCompleted
-            ? '0 4px 14px ' + fgColor + '55'
-            : isNext
-              ? '0 0 0 3px ' + fgColor + '22'
-              : '0 2px 5px rgba(0,0,0,0.05)'
-          };color:${iconFill};${isNext ? 'animation:cc-pulse-ring 2s infinite;--cc-fg-color66:' + fgColor + '66;' : ''
-          }position:relative;transition:all .3s ease;">`;
-        drawerHtml += `<span style="width:${iconSize}px;height:${iconSize}px;display:flex;align-items:center;justify-content:center;pointer-events:none;">${iconHtml}</span>`;
-        // Completed checkmark badge
-        if (isCompleted) {
-          drawerHtml += `<span style="position:absolute;top:-4px;right:-4px;width:16px;height:16px;background:#10b981;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid #fff;"><svg width="8" height="8" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
-        }
-        drawerHtml += `</div>`;
+        // Node circle — No background or border as requested, just the icon
+        pbHtml += `<div style="width:${nodeSize}px;height:${nodeSize}px;display:flex;align-items:center;justify-content:center;transition:all .3s ease;${isNext ? 'animation:cc-pulse-ring 2s infinite;--cc-fg-color66:' + fgColor + '66;' : ''}position:relative;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.15));color:${iconFill};">`;
+        pbHtml += `<span style="width:${iconSize}px;height:${iconSize}px;display:flex;align-items:center;justify-content:center;font-size:${isCompleted || isNext ? '28px' : '22px'};pointer-events:none;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.1));">${iconHtml}</span>`;
+        pbHtml += `</div>`;
 
         // Description label below node
         const amountDisplay = pInfo.mode === 'amount' ? CURRENCY_SYMBOL + Math.round(ms.target) : ms.target + ' items';
-        
-        drawerHtml += `<div style="position:absolute;top:100%;margin-top:8px;width:120px;left:50%;transform:translateX(-50%);text-align:center;font-size:11px;line-height:1.2;pointer-events:none;z-index:10;display:flex;flex-direction:column;align-items:center;transition:all .3s ease;color:${isCompleted ? fgColor : '#64748b'};opacity:${isCompleted || isNext ? 1 : 0.7};word-wrap:break-word;">`;
-        
-        drawerHtml += `<span style="font-weight:800;font-size:12px;margin-bottom:2px;">${amountDisplay}</span>`;
-        
+
+        pbHtml += `<div style="position:absolute;top:100%;margin-top:8px;width:120px;left:50%;transform:translateX(-50%);text-align:center;font-size:11px;line-height:1.2;pointer-events:none;z-index:10;display:flex;flex-direction:column;align-items:center;transition:all .3s ease;color:${isCompleted ? fgColor : '#64748b'};opacity:${isCompleted || isNext ? 1 : 0.7};word-wrap:break-word;">`;
+
+        pbHtml += `<span style="font-weight:800;font-size:12px;margin-bottom:2px;">${amountDisplay}</span>`;
+
         if (ms.title) {
-          drawerHtml += `<span style="font-weight:700;margin-bottom:2px;">${ms.title}</span>`;
+          pbHtml += `<span style="font-weight:700;margin-bottom:2px;">${ms.title}</span>`;
         }
         if (ms.rewardText) {
-          drawerHtml += `<span style="font-weight:500;opacity:0.9;">${ms.rewardText}</span>`;
+          pbHtml += `<span style="font-weight:500;opacity:0.9;">${ms.rewardText}</span>`;
         }
-        drawerHtml += `</div></div>`;
+        pbHtml += `</div></div>`;
       });
 
-      drawerHtml += `</div>`; // end progress track
-      drawerHtml += `</div>`; // end progress container
-      
+      pbHtml += `</div>`; // end progress track
+      pbHtml += `</div>`; // end progress container
+
+      if (progress.placement === 'bottom') bottomBodyHtml += pbHtml;
+      else topBodyHtml += pbHtml;
+
       // Trigger Confetti "Paper Popup" when fully unlocked
       if (!pInfo.upcoming) {
         if (!window._ccConfettiShown && progress.enableConfetti) {
@@ -1155,6 +1178,15 @@
         window._ccConfettiShown = false; // Reset if cart drops below target
       }
     }
+
+    /* ---- COUPON SECTION ---- */
+    const coupon = CONFIG.coupon;
+    if (coupon.enabled && coupon.selectedActiveCoupons.length > 0) {
+      if (coupon.position === 'bottom') bottomBodyHtml += renderCouponSection(coupon, cartTotal);
+      else topBodyHtml += renderCouponSection(coupon, cartTotal);
+    }
+
+    drawerHtml += topBodyHtml;
 
     /* ---- EMPTY STATE ---- */
     if (isEmpty) {
@@ -1245,11 +1277,6 @@
   `;
       });
 
-      /* ---- COUPON SECTION ---- */
-      const coupon = CONFIG.coupon;
-      if (coupon.enabled && coupon.selectedActiveCoupons.length > 0) {
-        drawerHtml += renderCouponSection(coupon, cartTotal);
-      }
     }
 
     /* ---- UPSELL (BOTTOM POSITION) ---- */
@@ -1257,6 +1284,7 @@
       drawerHtml += bottomUpsellHtml;
     }
 
+    drawerHtml += bottomBodyHtml;
     drawerHtml += `</div>`; // end body
 
     /* -------- FOOTER -------- */
@@ -1317,12 +1345,12 @@
     </div>
   </div>
   <a href="/checkout" style="text-decoration:none;" onclick="ccSendClickEvent('checkout_click')">
-    <button style="width:100%;padding:16px;background:#111827;color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
-      Checkout Now <span style="font-size:18px;">→</span>
+    <button style="width:100%;padding:16px;background:${(CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.backgroundColor) || '#111827'};color:${(CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.textColor) || '#fff'};border:none;border-radius:${(CONFIG.checkoutButtonStyle && CONFIG.checkoutButtonStyle.borderRadius !== undefined) ? CONFIG.checkoutButtonStyle.borderRadius : 12}px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);transition:all .2s ease;">
+      ${escapeHtml(CONFIG.checkoutName || 'Checkout Now')} <span style="font-size:18px;">→</span>
     </button>
   </a>
   <p style="margin:12px 0 0 0;text-align:center;font-size:11px;color:#94a3b8;font-weight:500;">
-    Shipping and taxes calculated at checkout
+    ${escapeHtml(CONFIG.checkoutFooterText || 'Shipping and taxes calculated at checkout')}
   </p>
 </div>
 `;

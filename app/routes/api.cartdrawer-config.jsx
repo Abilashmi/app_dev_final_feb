@@ -37,6 +37,7 @@ const DEFAULT_SETTINGS = {
         showOnEmpty: true,
         barBackgroundColor: "#e2e8f0",
         barForegroundColor: "#2563eb",
+        iconColor: "#2563eb",
         fill_gradient: "",
         borderRadius: 8,
         completionText: "🎉 You've unlocked free shipping!",
@@ -171,6 +172,7 @@ function transformFromDB(dbData) {
             ...progressData,
             enabled: progressEnabled,
             mode: progressData.mode || DEFAULT_SETTINGS.progressBar.mode,
+            iconColor: progressData.iconColor || progressData.icon_color || progressData.barForegroundColor || DEFAULT_SETTINGS.progressBar.iconColor,
             placement: progressData.placement || DEFAULT_SETTINGS.progressBar.placement,
             tiers: (progressData.tiers || DEFAULT_SETTINGS.progressBar.tiers).map(tier => ({
                 ...tier,
@@ -219,6 +221,7 @@ function transformFromDB(dbData) {
         checkoutName: dbData.checkoutName || 'Checkout Now',
         checkoutFooterText: dbData.checkoutFooterText || 'Shipping and taxes calculated at checkout',
         customCSS: dbData.customCSS || '',
+        checkout_button_style: dbData.checkout_button_style || null,
     };
 
     // Extract coupon selections if present in coupon_data
