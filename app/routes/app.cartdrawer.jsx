@@ -131,7 +131,7 @@ const ColorPickerField = ({ label, value, onChange }) => {
   };
 
   const activator = (
-    <Button onClick={() => setPopoverActive((active) => !active)}>
+    <Button fullWidth onClick={() => setPopoverActive((active) => !active)}>
       <InlineStack gap="200" blockAlign="center">
         <div style={{
           width: '32px',
@@ -2408,7 +2408,7 @@ export default function CartDrawerAdmin() {
               </div>
               <div style={{ padding: '20px' }}>
                 <BlockStack gap="400">
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     <ColorPickerField
                       label="Background Color"
                       value={progressBarSettings.barBackgroundColor}
@@ -2419,10 +2419,17 @@ export default function CartDrawerAdmin() {
                       value={progressBarSettings.barForegroundColor}
                       onChange={(value) => updateProgressBarSetting('barForegroundColor', value)}
                     />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     <ColorPickerField
                       label="Icon Color"
                       value={progressBarSettings.iconColor}
                       onChange={(value) => updateProgressBarSetting('iconColor', value)}
+                    />
+                    <ColorPickerField
+                      label="Message Color"
+                      value={progressBarSettings.completionTextColor || '#10b981'}
+                      onChange={(value) => updateProgressBarSetting('completionTextColor', value)}
                     />
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -2433,11 +2440,6 @@ export default function CartDrawerAdmin() {
                       onChange={(value) => updateProgressBarSetting('borderRadius', Number(value))}
                       suffix="px"
                       autoComplete="off"
-                    />
-                    <ColorPickerField
-                      label="Message Color"
-                      value={progressBarSettings.completionTextColor || '#10b981'}
-                      onChange={(value) => updateProgressBarSetting('completionTextColor', value)}
                     />
                   </div>
                   <TextField
