@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(shopify app:*)"
+      "Bash(shopify app:*)",
+      "Bash(ls D:/Digifyce/cartdrawer/cartdrawer/app/routes/app.*.jsx)",
+      "WebFetch(domain:shopify.dev)"
     ]
   }
 }

@@ -1,0 +1,214 @@
+import React, { useState, useEffect } from "react";
+import { Page, Layout, Card, BlockStack, Text, Button, ProgressBar, Badge, Banner, IndexTable, Box, Icon, InlineStack } from "@shopify/polaris";
+import { AlertCircleIcon, CreditCardIcon, CheckCircleIcon, ChartVerticalIcon } from "@shopify/polaris-icons";
+import { authenticate } from "../shopify.server";
+
+export async function loader({ request }) {
+  const { session } = await authenticate.admin(request);
+  if (!session) return { redirect: "/auth" };
+  return { shop: session.shop };
+}
+
+export default function BillingDashboard() {
+  const [today, setToday] = useState(null);
+  const [charges, setCharges] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [chargeLoading, setChargeLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch("/api/billing/get-usage")
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          setToday(d.data.today);
+        } else {
+          setError(d.error || "Failed to load usage data");
+        }
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/billing/charges")
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          setCharges(d.data.history || []);
+        }
+      })
+      .catch(e => console.error("Failed to load charges:", e));
+  }, []);
+
+  const handleCreateCharge = async () => {
+    setChargeLoading(true);
+    try {
+      const r = await fetch("/api/billing/trigger-charge", { method: "POST" });
+      const d = await r.json();
+      if (d.success) {
+        setError(null);
+        // Refresh data
+        setTimeout(() => location.reload(), 1500);
+      } else {
+        setError(d.error || "Failed to create charge");
+      }
+    } catch (e) {
+      setError(e.message);
+    }
+    setChargeLoading(false);
+  };
+
+  if (loading) {
+    return (
+      <Page title="Billing Dashboard">
+        <Card padding="600">
+          <Text>Loading billing data...</Text>
+        </Card>
+      </Page>
+    );
+  }
+
+  if (!today) {
+    return (
+      <Page title="Billing Dashboard">
+        <Card padding="600">
+          <Banner tone="critical">No usage data available</Banner>
+        </Card>
+      </Page>
+    );
+  }
+
+  const freeOrders = today.free_orders || 50;
+  const totalOrders = today.total_orders || 0;
+  const overageOrders = today.overage_orders || 0;
+  const pendingCharge = today.pending_charge || 0;
+  const percentUsed = totalOrders > 0 ? (totalOrders / freeOrders) * 100 : 0;
+  const hasOverage = overageOrders > 0;
+
+  return (
+    <Page title="Billing Dashboard">
+      <Layout>
+        <Layout.Section>
+          {error && <Banner tone="critical">{error}</Banner>}
+
+          {/* Today's Usage Card */}
+          <Card padding="600">
+            <BlockStack gap="500">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text variant="headingMd" fontWeight="bold">Today's Usage</Text>
+                <Badge tone="info">{new Date().toLocaleDateString()}</Badge>
+              </InlineStack>
+
+              {/* Progress Bar */}
+              <BlockStack gap="200">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text variant="bodySm" tone="subdued">Orders: {totalOrders} / {freeOrders} (free)</Text>
+                  <Text variant="bodySm" tone="subdued">{percentUsed.toFixed(1)}%</Text>
+                </InlineStack>
+                <ProgressBar
+                  progress={Math.min(percentUsed / 100, 1)}
+                  tone={hasOverage ? "critical" : "success"}
+                  size="large"
+                />
+              </BlockStack>
+
+              {/* Overage Alert */}
+              {hasOverage && (
+                <Box padding="400" background="bg-surface-critical-subdued" borderRadius="200">
+                  <BlockStack gap="300">
+                    <InlineStack gap="200" blockAlign="start">
+                      <Icon source={AlertCircleIcon} tone="critical" />
+                      <BlockStack gap="100">
+                        <Text fontWeight="bold">Overage Charges</Text>
+                        <Text>{overageOrders} orders above limit × $0.10/order = <Text fontWeight="bold">${pendingCharge.toFixed(2)}</Text></Text>
+                      </BlockStack>
+                    </InlineStack>
+                    <Button
+                      onClick={handleCreateCharge}
+                      loading={chargeLoading}
+                      tone="critical"
+                      variant="primary"
+                      fullWidth
+                    >
+                      Record Usage Charge
+                    </Button>
+                  </BlockStack>
+                </Box>
+              )}
+
+              {!hasOverage && (
+                <Box padding="300" background="bg-surface-success-subdued" borderRadius="200">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={CheckCircleIcon} tone="success" />
+                    <Text tone="success">All orders within free limit</Text>
+                  </InlineStack>
+                </Box>
+              )}
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        {/* Billing History */}
+        <Layout.Section>
+          <Card padding="600">
+            <BlockStack gap="400">
+              <InlineStack gap="200" blockAlign="center">
+                <Icon source={ChartVerticalIcon} />
+                <Text variant="headingMd" fontWeight="bold">Billing History</Text>
+              </InlineStack>
+
+              {charges.length === 0 ? (
+                <Box paddingBlockStart="400">
+                  <Text tone="subdued">No charges yet</Text>
+                </Box>
+              ) : (
+                <IndexTable
+                  resourceName={{ singular: "charge", plural: "charges" }}
+                  itemCount={charges.length}
+                  selectable={false}
+                  headings={[
+                    { title: "Date" },
+                    { title: "Orders" },
+                    { title: "Amount" },
+                    { title: "Status" }
+                  ]}
+                >
+                  {charges.map((charge, idx) => (
+                    <IndexTable.Row key={idx} position={idx} id={charge.id?.toString()}>
+                      <IndexTable.Cell>{charge.date}</IndexTable.Cell>
+                      <IndexTable.Cell>{charge.overage_orders}</IndexTable.Cell>
+                      <IndexTable.Cell>${parseFloat(charge.charge_amount).toFixed(2)}</IndexTable.Cell>
+                      <IndexTable.Cell>
+                        <Badge
+                          tone={
+                            charge.status === "charged" ? "success" :
+                            charge.status === "failed" ? "critical" :
+                            "attention"
+                          }
+                        >
+                          {charge.status}
+                        </Badge>
+                      </IndexTable.Cell>
+                    </IndexTable.Row>
+                  ))}
+                </IndexTable>
+              )}
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        {/* Pricing Info */}
+        <Layout.Section>
+          <Card padding="600">
+            <BlockStack gap="300">
+              <Text variant="headingMd" fontWeight="bold">Usage-Based Billing</Text>
+              <Text tone="subdued">Your plan includes 50 completed orders per day. Each additional order is charged at $0.10. Usage charges are recorded automatically and added to your next monthly invoice — no separate approval needed.</Text>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+      </Layout>
+    </Page>
+  );
+}

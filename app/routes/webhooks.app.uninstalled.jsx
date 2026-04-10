@@ -14,7 +14,7 @@ export const action = async ({ request }) => {
 
   // Make request to the remote DB to mark the shop as inactive
   try {
-    const response = await fetch("https://blueviolet-clam-512487.hostingersite.com/uninstall_shop.php", {
+    const response = await fetch("https://int.thecartninja.com/uninstall_shop.php", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

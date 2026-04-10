@@ -65,7 +65,7 @@ try {
         'details' => 'Shop has been successfully installed and registered in the database.'
     ];
 
-    $ch = curl_init('https://blueviolet-clam-512487.hostingersite.com/shop_logger.php');
+    $ch = curl_init('https://int.thecartninja.com/shop_logger.php');
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($logData));

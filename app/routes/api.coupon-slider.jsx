@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 
-const EXTERNAL_API = "https://blueviolet-clam-512487.hostingersite.com/save_coupon_slider_widget.php";
+const EXTERNAL_API = "https://int.thecartninja.com/save_coupon_slider_widget.php";
 
 const DATA_FILE = path.resolve("coupon-slider-data.json");
 

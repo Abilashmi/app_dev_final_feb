@@ -3,7 +3,7 @@
 // Configuration
 // ===============================
 
-const PHP_ENDPOINT = "https://blueviolet-clam-512487.hostingersite.com/save_coupon.php";
+const PHP_ENDPOINT = "https://int.thecartninja.com/save_coupon.php";
 
 
 // ===============================

@@ -345,7 +345,7 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
     }
     var encodedShop=encodeURIComponent(shop);
     var proxyAPI='/apps/cart-app/save_coupon_slider_widget.php?shopdomain='+encodedShop;
-    var directAPI='https://blueviolet-clam-512487.hostingersite.com/save_coupon_slider_widget.php?shopdomain='+encodedShop;
+    var directAPI='https://int.thecartninja.com/save_coupon_slider_widget.php?shopdomain='+encodedShop;
 
     function requestJson(url){
       return fetch(url,{headers:{'ngrok-skip-browser-warning':'true'}})

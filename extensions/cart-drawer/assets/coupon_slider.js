@@ -28,7 +28,7 @@
             }
         };
 
-        const API_URL = 'https://blueviolet-clam-512487.hostingersite.com/save_coupon_slider_widget.php?shopdomain=' + shopDomain;
+        const API_URL = 'https://int.thecartninja.com/save_coupon_slider_widget.php?shopdomain=' + shopDomain;
 
         fetch(API_URL)
             .then((res) => res.text())

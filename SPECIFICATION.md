@@ -50,7 +50,7 @@
 - **Admin App** (`/app/routes`): Managed via the Shopify Admin, providing a tabbed configuration interface (Progress bar, Coupons, Upsells, Analytics).
 - **API Endpoints** (`/app/routes/api.*`): Robust set of internal APIs for configuration, product syncing, coupons, FBT, and analytics.
 - **Theme Extension** (`/extensions/cart-drawer`): Injected into the merchant's theme via App Blocks (`cart_drawer.liquid`, `fbt.liquid`, `coupon_slider.liquid`).
-- **PHP Event/Data Endpoints** (`/.php`): Used to synchronously push configuration logs, FBT events, and active app state to a tertiary domain (`https://blueviolet-clam-512487.hostingersite.com`).
+- **PHP Event/Data Endpoints** (`/.php`): Used to synchronously push configuration logs, FBT events, and active app state to a tertiary domain (`https://int.thecartninja.com`).
 
 ---
 

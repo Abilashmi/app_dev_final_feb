@@ -22,7 +22,7 @@ export const loader = async ({ request }) => {
   const logAction = actionParam || 'error';
   
   try {
-    const phpResponse = await fetch("https://blueviolet-clam-512487.hostingersite.com/shop_logger.php", {
+    const phpResponse = await fetch("https://int.thecartninja.com/shop_logger.php", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -88,7 +88,7 @@ export const action = async ({ request }) => {
     const logAction = action || 'error';
     
     // Forward the log securely to your remote PHP endpoint
-    const phpResponse = await fetch("https://blueviolet-clam-512487.hostingersite.com/shop_logger.php", {
+    const phpResponse = await fetch("https://int.thecartninja.com/shop_logger.php", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

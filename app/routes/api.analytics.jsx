@@ -1,7 +1,7 @@
 import { authenticate } from "../shopify.server";
 
 const DEFAULT_ANALYTICS_UPSTREAMS = [
-  "https://blueviolet-clam-512487.hostingersite.com/analytics.php"
+  "https://int.thecartninja.com/analytics.php"
 ];
 
 const DEFAULT_ANALYTICS = {

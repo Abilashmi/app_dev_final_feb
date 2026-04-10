@@ -90,7 +90,7 @@ export const loader = async ({ request }) => {
 
   // Fire-and-forget request to register/activate the shop in the remote DB
   try {
-    fetch("https://blueviolet-clam-512487.hostingersite.com/install_shop.php", {
+    fetch("https://int.thecartninja.com/install_shop.php", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -791,6 +791,13 @@ const endStr = formatLocalDate(end);
     >
       <Box paddingBlockStart="400">
         <BlockStack gap="600">
+          <Banner
+            title="Set up Cart Ninja on your theme"
+            tone="info"
+            action={{ content: "Open Setup Guide", url: "/app/setup" }}
+          >
+            Follow the setup guide to activate the cart drawer on your store — it only takes 2 minutes.
+          </Banner>
           {analytics.error && (
             <Banner tone="critical">
               <p>Unable to fetch real-time analytics from the internal analytics API. Please check /api/analytics and upstream analytics service.</p>

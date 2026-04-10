@@ -6,7 +6,7 @@ import path from "path";
 // ---------------- EXTERNAL API ----------------
 // Single source of truth for the external PHP backend URL.
 // Update this when the ngrok tunnel URL changes.
-const EXTERNAL_CART_API = "https://blueviolet-clam-512487.hostingersite.com/save_cart_drawer.php";
+const EXTERNAL_CART_API = "https://int.thecartninja.com/save_cart_drawer.php";
 
 // Local fallback persistence (used when external API is unavailable or incomplete)
 const LOCAL_DATA_FILE = path.resolve("cartdrawer-config-data.json");
