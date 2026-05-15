@@ -1,5 +1,5 @@
 {
-  "activeTemplate": "template3",
+  "activeTemplate": "template2",
   "title": {
     "text": "Apply Coupon",
     "fontSize": 14,
@@ -84,14 +84,15 @@
     }
   },
   "selectedActiveCoupons": [
-    "gid:/shopify/DiscountAutomaticNode/1161690120399",
-    "gid://shopify/DiscountRedeemCode/14023873364175"
+    "gid://shopify/DiscountRedeemCode/14065907859663"
   ],
   "allTemplateOverrides": {
     "template1": {},
     "template2": {
-      "gid:/shopify/DiscountAutomaticNode/1161690120399": {
-        "displayCondition": "product_handle"
+      "gid://shopify/DiscountRedeemCode/14065907859663": {
+        "couponCode": "summerrr",
+        "headingText": "SPECIAL OFFER",
+        "subtextText": "Free shipping on orders over ₹500"
       }
     },
     "template3": {

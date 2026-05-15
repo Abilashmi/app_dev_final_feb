@@ -841,7 +841,7 @@ const endStr = formatLocalDate(end);
           </div>
 
           {renderSetup()}
-          {renderGuide()}
+          {/* {renderGuide()} */}
 
         </BlockStack>
       </Box >

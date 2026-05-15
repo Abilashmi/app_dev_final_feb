@@ -3,7 +3,16 @@
     "allow": [
       "Bash(shopify app:*)",
       "Bash(ls D:/Digifyce/cartdrawer/cartdrawer/app/routes/app.*.jsx)",
-      "WebFetch(domain:shopify.dev)"
+      "WebFetch(domain:shopify.dev)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git rm *)",
+      "Bash(git commit *)",
+      "Bash(git push *)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "shopify-dev-mcp"
+  ]
 }

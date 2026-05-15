@@ -69,7 +69,7 @@ export async function action({ request }) {
                 },
             },
         ],
-        returnUrl: "https://cartdrawer.fly.dev/app/billing",
+        returnUrl: "https://9a41-103-186-151-132.ngrok-free.app/app/billing",
         trialDays: 14,
     };
 

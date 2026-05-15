@@ -36,7 +36,7 @@ export default function App() {
                 <CurrencyProvider symbol={currencySymbol}>
                     <PlanProvider isPro={isPro}>
                         <s-app-nav>
-                            <s-link href="/app/setup">Setup Guide</s-link>
+                            {/* <s-link href="/app/setup">Setup Guide</s-link> */}
                             <s-link href="/app/discount">Create coupons</s-link>
                             <s-link href="/app/productwidget">Productwidget</s-link>
                             <s-link href="/app/cartdrawer">Cartdrawer Editor</s-link>

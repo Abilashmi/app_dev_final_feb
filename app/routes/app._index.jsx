@@ -662,7 +662,7 @@ const endStr = formatLocalDate(end);
 
   return (
     <Page
-      title="Analytics Dashboard"
+      title="Analytics Dashboard hi"
       primaryAction={
         <Popover
           active={popoverActive}
@@ -791,13 +791,13 @@ const endStr = formatLocalDate(end);
     >
       <Box paddingBlockStart="400">
         <BlockStack gap="600">
-          <Banner
+          {/* <Banner
             title="Set up Cart Ninja on your theme"
             tone="info"
             action={{ content: "Open Setup Guide", url: "/app/setup" }}
           >
             Follow the setup guide to activate the cart drawer on your store — it only takes 2 minutes.
-          </Banner>
+          </Banner> */}
           {analytics.error && (
             <Banner tone="critical">
               <p>Unable to fetch real-time analytics from the internal analytics API. Please check /api/analytics and upstream analytics service.</p>
@@ -861,7 +861,7 @@ const endStr = formatLocalDate(end);
           </div>
 
           {renderSetup()}
-          {renderGuide()}
+          {/* {renderGuide()} */}
 
         </BlockStack>
       </Box >

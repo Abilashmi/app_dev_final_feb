@@ -45,7 +45,7 @@
     }
   },
   "fbt": {
-    "activeTemplate": "fbt3",
+    "activeTemplate": "fbt2",
     "templates": {
       "fbt1": {
         "name": "Classic Grid",
@@ -63,7 +63,7 @@
       },
       "fbt2": {
         "name": "Modern Cards",
-        "layout": "horizontal",
+        "layout": "vertical",
         "interactionType": "bundle",
         "bgColor": "#f9fafb",
         "textColor": "#374151",
@@ -1074,19 +1074,19 @@
       "maxSuggestions": 6,
       "customPrompt": ""
     },
-    "selectedTemplate": "fbt3",
+    "selectedTemplate": "fbt2",
     "interactionStyle": "bundle",
     "layoutAlignment": "vertical",
     "color": {
-      "bgColor": "#ffffff",
-      "textColor": "#1f2937",
-      "priceColor": "#2563eb",
-      "buttonColor": "#10b981",
+      "bgColor": "#f9fafb",
+      "textColor": "#374151",
+      "priceColor": "#dc2626",
+      "buttonColor": "#4f46e5",
       "buttonText": "#ffffff",
-      "borderColor": "#f3f4f6"
+      "borderColor": "#d1d5db"
     },
     "styling": {
-      "borderRadius": 4,
+      "borderRadius": 12,
       "showPrices": true,
       "showAddAllButton": true
     },
