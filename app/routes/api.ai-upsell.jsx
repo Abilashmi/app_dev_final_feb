@@ -278,6 +278,13 @@ JSON array:`;
         if (!openaiRes.ok) {
             const errText = await openaiRes.text();
             console.error("[AI-UPSELL] OpenAI API error:", openaiRes.status, errText);
+            // Quota exceeded — return empty recommendations so UI degrades gracefully
+            if (openaiRes.status === 429) {
+                return new Response(
+                    JSON.stringify({ recommendations: [], warning: "AI quota exceeded. Please update your OpenAI API key." }),
+                    { status: 200, headers: { "Content-Type": "application/json" } }
+                );
+            }
             let errDetail = errText;
             try {
                 errDetail = JSON.parse(errText)?.error?.message || errText;
