@@ -345,7 +345,6 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
     }
     var encodedShop=encodeURIComponent(shop);
     var proxyAPI='/apps/cart-app/save_coupon_slider_widget.php?shopdomain='+encodedShop;
-    var directAPI='https://int.thecartninja.com/save_coupon_slider_widget.php?shopdomain='+encodedShop;
 
     function requestJson(url){
       return fetch(url,{headers:{'ngrok-skip-browser-warning':'true'}})
@@ -359,7 +358,6 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
     }
 
     requestJson(proxyAPI)
-      .catch(function(){return requestJson(directAPI);})
       .then(function(res){
         if(!res||res.status!=='success'){el.innerHTML='<p style="color:#6b7280;font-size:14px;padding:16px;">No coupons available.</p>';return;}
         _cache[shop]=res.data;

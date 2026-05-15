@@ -1,9 +1,35 @@
+import { promises as fs } from "fs";
+import path from "path";
 
 // ===============================
 // Configuration
 // ===============================
 
 const PHP_ENDPOINT = "https://int.thecartninja.com/save_coupon.php";
+const LOCAL_COUPONS_FILE = path.resolve("coupons-data.json");
+
+async function saveCouponLocally(coupon) {
+    try {
+        const shopDomain = (coupon.shop_domain || coupon.shopDomain || "").toLowerCase();
+        let all = {};
+        try {
+            const raw = await fs.readFile(LOCAL_COUPONS_FILE, "utf-8");
+            all = JSON.parse(raw);
+        } catch { /* file may not exist yet */ }
+        if (!all[shopDomain]) all[shopDomain] = [];
+        const existingIdx = all[shopDomain].findIndex(
+            c => c.shopify_id === coupon.shopify_id || c.internal_id === coupon.internal_id
+        );
+        if (existingIdx >= 0) {
+            all[shopDomain][existingIdx] = coupon;
+        } else {
+            all[shopDomain].push(coupon);
+        }
+        await fs.writeFile(LOCAL_COUPONS_FILE, JSON.stringify(all, null, 2));
+    } catch (err) {
+        console.warn("Failed to save coupon locally:", err.message);
+    }
+}
 
 
 // ===============================
@@ -151,7 +177,10 @@ export async function action({ request }) {
         // 1. Store locally
         const storedCoupon = await storeCoupon(couponData);
 
-        // 2. Send to PHP
+        // 2. Save to local JSON (storefront reads from this via save_coupon.php route)
+        await saveCouponLocally(storedCoupon);
+
+        // 3. Send to PHP (best-effort, non-blocking)
         const phpSuccess = await sendCouponToPHP(storedCoupon);
 
         if (!phpSuccess) {

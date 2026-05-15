@@ -28,9 +28,9 @@
             }
         };
 
-        const API_URL = 'https://int.thecartninja.com/save_coupon_slider_widget.php?shopdomain=' + shopDomain;
+        const API_URL = '/apps/cart-app/save_coupon_slider_widget.php?shopdomain=' + encodeURIComponent(shopDomain);
 
-        fetch(API_URL)
+        fetch(API_URL, { headers: { 'ngrok-skip-browser-warning': 'true' } })
             .then((res) => res.text())
             .then((text) => {
                 const isTruncated = text.length > 0 && !text.trim().endsWith('}');

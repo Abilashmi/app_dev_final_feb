@@ -1526,67 +1526,66 @@
     couponsToShow.forEach((coupon) => {
 
       if (style === 'style-1') {
-        // Style 1: Classic banner layout, but colors/icon come from coupon config.
         const baseColor = coupon.backgroundColor || '#1a1a2e';
         const icon = coupon.iconUrl || '☀️';
+        const btnBg = coupon.buttonBackgroundColor || baseColor;
+        const btnTc = coupon.buttonTextColor || '#ffffff';
+        const btnLabel = coupon.code === _lastCopiedCode ? 'Copied' : (coupon.buttonText || 'Apply');
         html += `
     <div data-coupon-card class="cc-coupon-card" style="min-width:220px;width:100%;padding:10px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.05);display:flex;align-items:center;gap:10px;position:relative;">
-      <div style="position:absolute;top:0;left:0;width:4px;height:100%;background:${baseColor};"></div>
-      <div style="width:40px;height:40px;border-radius:8px;background:${baseColor}20;display:flex;align-items:center;justify-content:center;font-size:20px;color:${baseColor};flex-shrink:0;">
-        ${icon}
-      </div>
+      <div style="position:absolute;top:0;left:0;width:4px;height:100%;background:${baseColor};border-radius:12px 0 0 12px;"></div>
+      <div style="width:40px;height:40px;border-radius:8px;background:${baseColor}20;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;">${icon}</div>
       <div style="flex:1;min-width:0;">
-        <p style="margin:0;font-size:13px;font-weight:700;color:#1e293b;">${escapeHtml(coupon.code)}</p>
-        <p style="margin:0;font-size:11px;color:#64748b;">${escapeHtml(coupon.label || coupon.description)}</p>
+        <p style="margin:0;font-size:13px;font-weight:700;color:#1e293b;line-height:1.3;">${escapeHtml(coupon.code)}</p>
+        <p style="margin:2px 0 0 0;font-size:11px;color:#64748b;line-height:1.3;">${escapeHtml(coupon.label || coupon.description)}</p>
       </div>
-      <div style="padding:4px 8px;background:#f8fafc;color:#475569;border-radius:6px;font-size:10px;font-weight:600;border:1px solid #e2e8f0;white-space:nowrap;cursor:pointer;" onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')">
-        ${coupon.code === _lastCopiedCode ? 'Copied' : 'Apply'}
-      </div>
+      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="padding:6px 12px;background:${coupon.code === _lastCopiedCode ? '#10b981' : btnBg};color:${btnTc};border:none;border-radius:6px;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;flex-shrink:0;">
+        ${escapeHtml(btnLabel)}
+      </button>
     </div>
   `;
       } else if (style === 'style-2') {
-        // Style 2: White card, filled colored icon box, dark text, black Apply Coupon button
+        const btnBg = coupon.buttonBackgroundColor || '#1e293b';
+        const btnTc = coupon.buttonTextColor || '#ffffff';
+        const btnLabel = coupon.buttonText || 'Apply';
         html += `
     <div data-coupon-card class="cc-coupon-card" style="padding:14px;background:#fff;border:${coupon.code === _lastCopiedCode ? '2px solid ' + coupon.backgroundColor : '1px solid #e2e8f0'
-          };box-shadow:0 4px 12px rgba(0,0,0,0.06);display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;position:relative;">
+          };border-radius:${coupon.borderRadius || 8}px;box-shadow:0 4px 12px rgba(0,0,0,0.06);display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;position:relative;min-width:160px;">
       <div style="width:48px;height:48px;border-radius:14px;background:${coupon.backgroundColor
-          };display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;box-shadow:0 4px 10px ${coupon.backgroundColor
-          }40;">${coupon.iconUrl}</div>
-      <div>
-        <p style="margin:0 0 2px 0;font-size:14px;font-weight:800;color:#1e293b;">${escapeHtml(coupon.code)}</p>
-        <p style="margin:0;font-size:11px;color:#64748b;">${escapeHtml(coupon.description)}</p>
+          };display:flex;align-items:center;justify-content:center;font-size:24px;box-shadow:0 4px 10px ${coupon.backgroundColor}40;">${coupon.iconUrl}</div>
+      <div style="width:100%;">
+        <p style="margin:0 0 2px 0;font-size:14px;font-weight:800;color:#1e293b;text-align:center;line-height:1.3;">${escapeHtml(coupon.code)}</p>
+        <p style="margin:0;font-size:11px;color:#64748b;text-align:center;line-height:1.3;">${escapeHtml(coupon.description)}</p>
       </div>
-      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="width:100%;padding:8px;margin-top:2px;background:${coupon.code === _lastCopiedCode ? '#10b981' : '#1e293b'
-          };color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;position:relative;">
-        ${coupon.code === _lastCopiedCode ? '✓ Copied!' : 'Copy Coupon'}
+      <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="width:100%;padding:8px;margin-top:2px;background:${coupon.code === _lastCopiedCode ? '#10b981' : btnBg
+          };color:${coupon.code === _lastCopiedCode ? '#fff' : btnTc};border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;position:relative;">
+        ${coupon.code === _lastCopiedCode ? '✓ Copied!' : escapeHtml(btnLabel)}
         ${coupon.code === _lastCopiedCode ? `<div style="position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:10px;color:#10b981;font-weight:700;white-space:nowrap;animation:cc-fade-in 0.3s ease;">Copied to clipboard</div>` : ''}
       </button>
     </div>
   `;
       } else {
-        // Style 3: Colored header + white body with dashed code box + text-link apply button
+        // Style 3: Colored header + white body with dashed code box
+        const btnTc = coupon.buttonTextColor || '#2563eb';
+        const btnLabel = coupon.buttonText || 'COPY';
+        const discountBadge = coupon.discountValue > 0 ? `${coupon.discountValue}% OFF` : (coupon.label || '');
         html += `
-    <div data-coupon-card class="cc-coupon-card" style="padding:0;background:#fff;border:1px solid #e2e8f0;box-shadow:0 2px 6px rgba(0,0,0,0.04);display:flex;flex-direction:column;overflow:visible;">
-      <div style="background:${coupon.backgroundColor
-          };padding:10px 14px;display:flex;align-items:center;justify-content:space-between;color:${coupon.textColor};">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:16px;">${coupon.iconUrl}</span>
-          <span style="font-size:13px;font-weight:700;">${escapeHtml(coupon.label)}</span>
+    <div data-coupon-card class="cc-coupon-card" style="padding:0;background:#fff;border:1px solid #e2e8f0;border-radius:${coupon.borderRadius || 8}px;box-shadow:0 2px 6px rgba(0,0,0,0.04);display:flex;flex-direction:column;overflow:hidden;min-width:200px;">
+      <div style="background:${coupon.backgroundColor};padding:10px 14px;display:flex;align-items:center;justify-content:space-between;color:${coupon.textColor};">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+          <span style="font-size:16px;flex-shrink:0;">${coupon.iconUrl}</span>
+          <span style="font-size:13px;font-weight:700;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(coupon.label || coupon.code)}</span>
         </div>
-        <div style="background:rgba(255,255,255,0.2);padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;">${coupon.discountValue
-          }% OFF</div>
+        ${discountBadge ? `<div style="background:rgba(255,255,255,0.2);padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;white-space:nowrap;margin-left:8px;">${escapeHtml(discountBadge)}</div>` : ''}
       </div>
-      <div style="padding:8px 14px 4px 14px;">
-        <p style="margin:0;font-size:11px;color:#64748b;">${escapeHtml(coupon.description)}</p>
-      </div>
+      ${coupon.description ? `<div style="padding:6px 14px 2px 14px;"><p style="margin:0;font-size:11px;color:#64748b;line-height:1.3;">${escapeHtml(coupon.description)}</p></div>` : ''}
       <div style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
-        <div style="flex:1;border:1px dashed #cbd5e1;border-radius:6px;padding:5px 10px;background:#f8fafc;">
-          <p style="margin:0;font-size:12px;font-weight:700;color:#334155;font-family:monospace;">${escapeHtml(coupon.code)}</p>
+        <div style="flex:1;border:1px dashed #cbd5e1;border-radius:6px;padding:6px 10px;background:#f8fafc;display:flex;align-items:center;">
+          <p style="margin:0;font-size:12px;font-weight:700;color:#334155;font-family:monospace;line-height:1;">${escapeHtml(coupon.code)}</p>
         </div>
-        <div style="position:relative;">
-          <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${coupon.code === _lastCopiedCode ? '#10b981' : '#2563eb'
-            };font-size:12px;font-weight:700;cursor:pointer;padding:4px;">${coupon.code === _lastCopiedCode ? 'COPIED' : 'COPY'}</button>
-          ${coupon.code === _lastCopiedCode ? `<div style="position:absolute;bottom:-14px;right:0;font-size:8px;color:#10b981;font-weight:700;white-space:nowrap;animation:cc-fade-in 0.3s ease;">Copied to clipboard</div>` : ''}
+        <div style="position:relative;flex-shrink:0;">
+          <button onclick="ccApplyCoupon('${escapeHtml(coupon.code)}')" style="border:none;background:none;color:${coupon.code === _lastCopiedCode ? '#10b981' : btnTc};font-size:12px;font-weight:700;cursor:pointer;padding:4px;white-space:nowrap;">${coupon.code === _lastCopiedCode ? 'COPIED' : escapeHtml(btnLabel)}</button>
+          ${coupon.code === _lastCopiedCode ? `<div style="position:absolute;bottom:-14px;right:0;font-size:8px;color:#10b981;font-weight:700;white-space:nowrap;animation:cc-fade-in 0.3s ease;">Copied!</div>` : ''}
         </div>
       </div>
     </div>
