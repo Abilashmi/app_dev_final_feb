@@ -5,7 +5,6 @@ import {
     InlineStack,
     Text,
     Button,
-    Banner,
     Spinner,
 } from "@shopify/polaris";
 
@@ -138,9 +137,9 @@ export default function AiUpsellSection({ currentProduct, limit = 4 }) {
                 </InlineStack>
 
                 {!normalizedProduct && (
-                    <Banner tone="warning">
-                        <p>Select or load a product to generate upsells.</p>
-                    </Banner>
+                    <Text variant="bodySm" tone="subdued">
+                        No product available to generate suggestions.
+                    </Text>
                 )}
 
                 {error && (

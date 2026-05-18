@@ -765,6 +765,7 @@ export default function CartDrawerAdmin() {
   const [couponSubTab, setCouponSubTab] = useState('global-style'); // 'global-style' or 'manage-coupons'
   const [showSaveToast, setShowSaveToast] = useState(false);
   const [saveToastMessage, setSaveToastMessage] = useState('Saved');
+  const [saveToastIsError, setSaveToastIsError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const couponSliderRef = React.useRef(null);
 
@@ -810,7 +811,7 @@ export default function CartDrawerAdmin() {
   // ==========================================
   const [upsellConfig, setUpsellConfig] = useState({
     enabled: false,
-    useAI: true,
+    useAI: false,
     showIfInCart: false,
     limit: 3,
     showReviews: false,
@@ -830,8 +831,8 @@ export default function CartDrawerAdmin() {
   const [upsellSaving, setUpsellSaving] = useState(false);
   const [upsellRulesConfig, setUpsellRulesConfig] = useState({
     rule1: {
-      enabled: true,
-      upsellProducts: ['sp-1', 'sp-2'],
+      enabled: false,
+      upsellProducts: [],
     },
     rule2: {
       enabled: false,
@@ -1523,7 +1524,8 @@ export default function CartDrawerAdmin() {
     // Strict save validation
     if (!canSaveCoupons) {
       setActiveCouponWarning('Select at least one active coupon from the Dashboard to save.');
-      setSaveToastMessage('Cannot save — no active coupons selected');
+      setSaveToastIsError(true);
+      setSaveToastMessage('Select at least one coupon before saving');
       setShowSaveToast(true);
       return;
     }
@@ -1565,7 +1567,8 @@ export default function CartDrawerAdmin() {
     setAllCoupons(JSON.parse(JSON.stringify(couponsToSave)));
     const saveResult = await handleSaveAll();
     if (saveResult?.success) {
-      setSaveToastMessage('Coupon saved');
+      setSaveToastIsError(false);
+      setSaveToastMessage('Saved');
       setShowSaveToast(true);
     }
   };
@@ -1609,6 +1612,7 @@ export default function CartDrawerAdmin() {
     setCouponTitleTextColor(title.textColor || '#1e293b');
     setCouponTitleAlignment(title.alignment || 'left');
 
+    setSaveToastIsError(false);
     setSaveToastMessage('Changes discarded');
     setShowSaveToast(true);
   };
@@ -1773,24 +1777,26 @@ export default function CartDrawerAdmin() {
         allCouponDetails: selectedActiveCoupons.map(id => {
           const apiCoupon = activeCouponsFromAPI.find(c => c.id === id) || {};
           const override = couponOverrides[id] || {};
+          // Preserve previously saved code if activeCouponsFromAPI hasn't loaded yet
+          const existingSaved = allCoupons.find(c => c.id === id) || {};
           return {
             id,
-            code: override.code || apiCoupon.code || '',
-            label: override.label || apiCoupon.label || apiCoupon.title || '',
-            description: override.description || apiCoupon.description || '',
-            discountType: override.discountType || apiCoupon.discountType || 'percentage',
-            discountValue: override.discountValue ?? apiCoupon.discountValue ?? 0,
-            iconUrl: override.iconUrl || apiCoupon.iconUrl || '🎟️',
-            backgroundColor: override.backgroundColor || apiCoupon.backgroundColor || '#000',
-            textColor: override.textColor || apiCoupon.textColor || '#fff',
-            borderRadius: override.borderRadius ?? apiCoupon.borderRadius ?? 8,
+            code: override.code || apiCoupon.code || existingSaved.code || '',
+            label: override.label || apiCoupon.label || apiCoupon.title || existingSaved.label || '',
+            description: override.description || apiCoupon.description || existingSaved.description || '',
+            discountType: override.discountType || apiCoupon.discountType || existingSaved.discountType || 'percentage',
+            discountValue: override.discountValue ?? apiCoupon.discountValue ?? existingSaved.discountValue ?? 0,
+            iconUrl: override.iconUrl || apiCoupon.iconUrl || existingSaved.iconUrl || '🎟️',
+            backgroundColor: override.backgroundColor || apiCoupon.backgroundColor || existingSaved.backgroundColor || '#000',
+            textColor: override.textColor || apiCoupon.textColor || existingSaved.textColor || '#fff',
+            borderRadius: override.borderRadius ?? apiCoupon.borderRadius ?? existingSaved.borderRadius ?? 8,
             button: {
-              text: override['button.text'] ?? override.button?.text ?? apiCoupon.button?.text ?? 'Apply',
-              textColor: override['button.textColor'] ?? override.button?.textColor ?? apiCoupon.button?.textColor ?? '#ffffff',
-              backgroundColor: override['button.backgroundColor'] ?? override.button?.backgroundColor ?? apiCoupon.button?.backgroundColor ?? '#000000',
-              borderRadius: override['button.borderRadius'] ?? override.button?.borderRadius ?? apiCoupon.button?.borderRadius ?? 4,
+              text: override['button.text'] ?? override.button?.text ?? apiCoupon.button?.text ?? existingSaved.button?.text ?? 'Apply',
+              textColor: override['button.textColor'] ?? override.button?.textColor ?? apiCoupon.button?.textColor ?? existingSaved.button?.textColor ?? '#ffffff',
+              backgroundColor: override['button.backgroundColor'] ?? override.button?.backgroundColor ?? apiCoupon.button?.backgroundColor ?? existingSaved.button?.backgroundColor ?? '#000000',
+              borderRadius: override['button.borderRadius'] ?? override.button?.borderRadius ?? apiCoupon.button?.borderRadius ?? existingSaved.button?.borderRadius ?? 4,
             },
-            enabled: override.enabled ?? apiCoupon.enabled ?? true,
+            enabled: override.enabled ?? apiCoupon.enabled ?? existingSaved.enabled ?? true,
           };
         }),
       }),
@@ -1825,18 +1831,21 @@ export default function CartDrawerAdmin() {
       console.log('[Sample API] Response received:', responseBody);
 
       if (response.ok && responseBody.success) {
-        setSaveToastMessage(`✅ Configuration saved to DB (${targetStatus})`);
+        setSaveToastIsError(false);
+        setSaveToastMessage('Saved');
         setShowSaveToast(true);
         return { success: true, responseBody };
       } else {
         const errorMsg = responseBody.error || responseBody.externalError || responseBody.message || `Status ${response.status}`;
-        setSaveToastMessage(`❌ Error: ${errorMsg}`);
+        setSaveToastIsError(true);
+        setSaveToastMessage(`Failed to save: ${errorMsg}`);
         setShowSaveToast(true);
         return { success: false, responseBody };
       }
     } catch (error) {
       console.error('[Sample API] Fetch error:', error);
-      setSaveToastMessage('❌ Failed to connect to sample API');
+      setSaveToastIsError(true);
+      setSaveToastMessage('Failed to save. Check your connection.');
       setShowSaveToast(true);
       return { success: false, error };
     } finally {
@@ -1850,6 +1859,7 @@ export default function CartDrawerAdmin() {
   const handleSaveUpsellRules = async () => {
     const error = getUpsellValidationError();
     if (error) {
+      setSaveToastIsError(true);
       setSaveToastMessage(error);
       setShowSaveToast(true);
       return;
@@ -1867,6 +1877,7 @@ export default function CartDrawerAdmin() {
   const handleCancelUpsellRules = () => {
     setUpsellConfig(initialUpsellConfig);
     setManualUpsellRules(JSON.parse(JSON.stringify(initialManualUpsellRules)));
+    setSaveToastIsError(false);
     setSaveToastMessage('Changes discarded');
   };
 
@@ -1879,7 +1890,7 @@ export default function CartDrawerAdmin() {
   const addManualUpsellRule = () => {
     const newRule = {
       id: generateUpsellRuleId(),
-      triggerType: 'all', // 'all' | 'specific'
+      triggerType: 'specific', // 'all' | 'specific'
       triggerProductIds: [],
       triggerCollectionIds: [],
       upsellProductIds: [],
@@ -1958,6 +1969,7 @@ export default function CartDrawerAdmin() {
   const saveManualUpsellRules = async () => {
     // Validate rules
     if (manualUpsellRules.length === 0) {
+      setSaveToastIsError(true);
       setSaveToastMessage('Add at least one upsell rule');
       setShowSaveToast(true);
       return;
@@ -1972,6 +1984,7 @@ export default function CartDrawerAdmin() {
     });
 
     if (!allValid) {
+      setSaveToastIsError(true);
       setSaveToastMessage('Each rule must have trigger and upsell products');
       setShowSaveToast(true);
       return;
@@ -1986,11 +1999,13 @@ export default function CartDrawerAdmin() {
       }
 
       setInitialManualUpsellRules(JSON.parse(JSON.stringify(manualUpsellRules)));
-      setSaveToastMessage('✅ Upsell rules saved successfully');
+      setSaveToastIsError(false);
+      setSaveToastMessage('Saved');
       setShowSaveToast(true);
       setShowManualUpsellBuilder(false);
     } catch (error) {
-      console.error('❌ Error saving upsell rules:', error);
+      console.error('Error saving upsell rules:', error);
+      setSaveToastIsError(true);
       setSaveToastMessage(error.message || 'Failed to save upsell rules');
       setShowSaveToast(true);
     } finally {
@@ -2000,6 +2015,7 @@ export default function CartDrawerAdmin() {
 
   const cancelManualUpsellRules = () => {
     setManualUpsellRules(JSON.parse(JSON.stringify(initialManualUpsellRules)));
+    setSaveToastIsError(false);
     setSaveToastMessage('Changes discarded');
     setShowSaveToast(true);
     setShowManualUpsellBuilder(false);
@@ -3450,11 +3466,20 @@ export default function CartDrawerAdmin() {
               </BlockStack>
             </Card>
 
-            {upsellConfig.useAI && (
+            {upsellConfig.useAI && loadedShopifyProducts?.length > 0 && (
               <AiUpsellSection
-                currentProduct={loadedShopifyProducts?.[0] || null}
+                currentProduct={loadedShopifyProducts[0]}
                 limit={upsellConfig.limit}
               />
+            )}
+            {upsellConfig.useAI && !(loadedShopifyProducts?.length > 0) && (
+              <Card>
+                <BlockStack gap="200">
+                  <Text variant="bodyMd" tone="subdued" alignment="center">
+                    Loading your store products…
+                  </Text>
+                </BlockStack>
+              </Card>
             )}
 
             {/* Manual Product Selection (only if AI is off) */}
@@ -3750,7 +3775,8 @@ export default function CartDrawerAdmin() {
             <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <Button size="large" onClick={async () => {
                 await handleSaveAll();
-                setSaveToastMessage('✅ Settings saved successfully');
+                setSaveToastIsError(false);
+                setSaveToastMessage('Saved');
                 setShowSaveToast(true);
               }} variant="primary">
                 Save Settings
@@ -3878,13 +3904,15 @@ export default function CartDrawerAdmin() {
     // Calculate Upsell Recommendations Once for use in Footer or Body
     let upsellProductsToShow = [];
     const internalEnabled = isEnabled(featureStates.upsellEnabled);
-    const internalUseAI = upsellConfig.useAI !== undefined ? upsellConfig.useAI : true;
+    const internalUseAI = upsellConfig.useAI !== undefined ? upsellConfig.useAI : false;
 
-    if (internalEnabled) {
+    const hasAnyConfiguredProducts = (manualUpsellRules || []).some(
+      r => (r.upsellProductIds || []).length > 0
+    );
+    if (internalEnabled && hasAnyConfiguredProducts) {
       if (internalUseAI) {
-        // AI recommendations - use actual products for realism
+        // AI mode preview — show real store products (no sample/demo fallback)
         upsellProductsToShow = loadedShopifyProducts.slice(1, 4).map(p => p.id);
-        if (upsellProductsToShow.length === 0) upsellProductsToShow = ['sp-2', 'sp-6', 'sp-8'];
       } else if (manualUpsellRules?.length > 0) {
         // Manual Rules Evaluation (aligned with storefront)
         const cartProductIds = itemsToRender.map(item => String(item.productId || item.id).replace('gid://shopify/Product/', ''));
@@ -3917,7 +3945,7 @@ export default function CartDrawerAdmin() {
     }
 
     const currentEnabled = isEnabled(featureStates.upsellEnabled);
-    const currentUseAI = upsellConfig.useAI !== undefined ? upsellConfig.useAI : true;
+    const currentUseAI = upsellConfig.useAI !== undefined ? upsellConfig.useAI : false;
     const currentPos = upsellConfig.position || 'bottom';
     const currentDir = upsellConfig.direction || 'vertical';
     const currentLayout = upsellConfig.layout || 'carousel';
@@ -4770,12 +4798,16 @@ export default function CartDrawerAdmin() {
   // ==========================================
 
   const saveToastMarkup = showSaveToast ? (
-    <Toast content={saveToastMessage} onDismiss={() => setShowSaveToast(false)} />
+    <Toast
+      content={saveToastMessage}
+      tone={saveToastIsError ? 'critical' : undefined}
+      onDismiss={() => { setShowSaveToast(false); setSaveToastIsError(false); }}
+    />
   ) : null;
 
-  const contextualSaveBarMarkup = isUpsellDirty && selectedTab === 'upsell' ? (
+  const contextualSaveBarMarkup = isUpsellDirty ? (
     <ContextualSaveBar
-      message="Unsaved changes in Upsell flow"
+      message="Unsaved changes"
       saveAction={{
         label: 'Save',
         onAction: handleSaveUpsellRules,

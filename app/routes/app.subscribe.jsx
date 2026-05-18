@@ -69,7 +69,7 @@ export async function action({ request }) {
                 },
             },
         ],
-        returnUrl: "https://9a41-103-186-151-132.ngrok-free.app/app/billing",
+        returnUrl: "https://347b-2409-40f4-20a6-2332-817-347e-ccb9-7fac.ngrok-free.app/app/billing",
         trialDays: 14,
     };
 

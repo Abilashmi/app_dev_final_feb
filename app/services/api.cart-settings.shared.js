@@ -357,8 +357,8 @@ export const DEFAULT_UPSELL_CONFIG = {
         formatting: { bold: false, italic: false, underline: false },
     },
     rule1: {
-        enabled: true,
-        upsellProducts: ['sp-1', 'sp-2'],
+        enabled: false,
+        upsellProducts: [],
         upsellCollections: [],
     },
     rule2: {

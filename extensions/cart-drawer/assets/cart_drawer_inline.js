@@ -930,9 +930,30 @@
     }
   }
 
+  function ccCopyTextFallback(text) {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0;';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    } catch (e) {}
+  }
+
   function applyCoupon(code) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(code).catch(() => { });
+    if (!code) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(null, () => ccCopyTextFallback(code));
+      } else {
+        ccCopyTextFallback(code);
+      }
+    } catch (e) {
+      ccCopyTextFallback(code);
     }
     _lastCopiedCode = code;
     setTimeout(() => {
@@ -1221,7 +1242,11 @@
     let bottomUpsellHtml = '';
 
     // Prepare upsell html asynchronously before concatenating
-    if (upsell.enabled && (upsell.showOnEmptyCart || !isEmpty)) {
+    // Allow render if: AI mode is on OR at least one rule has explicitly configured products
+    const hasUpsellProductsConfigured = (upsell.manualRules || []).some(
+      rule => (rule.upsellProductIds || []).length > 0
+    );
+    if (upsell.enabled && (upsell.showOnEmptyCart || !isEmpty) && (upsell.useAI || hasUpsellProductsConfigured)) {
       if (upsell.position === 'top') {
         topUpsellHtml = await renderUpsellSectionAsync(cart, upsell);
       } else if (upsell.position === 'bottom') {
@@ -1425,10 +1450,12 @@
         // 1. Check if we have saved details from DB
         const saved = savedDetails.find((d) => d.id === id);
         if (saved) {
+          const resolvedCode = saved.code || saved.label || saved.description || '';
+          if (!resolvedCode) return null;
           const btn = saved.button || {};
           return {
             id,
-            code: saved.code || 'CODE',
+            code: resolvedCode,
             label: saved.label || saved.code || 'Coupon',
             description: saved.description || '',
             discountType: saved.discountType || 'percentage',
@@ -1605,18 +1632,14 @@
     let matchedUpsellDetails = [];
     let storeDetailsById = null;
 
+    // AI mode: always runs when useAI is true, uses full store catalog.
+    // Manual rules run only when AI is off OR AI returned no products.
     if (upsellConfig.useAI) {
-      const allDetails = (upsellConfig.manualRules || []).flatMap((r) => r.upsellProductDetails || []);
-      let candidateCatalog = allDetails
-        .filter((d) => d && d.id && d.title)
-        .map((d) => ({ id: ccExtractNumericId(d.id) || d.id, title: d.title }))
-        .filter((d) => d && ccExtractNumericId(d.id));
-      if (candidateCatalog.length === 0) {
-        const storeCatalog = await ccGetStoreCatalog();
-        if (storeCatalog && Array.isArray(storeCatalog.candidateCatalog)) {
-          candidateCatalog = storeCatalog.candidateCatalog;
-          storeDetailsById = storeCatalog.detailsById || null;
-        }
+      const storeCatalog = await ccGetStoreCatalog();
+      let candidateCatalog = [];
+      if (storeCatalog && Array.isArray(storeCatalog.candidateCatalog)) {
+        candidateCatalog = storeCatalog.candidateCatalog;
+        storeDetailsById = storeCatalog.detailsById || null;
       }
 
       const cartProducts = cart.items.map((i) => ({
@@ -1645,7 +1668,7 @@
         } else {
           try {
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 6000);
+            const timeout = setTimeout(() => controller.abort(), 10000);
 
             const aiRes = await originalFetch(AI_UPSELL_API, {
               method: 'POST',
@@ -1681,14 +1704,6 @@
 
         if (upsellProducts.length > 0) {
           upsellProducts.forEach((id) => {
-            if (allDetails.length > 0) {
-              const detail = allDetails.find(
-                (d) => String(d.id).includes(id) || String(d.variantId) == String(id)
-              );
-              if (detail) matchedUpsellDetails.push(detail);
-              return;
-            }
-
             const storeDetail = storeDetailsById ? storeDetailsById[String(id)] : null;
             if (storeDetail) matchedUpsellDetails.push(storeDetail);
           });
@@ -1696,11 +1711,36 @@
       }
     }
 
-    if (upsellProducts.length === 0 && upsellConfig.manualRules) {
+    // When AI is on but returned nothing, fall back to all configured manual-rule products
+    // (ignoring trigger conditions) so something always shows.
+    if (upsellProducts.length === 0 && upsellConfig.useAI && upsellConfig.manualRules) {
+      if (!storeDetailsById) {
+        const sc = await ccGetStoreCatalog();
+        if (sc && sc.detailsById) storeDetailsById = sc.detailsById;
+      }
+      for (const rule of upsellConfig.manualRules) {
+        if (rule.enabled === false) continue;
+        (rule.upsellProductIds || []).forEach((id, idx) => {
+          const pId = String(id).replace('gid://shopify/Product/', '');
+          if (!upsellProducts.includes(pId)) {
+            upsellProducts.push(pId);
+            if (rule.upsellProductDetails?.[idx]) matchedUpsellDetails.push(rule.upsellProductDetails[idx]);
+          }
+        });
+      }
+    }
+
+    if (upsellProducts.length === 0 && !upsellConfig.useAI && upsellConfig.manualRules) {
       for (const rule of upsellConfig.manualRules) {
         if (rule.enabled === false) continue;
         const triggerIds = (rule.triggerProductIds || []).map(id => String(id).replace('gid://shopify/Product/', ''));
-        if (rule.triggerType === 'all' || triggerIds.some(id => cartProductIds.includes(id)) || triggerIds.length === 0) {
+        // When specific trigger products are set, they MUST be in the cart.
+        // triggerType='all' only acts as a global rule when NO trigger products are configured.
+        const hasSpecificTriggers = triggerIds.length > 0;
+        const triggerMatches = hasSpecificTriggers
+          ? triggerIds.some(id => cartProductIds.includes(id))
+          : rule.triggerType === 'all';
+        if (triggerMatches) {
           (rule.upsellProductIds || []).forEach((id, idx) => {
             const pId = String(id).replace('gid://shopify/Product/', '');
             if (!upsellProducts.includes(pId)) {
@@ -1731,6 +1771,20 @@
         upsellProducts = upsellProducts.slice(0, parsedLimit);
       }
     }
+    if (upsellProducts.length === 0) return '';
+
+    // Pre-filter: remove products that can't be resolved from the store catalog
+    // and have no valid saved title — prevents rendering empty placeholder cards
+    upsellProducts = upsellProducts.filter((productId) => {
+      const resolvedFromStore = storeDetailsById && !!storeDetailsById[String(productId)];
+      if (resolvedFromStore) return true;
+      const detail = (matchedUpsellDetails || []).find(
+        (d) => String(d.id).replace('gid://shopify/Product/', '') === productId ||
+               String(d.id).includes(productId)
+      );
+      return detail && detail.title && detail.title.trim() !== '' && detail.title !== 'Product';
+    });
+
     if (upsellProducts.length === 0) return '';
 
     const dir = upsellConfig.direction || 'vertical';
@@ -1819,6 +1873,13 @@
       }
 
       detail = detail || {};
+
+      // Skip products that cannot be resolved from the current store catalog
+      // and have no valid saved title/price — prevents showing placeholder cards
+      const resolvedFromStore = storeDetailsById && !!storeDetailsById[String(productId)];
+      const hasSavedTitle = detail.title && detail.title.trim() !== '' && detail.title !== 'Product';
+      if (!resolvedFromStore && !hasSavedTitle) return;
+
       const title = detail.title || 'Product';
       const priceText = detail.price ? CURRENCY_SYMBOL + parseFloat(detail.price).toFixed(0) : '';
       const imageHtml =
