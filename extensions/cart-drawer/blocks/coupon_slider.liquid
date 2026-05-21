@@ -125,13 +125,13 @@ function buildCard(tpl,s,code,h,sub){
       +'box-shadow:0 2px 12px rgba(0,0,0,0.06);'
       +'display:flex;flex-direction:row;'
       +'justify-content:space-between;align-items:center;'
-      +'gap:12px;flex:0 1 320px;min-width:320px;box-sizing:border-box;';
+      +'gap:12px;flex:0 0 240px;min-width:240px;box-sizing:border-box;';
     card.innerHTML=
       '<div style="flex:1;min-width:0;">'
         +'<div style="font-weight:800;font-size:'+( fs+4 )+'px;color:'+tc+';word-wrap:break-word;line-height:1.2;">'+h+'</div>'
         +'<div style="font-size:'+( fs-1 )+'px;opacity:0.55;color:'+tc+';word-wrap:break-word;margin-top:2px;line-height:1.2;">'+sub+'</div>'
       +'</div>'
-      +'<button class="ps-btn" data-code="'+code+'" style="'
+      +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
         +'background:'+bc+';color:'+btc+';border:none;'
         +'padding:10px 24px;border-radius:'+br+'px;'
         +'font-size:13px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
@@ -147,22 +147,22 @@ function buildCard(tpl,s,code,h,sub){
       +'display:flex;flex-direction:row;'
       +'overflow:visible;'
       +'box-shadow:0 4px 20px rgba(0,0,0,0.08);'
-      +'flex:0 1 420px;min-width:420px;'
+      +'flex:0 0 260px;min-width:260px;'
       +'box-sizing:border-box;position:relative;align-items:center;';
     card.innerHTML=
       /* punch-out circles */
       '<div style="position:absolute;width:22px;height:22px;background:#f9fafb;border-radius:50%;left:-11px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
       +'<div style="position:absolute;width:22px;height:22px;background:#f9fafb;border-radius:50%;right:-11px;top:50%;transform:translateY(-50%);z-index:2;box-shadow:0 0 6px rgba(0,0,0,0.12);"></div>'
       /* left panel */
-      +'<div style="width:36%;min-height:160px;background:linear-gradient(180deg,'+ac+'30 0%,'+ac+'20 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px 14px;flex-shrink:0;border-right:2px dashed '+ac+'50;position:relative;border-top-left-radius:'+br+'px;border-bottom-left-radius:'+br+'px;">'
+      +'<div style="width:36%;min-height:110px;background:linear-gradient(180deg,'+ac+'30 0%,'+ac+'20 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px 8px;flex-shrink:0;border-right:2px dashed '+ac+'50;position:relative;border-top-left-radius:'+br+'px;border-bottom-left-radius:'+br+'px;">'
         +'<span style="font-size:9px;font-weight:700;opacity:0.75;text-transform:uppercase;letter-spacing:1.5px;color:'+ac+';margin-bottom:10px;display:block;white-space:nowrap;">Your Code</span>'
-        +'<span style="font-size:22px;font-weight:900;font-family:monospace;letter-spacing:2.5px;color:'+ac+';text-align:center;line-height:1.3;white-space:nowrap;overflow-wrap:break-word;word-wrap:break-word;">'+code+'</span>'
+        +'<span style="font-size:13px;font-weight:900;font-family:monospace;letter-spacing:1px;color:'+ac+';text-align:center;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;">'+code+'</span>'
       +'</div>'
       /* right panel */
       +'<div style="flex:1;padding:16px 20px;display:flex;flex-direction:column;justify-content:center;gap:6px;min-width:0;">'
         +'<div style="font-size:'+( fs+3 )+'px;font-weight:900;color:'+tc+';word-wrap:break-word;line-height:1.2;">'+h+'</div>'
         +'<div style="font-size:'+( fs-1 )+'px;opacity:0.6;color:'+tc+';word-wrap:break-word;line-height:1.3;margin-bottom:4px;">'+sub+'</div>'
-        +'<button class="ps-btn" data-code="'+code+'" style="'
+        +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
           +'background:'+bc+';color:'+btc+';border:none;'
           +'padding:9px 26px;border-radius:'+br+'px;'
           +'font-size:12px;font-weight:700;align-self:flex-start;cursor:pointer;white-space:nowrap;">'
@@ -180,7 +180,7 @@ function buildCard(tpl,s,code,h,sub){
       +'display:flex;flex-direction:column;'
       +'box-shadow:0 2px 12px rgba(0,0,0,0.06);'
       +'border:1px solid '+ac+'15;'
-      +'flex:0 1 300px;min-width:300px;box-sizing:border-box;';
+      +'flex:0 0 240px;min-width:240px;box-sizing:border-box;';
     card.innerHTML=
       /* top row: icon + text */
       '<div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;">'
@@ -193,7 +193,7 @@ function buildCard(tpl,s,code,h,sub){
       /* bottom row: code pill + Apply btn */
       +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
         +'<div style="padding:6px 14px;border-radius:6px;border:1.5px dashed '+ac+'55;color:'+ac+';font-size:12px;font-weight:700;font-family:monospace;letter-spacing:1.5px;flex:1;min-width:120px;text-align:center;word-wrap:break-word;">'+code+'</div>'
-        +'<button class="ps-btn" data-code="'+code+'" style="'
+        +'<button class="ps-btn" type="button" data-code="'+code+'" style="'
           +'background:'+bc+';color:'+btc+';border:none;'
           +'padding:8px 20px;border-radius:'+br+'px;'
           +'font-size:12px;font-weight:700;flex-shrink:0;cursor:pointer;white-space:nowrap;">'
@@ -319,16 +319,20 @@ function renderSlider(el,data,ctx){
     var btn=e.target.closest('.ps-btn');
     if(!btn)return;
     var c=btn.dataset.code,t=btn.innerText;
-    if(navigator.clipboard&&navigator.clipboard.writeText){
-      navigator.clipboard.writeText(c).then(function(){
-        btn.innerText='Copied to clipboard';setTimeout(function(){btn.innerText=t;},2000);
-      });
-    }else{
+    if(!c)return;
+    try{
       var ta=document.createElement('textarea');
-      ta.value=c;document.body.appendChild(ta);ta.select();
+      ta.value=c;
+      ta.style.cssText='position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;';
+      document.body.appendChild(ta);ta.focus();ta.setSelectionRange(0,ta.value.length);
       document.execCommand('copy');document.body.removeChild(ta);
-      btn.innerText='Copied!';setTimeout(function(){btn.innerText=t;},1500);
+    }catch(_e){}
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(c).catch(function(){});
     }
+    var prevBg=btn.style.background,prevCol=btn.style.color;
+    btn.innerText='Copied!';btn.style.background='#10b981';btn.style.color='#fff';
+    setTimeout(function(){btn.innerText=t;btn.style.background=prevBg;btn.style.color=prevCol;},2000);
   });
 }
 
@@ -385,6 +389,6 @@ customElements.define('ps-coupon-slider',class extends HTMLElement{
 @media(max-width:768px){
   .ps-coupon-wrapper{gap:12px}
   .ps-nav{width:32px;height:32px}
-  .ps-card{flex:0 0 85vw!important;min-width:0!important}
+  .ps-card{flex:0 0 220px!important;min-width:220px!important}
 }
 </style>

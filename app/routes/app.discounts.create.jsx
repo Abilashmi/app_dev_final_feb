@@ -1252,12 +1252,12 @@ export default function CreateDiscount() {
                                 <BlockStack gap="300">
                                     <Text variant="headingMd" as="h2">Summary</Text>
                                     {code && (
-                                        <Box padding="200" background="bg-surface-secondary" borderRadius="200">
-                                            <InlineStack align="center" gap="200">
-                                                <Icon source={DiscountIcon} tone="base" />
-                                                <Text variant="headingLg" as="p">{code}</Text>
-                                            </InlineStack>
-                                        </Box>
+                                        <div style={{ padding: "8px 12px", background: "var(--p-color-bg-surface-secondary)", borderRadius: "8px", display: "flex", flexDirection: "row", alignItems: "center", gap: "8px", width: "fit-content" }}>
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="currentColor" style={{ flexShrink: 0 }}>
+                                                <path fillRule="evenodd" d="M11.013 2.513a1.75 1.75 0 0 1 2.475 0l3.999 4a1.75 1.75 0 0 1 0 2.474l-5.47 5.47a3.25 3.25 0 0 1-2.298.952H5.25A1.75 1.75 0 0 1 3.5 13.66V9.68a3.25 3.25 0 0 1 .952-2.298l5.47-5.47h1.09ZM7.25 11a1.25 1.25 0 1 0 0-2.5 1.25 1.25 0 0 0 0 2.5Z" clipRule="evenodd" />
+                                            </svg>
+                                            <span style={{ fontSize: "20px", fontWeight: "700", lineHeight: "1" }}>{code}</span>
+                                        </div>
                                     )}
                                     <Divider />
                                     <List type="bullet">

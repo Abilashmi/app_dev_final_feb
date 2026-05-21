@@ -51,14 +51,8 @@ export async function loader() {
     const title = config.title || {};
 
     const activeOverrides = allTemplateOverrides[activeTemplate] || {};
-    const selectedTemplateCoupon = selectedActiveCoupons.map(id => {
-        const ov = activeOverrides[id] || {};
-        const item = { id };
-        if (ov.couponCode && !/^\d+$/.test(ov.couponCode)) item.code = ov.couponCode;
-        if (ov.headingText !== undefined) item.h = ov.headingText;
-        if (ov.subtextText !== undefined) item.s = ov.subtextText;
-        return item;
-    });
+    // Return plain GID strings — coupon_slider.js expects an array of ID strings
+    const selectedTemplateCoupon = selectedActiveCoupons;
 
     const data = {
         selectedTemplate: activeTemplate,

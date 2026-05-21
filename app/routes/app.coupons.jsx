@@ -304,7 +304,7 @@ export default function Coupons() {
                 <IndexTable.Cell>
                     <Text variant="bodyMd" fontWeight="bold">
                         {source === "App" ? (
-                            <Link to={`/app/createcoupon?id=${id.split('/').pop()}&action=edit`}>{title}</Link>
+                            <Link to={`/app/discounts/create?discountId=${id}`}>{title}</Link>
                         ) : (
                             title
                         )}
@@ -384,7 +384,7 @@ export default function Coupons() {
             title="Coupons"
             primaryAction={{
                 content: "Create Coupon",
-                onAction: () => navigate("/app/createcoupon"),
+                onAction: () => navigate("/app/discounts/create"),
                 icon: PlusIcon,
             }}
             fullWidth
@@ -447,7 +447,7 @@ export default function Coupons() {
                                 heading="Manage your coupons"
                                 action={{
                                     content: "Create Coupon",
-                                    onAction: () => navigate("/app/createcoupon"),
+                                    onAction: () => navigate("/app/discounts/create"),
                                 }}
                                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
                             >

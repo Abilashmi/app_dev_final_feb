@@ -872,33 +872,35 @@
         body: JSON.stringify({ items: [{ id: resolvedId, quantity: quantity || 1 }] }),
       });
       if (res.ok) {
-        // Double-render: first quick refresh, then a follow-up to catch
-        // any Shopify session lag in updating cart state
         setTimeout(() => renderDrawer(), 300);
         setTimeout(() => renderDrawer(), 800);
+        return true;
       } else {
         const errData = await res.json().catch(() => ({}));
         const msg = String(errData?.description || errData?.message || '').toLowerCase();
         const shouldResolve =
           res.status === 400 ||
           res.status === 404 ||
+          res.status === 422 ||
           msg.includes('not found') ||
           msg.includes('cannot find') ||
           msg.includes('no variant') ||
           rawId.includes('gid://shopify/Product/');
 
         if (shouldResolve) {
-          await resolveAndAddVariant(rawId, quantity);
+          return await resolveAndAddVariant(rawId, quantity);
         }
+        return false;
       }
     } catch (e) {
+      return false;
     }
   }
 
   async function resolveAndAddVariant(productId, quantity) {
     try {
       const normalizedProductId = ccExtractNumericId(productId) || String(productId || '').trim();
-      if (!normalizedProductId) return;
+      if (!normalizedProductId) return false;
       const res = await originalFetch('/products.json?limit=250');
       const data = await res.json();
       const product = (data.products || []).find((p) => String(p.id) === String(normalizedProductId));
@@ -912,11 +914,12 @@
         if (addRes.ok) {
           setTimeout(() => renderDrawer(), 300);
           setTimeout(() => renderDrawer(), 800);
+          return true;
         }
-        return;
+        return false;
       }
 
-      // Fallback: if the ID wasn't a product id, try it as a variant id.
+      // Fallback: try the ID directly as a variant id
       const addRes = await originalFetch('/cart/add.js', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -925,8 +928,11 @@
       if (addRes.ok) {
         setTimeout(() => renderDrawer(), 300);
         setTimeout(() => renderDrawer(), 800);
+        return true;
       }
+      return false;
     } catch (e) {
+      return false;
     }
   }
 
@@ -1891,6 +1897,7 @@
       const addToCartId = hasVariantId ? detail.variantId : productId;
       const safeAddToCartId = ccExtractNumericId(addToCartId) || addToCartId;
       const addIsProductId = hasVariantId ? 'false' : 'true';
+      const safeHandle = (detail.handle || '').replace(/[^a-z0-9-]/g, '');
 
       if (isGrid) {
         // GRID CARD: Always Square Design (Image on Top, Content Below)
@@ -1905,7 +1912,7 @@
                 line-height:1.2;width:100%;text-align:left;">${escapeHtml(title)}</p>
               <div style="display:flex;align-items:center;justify-content:flex-start;gap:8px;width:100%;margin-top:auto;">
                 <span style="font-size:12px;font-weight:800;color:#10b981;">${priceText}</span>
-                <button onclick="ccAddToCart('${safeAddToCartId}', true, ${addIsProductId})" class="cc-add-btn" style="padding:4px 10px;font-size:10px;">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
+                <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}" style="padding:4px 10px;font-size:10px;">${escapeHtml(upsellConfig.buttonText || 'Add')}</button>
               </div>
             </div>
           </div>
@@ -1924,7 +1931,7 @@
               <p class="cc-upsell-title cc-upsell-title--carousel" style="margin:0;font-size:14px;font-weight:600;color:#0f172a;line-height:1.4;width:100%;">${escapeHtml(title)}</p>
               <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:8px;">
                 <span style="font-size:15px;font-weight:800;color:#10b981;">${priceText}</span>
-                <button onclick="ccAddToCart('${safeAddToCartId}', true, ${addIsProductId})" class="cc-add-btn">${escapeHtml((upsellConfig.buttonText || 'ADD TO CART').toUpperCase())}</button>
+                <button type="button" class="cc-add-btn" data-cc-id="${safeAddToCartId}" data-cc-handle="${safeHandle}" data-cc-isproduct="${addIsProductId}">${escapeHtml((upsellConfig.buttonText || 'ADD TO CART').toUpperCase())}</button>
               </div>
             </div>
           </div>
@@ -1995,14 +2002,86 @@
     removeItem(key);
   };
 
-  window.ccAddToCart = function (id, isUpsell, isProductId) {
-    if (isUpsell) sendClickEvent('upsell_click');
-    if (isProductId) {
-      resolveAndAddVariant(id, 1);
-      return;
+  // Delegated click listener for upsell "Add to Cart" buttons
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('.cc-add-btn');
+    if (!btn) return;
+
+    var id = btn.getAttribute('data-cc-id') || '';
+    var handle = btn.getAttribute('data-cc-handle') || '';
+    var isProductId = btn.getAttribute('data-cc-isproduct') === 'true';
+    var origText = btn.textContent;
+    var origBg = btn.style.background;
+
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+
+    function onDone(success) {
+      if (success) {
+        btn.textContent = 'Added!';
+        btn.style.background = '#10b981';
+        setTimeout(function () {
+          btn.textContent = origText;
+          btn.style.background = origBg;
+          btn.disabled = false;
+        }, 1500);
+      } else {
+        btn.textContent = origText;
+        btn.style.background = origBg;
+        btn.disabled = false;
+      }
     }
-    addToCart(id, 1);
-  };
+
+    function addViaVariantId(variantId) {
+      var numId = Number(variantId);
+      console.log('[CartDrawer] add to cart — raw id:', variantId, '→ numId:', numId, '| isProductId:', isProductId, '| handle:', handle);
+      if (!numId || isNaN(numId)) {
+        console.error('[CartDrawer] invalid id, aborting');
+        onDone(false);
+        return;
+      }
+      fetch('/cart/add.js', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [{ id: numId, quantity: 1 }] }),
+      }).then(function (r) {
+        if (r.ok) {
+          setTimeout(function () { renderDrawer(); }, 300);
+          setTimeout(function () { renderDrawer(); }, 800);
+          onDone(true);
+        } else {
+          r.text().then(function (t) { console.error('[CartDrawer] 422 body:', t); });
+          onDone(false);
+        }
+      }).catch(function (err) {
+        console.error('[CartDrawer] fetch error:', err);
+        onDone(false);
+      });
+    }
+
+    // If data-cc-id is already a variant ID (not a product ID), use it directly —
+    // avoids fetching the wrong variant (e.g. variants[0] may be out of stock)
+    if (!isProductId && id) {
+      addViaVariantId(id);
+    } else if (handle) {
+      // Only look up the product when we have a product ID and a handle
+      fetch('/products/' + handle + '.js')
+        .then(function (r) {
+          if (!r.ok) throw new Error(r.status);
+          return r.json();
+        })
+        .then(function (p) {
+          var variants = p && p.variants;
+          // Find first available variant, fallback to first variant
+          var v = (variants || []).find(function (v) { return v.available; }) || (variants && variants[0]);
+          var varId = v && v.id;
+          if (varId) { addViaVariantId(varId); } else { onDone(false); }
+        })
+        .catch(function () { onDone(false); });
+    } else {
+      addViaVariantId(id);
+    }
+  });
 
   window.ccSendClickEvent = function (eventType) {
     sendClickEvent(eventType);

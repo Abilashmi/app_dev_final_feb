@@ -171,7 +171,8 @@
                 const finalStyle = { ...defaultStyle, ...override };
                 const heading = finalStyle.headingText || 'Special Offer';
                 const subtext = finalStyle.subtextText || '';
-                const code = couponId.split('/').pop();
+                // Use saved coupon code from override; fall back to numeric ID from GID
+                const code = (finalStyle.couponCode && String(finalStyle.couponCode).trim()) || couponId.split('/').pop();
                 let card = document.createElement('div');
 
                 if (template === 'template1') {
@@ -209,13 +210,39 @@
             });
 
             container.addEventListener('click', function (e) {
-                if (e.target.classList.contains('ps-btn')) {
-                    const code = e.target.dataset.code;
-                    navigator.clipboard.writeText(code);
-                    const originalText = e.target.innerText;
-                    e.target.innerText = 'Copied to clipboard';
-                    setTimeout(() => { e.target.innerText = originalText; }, 2000);
+                const btn = e.target.closest('.ps-btn');
+                if (!btn) return;
+                const code = btn.dataset.code;
+                if (!code) return;
+
+                // Step 1: Synchronous copy via textarea (must run inside click handler)
+                try {
+                    const ta = document.createElement('textarea');
+                    ta.value = code;
+                    ta.setAttribute('readonly', '');
+                    ta.style.cssText = 'position:fixed;top:0;left:0;width:2px;height:2px;opacity:0;';
+                    document.body.appendChild(ta);
+                    ta.focus();
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                } catch (err) {}
+
+                // Step 2: Also try modern async API (enhances support on newer browsers)
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(code).catch(() => {});
                 }
+
+                // Visual feedback
+                const originalText = btn.innerText;
+                btn.innerText = 'Copied!';
+                btn.style.background = '#10b981';
+                btn.style.color = '#fff';
+                setTimeout(() => {
+                    btn.innerText = originalText;
+                    btn.style.background = '';
+                    btn.style.color = '';
+                }, 2000);
             });
         }
     });
