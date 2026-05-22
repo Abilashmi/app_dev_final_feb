@@ -1,0 +1,40 @@
+{
+  "cartstoreviewer.myshopify.com": [
+    {
+      "shopDomain": "cartstoreviewer.myshopify.com",
+      "title": "test",
+      "code": "3FDV3O9W",
+      "type": "amount_off_products",
+      "valueType": "percentage",
+      "value": 50,
+      "startDate": "2026-05-20T18:30:00.000Z",
+      "endDate": null,
+      "selectionType": "all",
+      "selectedResources": [],
+      "minimumRequirementValue": "none",
+      "minimumPurchaseAmount": 0,
+      "minimumQuantity": 0,
+      "limitTotalUses": false,
+      "totalUsesLimit": 0,
+      "limitOnePerCustomer": false,
+      "combineProduct": false,
+      "combineOrder": false,
+      "combineShipping": false,
+      "oncePerOrder": false,
+      "countriesType": null,
+      "selectedCountries": [],
+      "bxgyBuysType": null,
+      "bxgyBuysResources": [],
+      "bxgyBuysQuantity": null,
+      "bxgyGetsType": null,
+      "bxgyGetsResources": [],
+      "bxgyGetsValueType": null,
+      "bxgyGetsValue": null,
+      "bxgyGetsQuantity": null,
+      "bxgyRepeatOncePerOrder": false,
+      "shopifyId": "gid://shopify/DiscountCodeNode/1165691715791",
+      "id": "sample_1779341929980",
+      "createdAt": "2026-05-21T05:38:49.980Z"
+    }
+  ]
+}

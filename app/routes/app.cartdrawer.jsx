@@ -266,6 +266,7 @@ function ProductPicker({
   maxSelect = null,
   showCount = true,
 }) {
+  const { symbol: currencySymbol } = useCurrency();
   const selectedProducts = selected
     .map((id) => products.find((p) => p.id === id))
     .filter((p) => p !== undefined);
@@ -562,6 +563,7 @@ const CouponPreview = ({ styleKey }) => {
 };
 
 function SelectedProductsDisplay({ productIds, label, products }) {
+  const { symbol: currencySymbol } = useCurrency();
   const selectedProducts = productIds
     .map((id) => products.find((p) => p.id === id))
     .filter((p) => p !== undefined);
