@@ -343,7 +343,7 @@ export async function loader({ request }) {
     // Fetch FBT config from internal API for the current shop
     let fbtConfig = null;
     try {
-        const fbtRes = await fetch(`${url.origin}/api/product-sample?shopdomain=${encodeURIComponent(shop)}`);
+        const fbtRes = await fetch(`${url.origin}/api/fbt-widget?shopdomain=${encodeURIComponent(shop)}`);
         const fbtData = await fbtRes.json();
         if (fbtData.success && fbtData.fbt) {
             fbtConfig = fbtData.fbt;
@@ -3088,7 +3088,7 @@ export default function ProductWidgetPage() {
                 aiSettings: data.aiSettings,
                 shop,
             },
-            { method: "POST", encType: "application/json", action: "/api/product-sample" }
+            { method: "POST", encType: "application/json", action: "/api/fbt-widget" }
         );
     };
 

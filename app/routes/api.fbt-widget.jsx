@@ -149,12 +149,46 @@ async function writeStoredData(data) {
 
 /* ---------------- LOADER ---------------- */
 
-export async function loader() {
-    const storedData = await readStoredData();
+export async function loader({ request }) {
+    const url = new URL(request.url);
+    const shopDomain = url.searchParams.get("shopdomain");
 
+    if (shopDomain) {
+        try {
+            const phpRes = await fetch(
+                `https://int.thecartninja.com/save_fbt_widget.php?shopdomain=${encodeURIComponent(shopDomain)}`,
+                { headers: { "ngrok-skip-browser-warning": "true" } }
+            );
+            if (phpRes.ok) {
+                const phpData = await phpRes.json();
+                if (phpData.status === "success" && phpData.data) {
+                    const row = phpData.data;
+                    const fbt = {
+                        activeTemplate: row.selectedTemp || "fbt1",
+                        mode: row.selectedMode || "manual",
+                        templates: {
+                            fbt1: (typeof row.temp1 === "object" && row.temp1) ? row.temp1 : DEFAULT_FBT_DATA.templates.fbt1,
+                            fbt2: (typeof row.temp2 === "object" && row.temp2) ? row.temp2 : DEFAULT_FBT_DATA.templates.fbt2,
+                            fbt3: (typeof row.temp3 === "object" && row.temp3) ? row.temp3 : DEFAULT_FBT_DATA.templates.fbt3,
+                        },
+                        manualRules: Array.isArray(row.condition) ? row.condition : [],
+                        aiSettings: {
+                            ...DEFAULT_AI_SETTINGS,
+                            aiProductCount: row.aiProductCount != null ? Number(row.aiProductCount) : DEFAULT_AI_SETTINGS.aiProductCount,
+                        },
+                    };
+                    return Response.json({ success: true, fbt });
+                }
+            }
+        } catch (e) {
+            console.error("[FBT loader] Failed to fetch shop data from PHP backend:", e);
+        }
+    }
+
+    // New install or no data found for this shop — return clean defaults
     return Response.json({
         success: true,
-        fbt: storedData.fbt || DEFAULT_FBT_DATA
+        fbt: { ...DEFAULT_FBT_DATA, manualRules: [] }
     });
 }
 
