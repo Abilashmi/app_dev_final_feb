@@ -1,4 +1,4 @@
-import { Outlet, useLoaderData, useRouteError, useNavigate } from "react-router";
+import { Outlet, useLoaderData, useRouteError, useNavigate, useLocation } from "react-router";
 import { useEffect } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider as ShopifyAppProvider } from "@shopify/shopify-app-react-router/react";
@@ -12,31 +12,36 @@ import { PlanProvider } from "../components/PlanContext";
 export const loader = async ({ request }) => {
     const { admin } = await authenticate.admin(request);
 
-    const subRes = await admin.graphql(`
+    const res = await admin.graphql(`
         query {
+            shop { plan { partnerDevelopment } }
             currentAppInstallation {
                 activeSubscriptions { id status }
             }
         }
     `);
-    const subData = await subRes.json();
-    const subs = subData.data?.currentAppInstallation?.activeSubscriptions || [];
-    const isPro = subs.some(s => s.status === "ACTIVE");
+    const data = await res.json();
+
+    // Dev stores (partner_test) get free access — required for Shopify review
+    const isDevStore = data.data?.shop?.plan?.partnerDevelopment === true;
+    const subs = data.data?.currentAppInstallation?.activeSubscriptions || [];
+    const isPro = isDevStore || subs.some(s => s.status === "ACTIVE");
 
     const currencySymbol = await getShopCurrencySymbol(admin);
     // eslint-disable-next-line no-undef
-    return { apiKey: process.env.SHOPIFY_API_KEY || "", currencySymbol, isPro };
+    return { apiKey: process.env.SHOPIFY_API_KEY || "", currencySymbol, isPro, isDevStore };
 };
 
 export default function App() {
-    const { apiKey, currencySymbol, isPro } = useLoaderData();
+    const { apiKey, currencySymbol, isPro, isDevStore } = useLoaderData();
     const navigate = useNavigate();
+    const location = useLocation();
 
     useEffect(() => {
-        if (!isPro) {
+        if (!isPro && location.pathname !== "/app/subscribe") {
             navigate("/app/subscribe");
         }
-    }, [isPro]);
+    }, [isPro, location.pathname]);
 
     return (
         <ShopifyAppProvider embedded apiKey={apiKey}>
@@ -44,11 +49,10 @@ export default function App() {
                 <CurrencyProvider symbol={currencySymbol}>
                     <PlanProvider isPro={isPro}>
                         <s-app-nav>
-                            {/* <s-link href="/app/setup">Setup Guide</s-link> */}
                             <s-link href="/app/discount">Create coupons</s-link>
                             <s-link href="/app/productwidget">Productwidget</s-link>
                             <s-link href="/app/cartdrawer">Cartdrawer Editor</s-link>
-                            {/* <s-link href="/app/subscribe">Upgrade to Pro</s-link> */}
+                            {isDevStore && <s-link href="/app/plan">Plan</s-link>}
                         </s-app-nav>
                         <Outlet context={{ currencySymbol }} />
                     </PlanProvider>

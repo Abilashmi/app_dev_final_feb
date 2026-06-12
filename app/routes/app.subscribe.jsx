@@ -16,19 +16,22 @@ export async function loader({ request }) {
     `);
     const data = await res.json();
     const subs = data.data?.currentAppInstallation?.activeSubscriptions || [];
-    // Already on Pro — go to billing dashboard
     if (subs.some(s => s.status === "ACTIVE")) {
-        throw redirect("/app/billing");
+        throw redirect("/app");
     }
     return {};
 }
 
 export async function action({ request }) {
-    const { admin } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
     const formData = await request.formData();
     const interval = formData.get("interval") === "ANNUAL" ? "ANNUAL" : "EVERY_30_DAYS";
     const price = interval === "ANNUAL" ? "290.00" : "29.00";
-    const appUrl = new URL(request.url).origin;
+    const shop = session.shop;
+    // eslint-disable-next-line no-undef
+    const apiKey = process.env.SHOPIFY_API_KEY;
+    // Return into the embedded app via Shopify admin — avoids OAuth loop on redirect back
+    const returnUrl = `https://${shop}/admin/apps/${apiKey}/app/billing`;
 
     const mutation = `
         mutation AppSubscriptionCreate(
@@ -70,7 +73,7 @@ export async function action({ request }) {
                 },
             },
         ],
-        returnUrl: `${appUrl}/app/billing`,
+        returnUrl,
         trialDays: 14,
     };
 

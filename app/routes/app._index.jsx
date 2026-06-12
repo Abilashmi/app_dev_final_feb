@@ -662,7 +662,7 @@ const endStr = formatLocalDate(end);
 
   return (
     <Page
-      title="Analytics Dashboard hi"
+      title="Analytics Dashboard"
       primaryAction={
         <Popover
           active={popoverActive}
