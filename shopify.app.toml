@@ -2,7 +2,7 @@
 
 client_id = "9f7189f9faf11f0771c1ef2f81c42b8d"
 name = "The Cart Ninja"
-application_url = "https://b719-2409-40f4-208e-58d6-c84c-678d-6379-20b5.ngrok-free.app"
+application_url = "https://cartdrawer.fly.dev"
 embedded = true
 
 [build]
@@ -38,13 +38,13 @@ scopes = "read_discounts,write_discounts,write_products"
 
 [auth]
 redirect_urls = [
-  "https://b719-2409-40f4-208e-58d6-c84c-678d-6379-20b5.ngrok-free.app/auth/callback",
-  "https://b719-2409-40f4-208e-58d6-c84c-678d-6379-20b5.ngrok-free.app/auth/shopify/callback",
-  "https://b719-2409-40f4-208e-58d6-c84c-678d-6379-20b5.ngrok-free.app/api/auth/callback"
+  "https://cartdrawer.fly.dev/auth/callback",
+  "https://cartdrawer.fly.dev/auth/shopify/callback",
+  "https://cartdrawer.fly.dev/api/auth/callback"
 ]
 
 [app_proxy]
-url = "https://cartdrawer.fly.dev"
+url = "https://int.thecartninja.com"
 prefix = "apps"
 subpath = "cart-app"
 
