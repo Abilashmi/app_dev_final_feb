@@ -6,6 +6,7 @@ import {
     Text,
     Button,
     Spinner,
+    Banner,
 } from "@shopify/polaris";
 
 function normalizeCurrentProduct(currentProduct) {
