@@ -177,17 +177,21 @@
 
         const highestTier = parsedTiers.length > 0 ? Math.max(...parsedTiers.map((t) => t.target)) : 0;
         const maxTarget = highestTier > 0 ? highestTier : parseFloat(data.maxTarget) || 1000;
+        const fgColor = data.barForegroundColor || data.fill_color || '#2563eb';
 
         return {
             enabled,
             mode,
             showOnEmpty: data.showOnEmpty !== false,
             barBackgroundColor: data.barBackgroundColor || '#e2e8f0',
-            barForegroundColor: data.barForegroundColor || data.fill_color || '#2563eb',
+            barForegroundColor: fgColor,
+            iconColor: data.iconColor || data.icon_color || fgColor,
+            iconCompletedColor: data.iconCompletedColor || data.icon_completed_color || '#10b981',
             borderRadius: data.borderRadius || 8,
             completionText: data.completionText || '🎉 All Rewards Unlocked!',
             maxTarget: maxTarget,
             tiers: parsedTiers,
+            autoRemoveReward: data.autoRemoveReward !== false,
         };
     }
 
@@ -673,6 +677,82 @@
         return svg;
     }
 
+    // Track reward products that have been auto-added to prevent duplicate additions
+    let _ccRewardProductKeys = [];
+
+    // Resolve a product ID to its default variant ID
+    async function ccResolveProductVariant(productId) {
+        productId = String(productId);
+        if (!productId) return null;
+        try {
+            const catalog = await ccGetStoreCatalog();
+            if (catalog?.detailsById?.[productId]?.variantId) {
+                return String(catalog.detailsById[productId].variantId);
+            }
+        } catch (e) {}
+        try {
+            const res = await originalFetch(`/products.json?ids=${productId}&limit=1`);
+            if (!res.ok) return null;
+            const data = await res.json();
+            const product = data?.products?.[0];
+            if (product?.id != null && String(product.id) === productId && product.variants?.[0]?.id) {
+                return String(product.variants[0].id);
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    async function manageRewardProducts(pInfo, cart) {
+        const completedTiers = pInfo.completed || [];
+        const currentCartVariantIds = new Set((cart.items || []).map(i => String(i.variant_id)));
+
+        // Resolve all product IDs from completed tiers to variant IDs
+        const completedVariantIds = new Set();
+        for (const tier of completedTiers) {
+            if (tier.rewardType === 'product' && tier.products && tier.products.length > 0) {
+                for (const productRef of tier.products) {
+                    const rawId = ccExtractNumericId(productRef) || String(productRef || '').trim();
+                    if (!rawId) continue;
+                    const variantId = await ccResolveProductVariant(rawId);
+                    if (variantId) completedVariantIds.add(variantId);
+                }
+            }
+        }
+
+        // Add reward products that aren't already in the cart
+        for (const variantId of completedVariantIds) {
+            if (!currentCartVariantIds.has(variantId) && !_ccRewardProductKeys.includes(variantId)) {
+                _ccRewardProductKeys.push(variantId);
+                try {
+                    await originalFetch('/cart/add.js', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ items: [{ id: variantId, quantity: 1 }] }),
+                    });
+                } catch (e) {}
+            }
+        }
+
+        // Auto-remove reward products if their tier is no longer completed
+        if (CONFIG.progress.autoRemoveReward) {
+            for (const cartItem of cart.items || []) {
+                const itemKey = cartItem.key;
+                const itemVariantId = String(cartItem.variant_id);
+                const wasAutoAdded = _ccRewardProductKeys.includes(itemVariantId);
+                if (wasAutoAdded && !completedVariantIds.has(itemVariantId)) {
+                    _ccRewardProductKeys = _ccRewardProductKeys.filter(k => k !== itemVariantId);
+                    try {
+                        await originalFetch('/cart/change.js', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: itemKey, quantity: 0 }),
+                        });
+                    } catch (e) {}
+                }
+            }
+        }
+    }
+
     /* =================== RENDER =================== */
 
     async function renderDrawer() {
@@ -707,6 +787,14 @@
         if (progress.enabled && (progress.showOnEmpty || !isEmpty)) {
             const pInfo = getProgressInfo(cartTotal, cartQty, progress);
             const fgColor = progress.barForegroundColor || '#2563eb';
+            const iconColor = progress.iconColor || fgColor;
+            const iconCompletedColor = progress.iconCompletedColor || '#10b981';
+
+            // Auto-manage reward products based on milestone completion
+            if (!isEmpty) {
+                await manageRewardProducts(pInfo, cart);
+            }
+
             drawerHtml += `<div style="padding:24px 16px;background:#fff;border-radius:16px;box-shadow:0 4px 20px -5px rgba(0,0,0,0.05);margin-bottom:20px;position:relative;border:1px solid #f1f5f9;">
         <div style="text-align:center;margin-bottom:28px;">`;
             if (pInfo.upcoming) {
@@ -721,7 +809,7 @@
             pInfo.tiers.forEach((ms, idx) => {
                 const isCompleted = pInfo.currentVal >= ms.target;
                 const percent = Math.min(97, Math.max(3, (ms.target / pInfo.maxTarget) * 100));
-                const iconFill = isCompleted ? '#fff' : fgColor;
+                const iconFill = isCompleted ? iconCompletedColor : iconColor;
                 const iconHtml = getMilestoneIconHtml(ms, iconFill);
                 const nodeSize = isCompleted ? 40 : 32;
                 drawerHtml += `<div style="position:absolute;left:${percent}%;top:50%;transform:translate(-50%,-50%);z-index:2;display:flex;flex-direction:column;align-items:center;">
@@ -879,10 +967,92 @@
         return html;
     }
 
+    /* =================== FALLBACK RECOMMENDATIONS =================== */
+
+    let _ccAllProductsCache = null;
+    let _ccAllProductsCacheTs = 0;
+    const CC_ALL_PRODUCTS_CACHE_TTL = 60000;
+
+    async function ccFetchAllProducts() {
+        const now = Date.now();
+        if (_ccAllProductsCache && now - _ccAllProductsCacheTs < CC_ALL_PRODUCTS_CACHE_TTL) {
+            return _ccAllProductsCache;
+        }
+        try {
+            const res = await originalFetch('/products.json?limit=250');
+            if (!res.ok) return [];
+            const data = await res.json();
+            const products = Array.isArray(data?.products) ? data.products : [];
+            _ccAllProductsCache = products;
+            _ccAllProductsCacheTs = now;
+            return products;
+        } catch (e) {
+            return [];
+        }
+    }
+
+    async function ccGetFallbackRecommendations(cart, count) {
+        const allProducts = await ccFetchAllProducts();
+        if (allProducts.length === 0) return [];
+
+        const cartProductIds = new Set((cart.items || []).map(i => String(i.product_id)));
+        const candidates = allProducts.filter(p => {
+            if (!p || cartProductIds.has(String(p.id))) return false;
+            const hasAvailable = (p.variants || []).some(v => v.available !== false);
+            return hasAvailable;
+        });
+
+        const cartAttrs = { types: new Set(), vendors: new Set(), tags: new Set() };
+        for (const item of cart.items || []) {
+            const cp = allProducts.find(p => String(p.id) === String(item.product_id));
+            if (!cp) continue;
+            if (cp.product_type) cartAttrs.types.add(cp.product_type.toLowerCase().trim());
+            if (cp.vendor) cartAttrs.vendors.add(cp.vendor.toLowerCase().trim());
+            if (cp.tags) {
+                (typeof cp.tags === 'string' ? cp.tags.split(',') : cp.tags).forEach(t => {
+                    const tag = String(t).toLowerCase().trim();
+                    if (tag) cartAttrs.tags.add(tag);
+                });
+            }
+        }
+
+        const scored = candidates.map(p => {
+            let score = 0;
+            const type = (p.product_type || '').toLowerCase().trim();
+            const vendor = (p.vendor || '').toLowerCase().trim();
+            const tags = typeof p.tags === 'string' ? p.tags.split(',').map(t => t.toLowerCase().trim()) : [];
+            if (type && cartAttrs.types.has(type)) score += 3;
+            if (vendor && cartAttrs.vendors.has(vendor)) score += 2;
+            tags.forEach(t => { if (cartAttrs.tags.has(t)) score += 1; });
+            return { id: String(p.id), score };
+        });
+
+        scored.sort((a, b) => b.score - a.score);
+        const related = scored.filter(s => s.score > 0).map(s => s.id);
+        const random = scored.filter(s => s.score === 0).map(s => s.id);
+
+        const shuffle = (arr) => {
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        };
+
+        let result = related.slice(0, count);
+        if (result.length < count) {
+            const remaining = shuffle(random).slice(0, count - result.length);
+            result = result.concat(remaining);
+        }
+
+        return shuffle(result);
+    }
+
     async function renderUpsellSectionAsync(cart, upsellConfig) {
         const cartProductIds = cart.items.map(item => String(item.product_id));
         let upsellProducts = [];
         let matchedUpsellDetails = [];
+        let storeDetailsById = null;
 
         if (upsellConfig.useAI) {
             const allDetails = (upsellConfig.manualRules || []).flatMap((r) => r.upsellProductDetails || []);
@@ -942,7 +1112,7 @@
                             }
                         }
                     } catch (e) {
-                        // Ignore and fall back to manual rules.
+                        console.warn('[CartDrawer] AI upsell failed, using fallback:', e.message || e);
                     }
                 }
 
@@ -978,6 +1148,28 @@
                 }
             }
         }
+
+        // Fallback: when AI and manual rules produce nothing, recommend related products
+        if (upsellProducts.length === 0 && cart.items.length > 0) {
+            const rawLimit = Number.parseInt(String(upsellConfig.limit || 3), 10);
+            const count = Number.isFinite(rawLimit) ? Math.max(1, rawLimit) : 3;
+            const fallbackIds = await ccGetFallbackRecommendations(cart, count);
+            if (fallbackIds.length > 0) {
+                upsellProducts = fallbackIds;
+                // Fetch store catalog to enrich fallback products with title/image/price
+                if (!storeDetailsById) {
+                    const sc = await ccGetStoreCatalog();
+                    if (sc?.detailsById) storeDetailsById = sc.detailsById;
+                }
+                if (storeDetailsById) {
+                    upsellProducts.forEach(id => {
+                        const d = storeDetailsById[String(id)];
+                        if (d) matchedUpsellDetails.push(d);
+                    });
+                }
+            }
+        }
+
         if (!upsellConfig.showIfInCart) upsellProducts = upsellProducts.filter(id => !cartProductIds.includes(String(id)));
         if (upsellConfig.limit) upsellProducts = upsellProducts.slice(0, upsellConfig.limit);
         if (upsellProducts.length === 0) return '';

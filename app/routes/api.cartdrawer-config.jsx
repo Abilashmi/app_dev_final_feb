@@ -38,6 +38,7 @@ const DEFAULT_SETTINGS = {
         barBackgroundColor: "#e2e8f0",
         barForegroundColor: "#2563eb",
         iconColor: "#2563eb",
+        iconCompletedColor: "#10b981",
         fill_gradient: "",
         borderRadius: 8,
         completionText: "🎉 You've unlocked free shipping!",
@@ -173,6 +174,7 @@ function transformFromDB(dbData) {
             enabled: progressEnabled,
             mode: progressData.mode || DEFAULT_SETTINGS.progressBar.mode,
             iconColor: progressData.iconColor || progressData.icon_color || progressData.barForegroundColor || DEFAULT_SETTINGS.progressBar.iconColor,
+            iconCompletedColor: progressData.iconCompletedColor || progressData.icon_completed_color || DEFAULT_SETTINGS.progressBar.iconCompletedColor,
             placement: progressData.placement || DEFAULT_SETTINGS.progressBar.placement,
             tiers: (progressData.tiers || DEFAULT_SETTINGS.progressBar.tiers).map(tier => ({
                 ...tier,

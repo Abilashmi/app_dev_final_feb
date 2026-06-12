@@ -702,6 +702,8 @@ export default function CartDrawerAdmin() {
     showOnEmpty: true,
     barBackgroundColor: '#E2E2E2',
     barForegroundColor: '#2563eb',
+    iconColor: '#2563eb',
+    iconCompletedColor: '#10b981',
     fill_gradient: '',
     borderRadius: 8,
     completionText: 'Free shipping unlocked!',
@@ -1760,6 +1762,7 @@ export default function CartDrawerAdmin() {
         track_color: progressBarSettings.barBackgroundColor,
         fill_color: progressBarSettings.barForegroundColor,
         icon_color: progressBarSettings.iconColor,
+        icon_completed_color: progressBarSettings.iconCompletedColor,
         mode: progressMode,
         enabled: isProgressOn, // Critical sync
       }),
@@ -2454,10 +2457,17 @@ export default function CartDrawerAdmin() {
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     <ColorPickerField
-                      label="Icon Color"
-                      value={progressBarSettings.iconColor}
+                      label="Icon Default Color"
+                      value={progressBarSettings.iconColor || '#2563eb'}
                       onChange={(value) => updateProgressBarSetting('iconColor', value)}
                     />
+                    <ColorPickerField
+                      label="Icon Completed Color"
+                      value={progressBarSettings.iconCompletedColor || '#10b981'}
+                      onChange={(value) => updateProgressBarSetting('iconCompletedColor', value)}
+                    />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                     <ColorPickerField
                       label="Message Color"
                       value={progressBarSettings.completionTextColor || '#10b981'}
@@ -2768,7 +2778,9 @@ export default function CartDrawerAdmin() {
                             >
                               <div style={{ flex: 1 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                                  <span style={{ fontSize: '16px' }}>{product.image}</span>
+                                  {product.image && (
+                                    <img src={product.image} alt={product.title} style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover' }} />
+                                  )}
                                   <Text variant="bodyMd" fontWeight="semibold">{product.title}</Text>
                                 </div>
                                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -2779,7 +2791,7 @@ export default function CartDrawerAdmin() {
                                     🎁 {activeTier.description} Reward
                                   </Badge>
                                   <Text as="span" variant="bodySm" tone="subdued">
-                                    {product.variants} variants
+                                    {product.variants?.length || 0} variants
                                   </Text>
                                 </div>
                               </div>
@@ -4288,7 +4300,7 @@ export default function CartDrawerAdmin() {
                               alignItems: 'center',
                               justifyContent: 'center',
                               fontSize: isCompleted || isNext ? '28px' : '22px',
-                              color: (progressBarSettings.barForegroundColor || '#2563eb'),
+                              color: isCompleted ? (progressBarSettings.iconCompletedColor || '#10b981') : (progressBarSettings.iconColor || progressBarSettings.barForegroundColor || '#2563eb'),
                               transition: 'all 0.3s ease',
                               animation: isNext ? 'pulse-ring 2s infinite' : 'none',
                               position: 'relative',

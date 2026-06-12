@@ -154,7 +154,7 @@
       if (!CONFIG) {
         CONFIG = {
           cartStatus: true,
-          progress: { enabled: false, tiers: [], mode: 'amount', showOnEmpty: false, maxTarget: 1000, barBackgroundColor: '#e2e8f0', barForegroundColor: '#2563eb', borderRadius: 8, completionText: '🎉 All Rewards Unlocked!' },
+          progress: { enabled: false, tiers: [], mode: 'amount', showOnEmpty: false, maxTarget: 1000, barBackgroundColor: '#e2e8f0', barForegroundColor: '#2563eb', iconColor: '#2563eb', iconCompletedColor: '#10b981', borderRadius: 8, completionText: '🎉 All Rewards Unlocked!' },
           coupon: { enabled: false, selectedActiveCoupons: [], style: 'style-2', position: 'top', layout: 'grid', alignment: 'horizontal', title: { text: 'Apply Coupon', fontSize: 14, textColor: '#1e293b', alignment: 'left' }, couponOverrides: {}, allCouponDetails: [] },
           upsell: { enabled: false, manualRules: [], direction: 'vertical', layout: 'carousel', position: 'bottom', showOnEmptyCart: false, showIfInCart: false, limit: 3, buttonText: 'Add to cart', upsellTitle: { text: 'Recommended for you', color: '#111827', bold: false, italic: false, underline: false }, activeTemplate: 'grid' },
         };
@@ -247,13 +247,16 @@
     const maxTarget = highestTier > 0 ? highestTier : parseFloat(data.maxTarget) || 1000;
 
 
+    const fgColor = data.barForegroundColor || data.fill_color || '#2563eb';
+
     return {
       enabled,
       mode,
       showOnEmpty: data.showOnEmpty !== false,
       barBackgroundColor: data.barBackgroundColor || '#e2e8f0',
-      barForegroundColor: data.barForegroundColor || data.fill_color || '#2563eb',
-      iconColor: data.iconColor || data.icon_color || data.barForegroundColor || data.fill_color || '#2563eb',
+      barForegroundColor: fgColor,
+      iconColor: data.iconColor || data.icon_color || fgColor,
+      iconCompletedColor: data.iconCompletedColor || data.icon_completed_color || '#10b981',
       borderRadius: data.borderRadius || 8,
       completionText: data.completionText || '🎉 All Rewards Unlocked!',
       completionTextColor: data.completionTextColor || '#10b981',
@@ -261,6 +264,7 @@
       maxTarget: maxTarget,
       tiers: parsedTiers,
       placement: data.placement || 'top',
+      autoRemoveReward: data.autoRemoveReward !== false,
     };
   }
 
@@ -1076,6 +1080,82 @@
     return svg;
   }
 
+  // Track reward products that have been auto-added to prevent duplicate additions
+  let _ccRewardProductKeys = [];
+
+  // Resolve a product ID to its default variant ID
+  async function ccResolveProductVariant(productId) {
+    productId = String(productId);
+    if (!productId) return null;
+    try {
+      const catalog = await ccGetStoreCatalog();
+      if (catalog?.detailsById?.[productId]?.variantId) {
+        return String(catalog.detailsById[productId].variantId);
+      }
+    } catch (e) {}
+    try {
+      const res = await originalFetch(`/products.json?ids=${productId}&limit=1`);
+      if (!res.ok) return null;
+      const data = await res.json();
+      const product = data?.products?.[0];
+      if (product?.id != null && String(product.id) === productId && product.variants?.[0]?.id) {
+        return String(product.variants[0].id);
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  async function manageRewardProducts(pInfo, cart) {
+    const completedTiers = pInfo.completed || [];
+    const currentCartVariantIds = new Set((cart.items || []).map(i => String(i.variant_id)));
+
+    // Resolve all product IDs from completed tiers to variant IDs
+    const completedVariantIds = new Set();
+    for (const tier of completedTiers) {
+      if (tier.rewardType === 'product' && tier.products && tier.products.length > 0) {
+        for (const productRef of tier.products) {
+          const rawId = ccExtractNumericId(productRef) || String(productRef || '').trim();
+          if (!rawId) continue;
+          const variantId = await ccResolveProductVariant(rawId);
+          if (variantId) completedVariantIds.add(variantId);
+        }
+      }
+    }
+
+    // Add reward products that aren't already in the cart
+    for (const variantId of completedVariantIds) {
+      if (!currentCartVariantIds.has(variantId) && !_ccRewardProductKeys.includes(variantId)) {
+        _ccRewardProductKeys.push(variantId);
+        try {
+          await originalFetch('/cart/add.js', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: [{ id: variantId, quantity: 1 }] }),
+          });
+        } catch (e) {}
+      }
+    }
+
+    // Auto-remove reward products if their tier is no longer completed
+    if (CONFIG.progress.autoRemoveReward) {
+      for (const cartItem of cart.items || []) {
+        const itemKey = cartItem.key;
+        const itemVariantId = String(cartItem.variant_id);
+        const wasAutoAdded = _ccRewardProductKeys.includes(itemVariantId);
+        if (wasAutoAdded && !completedVariantIds.has(itemVariantId)) {
+          _ccRewardProductKeys = _ccRewardProductKeys.filter(k => k !== itemVariantId);
+          try {
+            await originalFetch('/cart/change.js', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: itemKey, quantity: 0 }),
+            });
+          } catch (e) {}
+        }
+      }
+    }
+  }
+
   /* =================== RENDER =================== */
 
   async function renderDrawer() {
@@ -1133,6 +1213,11 @@
 
       const fgColor = progress.barForegroundColor || '#2563eb';
 
+      // Auto-manage reward products based on milestone completion
+      if (!isEmpty) {
+        await manageRewardProducts(pInfo, cart);
+      }
+
       let pbHtml = `<div style="padding:8px 16px;margin-bottom:0;position:relative;order:${progress.placement === 'top' ? -2 : 998};">`;
       // Header info
       pbHtml += `<div style="text-align:center;margin-bottom:12px;">`;
@@ -1172,12 +1257,14 @@
       });
 
       // 3. The milestone nodes
+      const iconColor = progress.iconColor || fgColor;
+      const iconCompletedColor = progress.iconCompletedColor || '#10b981';
       pInfo.tiers.forEach((ms, idx) => {
         const isCompleted = pInfo.currentVal >= ms.target;
         const prevTarget = idx > 0 ? pInfo.tiers[idx - 1].target : 0;
         const isNext = !isCompleted && pInfo.currentVal >= prevTarget;
         const percent = Math.min(97, Math.max(3, (ms.target / pInfo.maxTarget) * 100));
-        const iconFill = progress.iconColor || progress.icon_color || fgColor;
+        const iconFill = isCompleted ? iconCompletedColor : iconColor;
         const iconHtml = getMilestoneIconHtml(ms, iconFill);
         const nodeSize = isCompleted || isNext ? 40 : 32;
         const iconSize = isCompleted || isNext ? 20 : 16;
@@ -1192,7 +1279,7 @@
         // Description label below node
         const amountDisplay = pInfo.mode === 'amount' ? CURRENCY_SYMBOL + Math.round(ms.target) : ms.target + ' items';
 
-        pbHtml += `<div style="position:absolute;top:100%;margin-top:8px;width:120px;left:50%;transform:translateX(-50%);text-align:center;font-size:11px;line-height:1.2;pointer-events:none;z-index:10;display:flex;flex-direction:column;align-items:center;transition:all .3s ease;color:${isCompleted ? fgColor : '#64748b'};opacity:${isCompleted || isNext ? 1 : 0.7};word-wrap:break-word;">`;
+        pbHtml += `<div style="position:absolute;top:100%;margin-top:8px;width:120px;left:50%;transform:translateX(-50%);text-align:center;font-size:11px;line-height:1.2;pointer-events:none;z-index:10;display:flex;flex-direction:column;align-items:center;transition:all .3s ease;color:${isCompleted ? iconCompletedColor : '#64748b'};opacity:${isCompleted || isNext ? 1 : 0.7};word-wrap:break-word;">`;
 
         pbHtml += `<span style="font-weight:800;font-size:12px;margin-bottom:2px;">${amountDisplay}</span>`;
 
@@ -1248,11 +1335,9 @@
     let bottomUpsellHtml = '';
 
     // Prepare upsell html asynchronously before concatenating
-    // Allow render if: AI mode is on OR at least one rule has explicitly configured products
-    const hasUpsellProductsConfigured = (upsell.manualRules || []).some(
-      rule => (rule.upsellProductIds || []).length > 0
-    );
-    if (upsell.enabled && (upsell.showOnEmptyCart || !isEmpty) && (upsell.useAI || hasUpsellProductsConfigured)) {
+    // Allow render whenever enabled; renderUpsellSectionAsync handles
+    // AI, manual rules, and intelligent fallback internally.
+    if (upsell.enabled && (upsell.showOnEmptyCart || !isEmpty)) {
       if (upsell.position === 'top') {
         topUpsellHtml = await renderUpsellSectionAsync(cart, upsell);
       } else if (upsell.position === 'bottom') {
@@ -1630,6 +1715,97 @@
     return html;
   }
 
+  /* =================== FALLBACK RECOMMENDATIONS =================== */
+
+  // Fetch all products with full details for fallback recommendation scoring
+  let _ccAllProductsCache = null;
+  let _ccAllProductsCacheTs = 0;
+  const CC_ALL_PRODUCTS_CACHE_TTL = 60000;
+
+  async function ccFetchAllProducts() {
+    const now = Date.now();
+    if (_ccAllProductsCache && now - _ccAllProductsCacheTs < CC_ALL_PRODUCTS_CACHE_TTL) {
+      return _ccAllProductsCache;
+    }
+    try {
+      const res = await originalFetch('/products.json?limit=250');
+      if (!res.ok) return [];
+      const data = await res.json();
+      const products = Array.isArray(data?.products) ? data.products : [];
+      _ccAllProductsCache = products;
+      _ccAllProductsCacheTs = now;
+      return products;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Fallback: recommend products related to cart contents
+  async function ccGetFallbackRecommendations(cart, count) {
+    const allProducts = await ccFetchAllProducts();
+    if (allProducts.length === 0) return [];
+
+    const cartProductIds = new Set((cart.items || []).map(i => String(i.product_id)));
+
+    // Exclude cart products and products with no available variants
+    const candidates = allProducts.filter(p => {
+      if (!p || cartProductIds.has(String(p.id))) return false;
+      const hasAvailable = (p.variants || []).some(v => v.available !== false);
+      return hasAvailable;
+    });
+
+    // Build cart product attributes for relevance matching
+    const cartAttrs = { types: new Set(), vendors: new Set(), tags: new Set() };
+    for (const item of cart.items || []) {
+      const cp = allProducts.find(p => String(p.id) === String(item.product_id));
+      if (!cp) continue;
+      if (cp.product_type) cartAttrs.types.add(cp.product_type.toLowerCase().trim());
+      if (cp.vendor) cartAttrs.vendors.add(cp.vendor.toLowerCase().trim());
+      if (cp.tags) {
+        (typeof cp.tags === 'string' ? cp.tags.split(',') : cp.tags).forEach(t => {
+          const tag = String(t).toLowerCase().trim();
+          if (tag) cartAttrs.tags.add(tag);
+        });
+      }
+    }
+
+    // Score candidates by relevance
+    const scored = candidates.map(p => {
+      let score = 0;
+      const type = (p.product_type || '').toLowerCase().trim();
+      const vendor = (p.vendor || '').toLowerCase().trim();
+      const tags = typeof p.tags === 'string' ? p.tags.split(',').map(t => t.toLowerCase().trim()) : [];
+      if (type && cartAttrs.types.has(type)) score += 3;
+      if (vendor && cartAttrs.vendors.has(vendor)) score += 2;
+      tags.forEach(t => { if (cartAttrs.tags.has(t)) score += 1; });
+      return { id: String(p.id), score };
+    });
+
+    // Sort by score descending, then pick top candidates
+    scored.sort((a, b) => b.score - a.score);
+    const related = scored.filter(s => s.score > 0).map(s => s.id);
+    const random = scored.filter(s => s.score === 0).map(s => s.id);
+
+    // Fisher-Yates shuffle
+    const shuffle = (arr) => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    };
+
+    // Take related products first, fill with random
+    let result = related.slice(0, count);
+    if (result.length < count) {
+      const remaining = shuffle(random).slice(0, count - result.length);
+      result = result.concat(remaining);
+    }
+
+    // Randomize final order
+    return shuffle(result);
+  }
+
   /* =================== UPSELL SECTION RENDERER =================== */
 
   async function renderUpsellSectionAsync(cart, upsellConfig) {
@@ -1704,7 +1880,7 @@
               }
             }
           } catch (e) {
-            // Ignore and fall back to manual rules.
+            console.warn('[CartDrawer] AI upsell failed, using fallback:', e.message || e);
           }
         }
 
@@ -1754,6 +1930,20 @@
               if (rule.upsellProductDetails?.[idx]) matchedUpsellDetails.push(rule.upsellProductDetails[idx]);
             }
           });
+        }
+      }
+    }
+
+    // Fallback: when AI and manual rules produce nothing, recommend related products
+    if (upsellProducts.length === 0 && cart.items.length > 0) {
+      const rawLimit = Number.parseInt(String(upsellConfig.limit || 3), 10);
+      const count = Number.isFinite(rawLimit) ? Math.max(1, rawLimit) : 3;
+      const fallbackIds = await ccGetFallbackRecommendations(cart, count);
+      if (fallbackIds.length > 0) {
+        upsellProducts = fallbackIds;
+        if (!storeDetailsById) {
+          const sc = await ccGetStoreCatalog();
+          if (sc?.detailsById) storeDetailsById = sc.detailsById;
         }
       }
     }

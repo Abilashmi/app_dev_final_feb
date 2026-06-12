@@ -251,6 +251,18 @@ export default function ProgressBarEditor({
                     value={progressBarSettings.barForegroundColor || '#2563eb'}
                     onChange={(hex) => updateProgressBarSetting('barForegroundColor', hex)}
                   />
+                  <ColorPickerField
+                    label="Default Icon Color"
+                    value={progressBarSettings.iconColor || '#2563eb'}
+                    onChange={(hex) => updateProgressBarSetting('iconColor', hex)}
+                  />
+                </InlineStack>
+                <InlineStack gap="400">
+                  <ColorPickerField
+                    label="Completed Icon Color"
+                    value={progressBarSettings.iconCompletedColor || '#10b981'}
+                    onChange={(hex) => updateProgressBarSetting('iconCompletedColor', hex)}
+                  />
                   <div style={{ width: '150px' }}>
                     <TextField
                       label="Border Radius (px)"
