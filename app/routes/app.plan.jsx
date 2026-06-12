@@ -1,11 +1,16 @@
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { useLoaderData } from "react-router";
 import {
     Page, Layout, Card, BlockStack, InlineStack, Text, Badge, Box, Divider,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
+import { isDataRequest } from "../utils/auth.server";
 import { redirect } from "react-router";
 
+export const shouldRevalidate = () => false;
+
 export async function loader({ request }) {
+    if (isDataRequest(request)) return {};
     const { admin } = await authenticate.admin(request);
     const res = await admin.graphql(`
         query { shop { plan { partnerDevelopment } } }
@@ -110,3 +115,7 @@ export default function PlanPage() {
         </Page>
     );
 }
+
+import { useRouteError } from "react-router";
+export function ErrorBoundary() { return boundary.error(useRouteError()); }
+export const headers = (h) => boundary.headers(h);

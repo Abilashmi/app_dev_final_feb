@@ -1,3 +1,4 @@
+import { boundary } from "@shopify/shopify-app-react-router/server";
 /**
  * Product Widgets Configuration Page
  * Features: Coupons and Frequently Bought Together tabs with templates and color pickers
@@ -6,6 +7,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useLoaderData, useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { isDataRequest } from "../utils/auth.server";
 import {
     Page,
     Layout,
@@ -272,7 +274,10 @@ const FAKE_FBT_CONFIG = {
 
 // --- LOADER ---
 
+export const shouldRevalidate = () => false;
+
 export async function loader({ request }) {
+    if (isDataRequest(request)) return { products: [], shop: null };
     const { admin, session } = await authenticate.admin(request);
     const shop = session.shop;
 
@@ -3134,3 +3139,6 @@ export default function ProductWidgetPage() {
         </>
     );
 }
+import { useRouteError } from "react-router";
+export function ErrorBoundary() { return boundary.error(useRouteError()); }
+export const headers = (h) => boundary.headers(h);

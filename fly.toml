@@ -35,7 +35,7 @@ primary_region = "bom"
     interval = "10s"
     timeout = "5s"
     method = "GET"
-    path = "/"
+    path = "/auth/login"
 
 [[vm]]
   memory = "1gb"

@@ -1,3 +1,4 @@
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   Page,
   Card,
@@ -26,10 +27,17 @@ import {
 import { useLoaderData, useNavigate, useSubmit, useActionData, useNavigation } from "react-router";
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { authenticate } from "../shopify.server";
+import { isDataRequest } from "../utils/auth.server";
+import { loader as shopifyCouponsLoader } from "./api.shopify-coupons";
 import { useCurrency } from "../components/CurrencyContext";
 
+export const shouldRevalidate = () => false;
+
 /* ---------------- LOADER & ACTION ---------------- */
-export { loader } from "./api.shopify-coupons";
+export async function loader({ request }) {
+  if (isDataRequest(request)) return { coupons: [], success: true };
+  return shopifyCouponsLoader({ request });
+}
 
 export async function action({ request }) {
   const { admin } = await authenticate.admin(request);
@@ -638,3 +646,6 @@ export default function AppDiscounts() {
     </Frame>
   );
 }
+import { useRouteError } from "react-router";
+export function ErrorBoundary() { return boundary.error(useRouteError()); }
+export const headers = (h) => boundary.headers(h);

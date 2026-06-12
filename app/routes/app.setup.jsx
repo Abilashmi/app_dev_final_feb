@@ -1,11 +1,16 @@
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { Page, Layout, Card, BlockStack, InlineStack, Text, Button, Badge, Box, Divider, List } from "@shopify/polaris";
 import { useLoaderData } from "react-router";
 import { authenticate } from "../shopify.server";
+import { isDataRequest } from "../utils/auth.server";
+
+export const shouldRevalidate = () => false;
 
 // Your theme extension UUID — used for deep links into the theme editor
 const EXTENSION_UUID = "c57aa0a4-9f48-795d-3a28-d57b2bbe1419dcaa27cf";
 
 export const loader = async ({ request }) => {
+  if (isDataRequest(request)) return { shop: null };
   const { session } = await authenticate.admin(request);
   return { shop: session.shop };
 };
@@ -208,3 +213,7 @@ export default function SetupPage() {
     </Page>
   );
 }
+
+import { useRouteError } from "react-router";
+export function ErrorBoundary() { return boundary.error(useRouteError()); }
+export const headers = (h) => boundary.headers(h);

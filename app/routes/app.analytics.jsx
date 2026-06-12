@@ -1,6 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Outlet, useLoaderData, useRouteError, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { isDataRequest } from "../utils/auth.server";
+
+export const shouldRevalidate = () => false;
 import {
   Page,
   Layout,
@@ -85,6 +88,7 @@ function normalizeAnalyticsState(payload = {}) {
 }
 
 export const loader = async ({ request }) => {
+  if (isDataRequest(request)) return { shop: null, initialAnalytics: { ...DEFAULT_ANALYTICS }, initialAnalyticsError: false };
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 

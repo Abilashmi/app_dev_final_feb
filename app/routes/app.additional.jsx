@@ -35,3 +35,9 @@ export default function AdditionalPage() {
     </s-page>
   );
 }
+
+import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useRouteError } from "react-router";
+export const shouldRevalidate = () => false;
+export function ErrorBoundary() { return boundary.error(useRouteError()); }
+export const headers = (h) => boundary.headers(h);

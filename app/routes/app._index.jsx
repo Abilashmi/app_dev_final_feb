@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Outlet, useLoaderData, useRouteError, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+
+export const shouldRevalidate = () => false;
 import {
   Page,
   Layout,
@@ -42,6 +44,7 @@ import {
   Line
 } from 'recharts';
 import { authenticate } from "../shopify.server";
+import { isDataRequest } from "../utils/auth.server";
 import { useCurrency } from "../components/CurrencyContext";
 import { formatAmount, getLocaleForCurrency } from "../utils/currency.shared";
 
@@ -85,38 +88,27 @@ function normalizeAnalyticsState(payload = {}) {
 }
 
 export const loader = async ({ request }) => {
+  if (isDataRequest(request)) return { shop: null, initialAnalytics: { ...DEFAULT_ANALYTICS }, initialAnalyticsError: false };
   const { session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  // Fire-and-forget request to register/activate the shop in the remote DB
-  try {
-    fetch("https://int.thecartninja.com/install_shop.php", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ shop }),
-    }).catch(console.error);
-  } catch (error) {
-    console.error("Failed to call install_shop.php", error);
-  }
+  // Fire-and-forget — register shop in remote DB
+  fetch("https://int.thecartninja.com/install_shop.php", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ shop }),
+  }).catch(() => {});
 
   let initialAnalytics = { ...DEFAULT_ANALYTICS };
   let initialAnalyticsError = false;
 
   try {
-    const requestUrl = new URL(request.url);
-    // Fetch today's data instead of all-time data
     const today = new Date().toISOString().split('T')[0];
-    const apiUrl = `${requestUrl.origin}/api/analytics?shop=${encodeURIComponent(shop)}&startDate=${today}&endDate=${today}`;
-    const response = await fetch(apiUrl, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "ngrok-skip-browser-warning": "true",
-      },
-    });
-
+    const origin = new URL(request.url).origin;
+    const response = await fetch(
+      `${origin}/api/analytics?shop=${encodeURIComponent(shop)}&startDate=${today}&endDate=${today}`,
+      { headers: { Accept: "application/json" } }
+    );
     const payload = await response.json();
     if (response.ok && payload?.success) {
       initialAnalytics = normalizeAnalyticsState(payload.data);

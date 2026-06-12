@@ -1,25 +1,26 @@
-import { useLoaderData } from "react-router";
-import { Page, Layout, Card, BlockStack, Text, Badge, Banner, IndexTable, Box, InlineStack, Button } from "@shopify/polaris";
-import { CheckCircleIcon, ChartVerticalIcon } from "@shopify/polaris-icons";
+import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useLoaderData, useNavigate } from "react-router";
+import { useEffect } from "react";
+import {
+  Page, Layout, Card, BlockStack, Text, Badge, Box, InlineStack, Button, ProgressBar, Divider,
+} from "@shopify/polaris";
+import { CheckCircleIcon, ChartVerticalIcon, CreditCardIcon } from "@shopify/polaris-icons";
 import { Icon } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
-import { redirect } from "react-router";
+import { isDataRequest } from "../utils/auth.server";
+
+export const shouldRevalidate = () => false;
 
 export async function loader({ request }) {
+  if (isDataRequest(request)) return { subscription: null };
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
 
-  // Get active subscription from Shopify
   const subRes = await admin.graphql(`
     query {
       currentAppInstallation {
         activeSubscriptions {
-          id
-          name
-          status
-          trialDays
-          createdAt
-          currentPeriodEnd
+          id name status trialDays createdAt currentPeriodEnd
           lineItems {
             id
             plan {
@@ -45,10 +46,7 @@ export async function loader({ request }) {
   const subs = subData.data?.currentAppInstallation?.activeSubscriptions || [];
   const activeSub = subs.find(s => s.status === "ACTIVE" || s.status === "PENDING");
 
-  // No active subscription — redirect to subscribe
-  if (!activeSub) {
-    throw redirect("/app/subscribe");
-  }
+  if (!activeSub) return { subscription: null };
 
   const recurringLine = activeSub.lineItems?.find(
     li => li.plan.pricingDetails.__typename === "AppRecurringPricing"
@@ -79,6 +77,13 @@ export async function loader({ request }) {
 
 export default function BillingDashboard() {
   const { subscription } = useLoaderData();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!subscription) navigate("/app/subscribe");
+  }, [subscription]);
+
+  if (!subscription) return null;
 
   const usagePct = subscription.cappedAmount > 0
     ? Math.min((subscription.balanceUsed / subscription.cappedAmount) * 100, 100)
@@ -89,92 +94,150 @@ export default function BillingDashboard() {
     : "—";
 
   const isAnnual = subscription.interval === "ANNUAL";
+  const isActive = subscription.status === "ACTIVE";
 
   return (
-    <Page
-      title="Billing"
-      subtitle="Cart Ninja Pro subscription"
-    >
+    <Page title="Billing" subtitle="Cart Ninja Pro subscription">
       <Layout>
-        <Layout.Section>
-          {/* Plan Summary */}
-          <Card padding="600">
-            <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
-                <BlockStack gap="100">
-                  <Text variant="headingMd" fontWeight="bold">Cart Ninja Pro</Text>
-                  <Text variant="bodySm" tone="subdued">
-                    ${subscription.basePrice}/{isAnnual ? "year" : "month"} · renews {periodEnd}
-                  </Text>
-                </BlockStack>
-                <Badge tone={subscription.status === "ACTIVE" ? "success" : "attention"}>
-                  {subscription.status === "ACTIVE" ? "Active" : subscription.status}
-                </Badge>
-              </InlineStack>
+        {/* Left column */}
+        <Layout.Section variant="oneHalf">
+          <BlockStack gap="400">
 
-              <Box background="bg-surface-success-subdued" padding="300" borderRadius="150">
-                <InlineStack gap="200" blockAlign="center">
-                  <Icon source={CheckCircleIcon} tone="success" />
-                  <Text tone="success" variant="bodySm">
-                    All features unlocked · 50 orders/day included
-                  </Text>
+            {/* Plan card */}
+            <Card padding="600">
+              <BlockStack gap="500">
+                <InlineStack align="space-between" blockAlign="start">
+                  <BlockStack gap="100">
+                    <Text variant="headingMd" fontWeight="bold">Cart Ninja Pro</Text>
+                    <Text variant="bodySm" tone="subdued">
+                      ${subscription.basePrice}/{isAnnual ? "year" : "month"}
+                    </Text>
+                  </BlockStack>
+                  <Badge tone={isActive ? "success" : "attention"}>
+                    {isActive ? "Active" : subscription.status}
+                  </Badge>
                 </InlineStack>
-              </Box>
-            </BlockStack>
-          </Card>
+
+                <Divider />
+
+                <BlockStack gap="200">
+                  <InlineStack align="space-between">
+                    <Text variant="bodySm" tone="subdued">Renewal date</Text>
+                    <Text variant="bodySm" fontWeight="semibold">{periodEnd}</Text>
+                  </InlineStack>
+                  <InlineStack align="space-between">
+                    <Text variant="bodySm" tone="subdued">Billing cycle</Text>
+                    <Text variant="bodySm" fontWeight="semibold">{isAnnual ? "Annual" : "Monthly"}</Text>
+                  </InlineStack>
+                  <InlineStack align="space-between">
+                    <Text variant="bodySm" tone="subdued">Base price</Text>
+                    <Text variant="bodySm" fontWeight="semibold">${subscription.basePrice}/{isAnnual ? "yr" : "mo"}</Text>
+                  </InlineStack>
+                </BlockStack>
+
+                <Box background="bg-surface-success-subdued" padding="300" borderRadius="200">
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={CheckCircleIcon} tone="success" />
+                    <Text tone="success" variant="bodySm" fontWeight="semibold">
+                      All features unlocked · 50 orders/day included
+                    </Text>
+                  </InlineStack>
+                </Box>
+              </BlockStack>
+            </Card>
+
+            {/* Manage card */}
+            <Card padding="600">
+              <BlockStack gap="300">
+                <InlineStack gap="200" blockAlign="center">
+                  <Icon source={CreditCardIcon} />
+                  <Text variant="headingMd" fontWeight="bold">Manage Subscription</Text>
+                </InlineStack>
+                <Text tone="subdued" variant="bodySm">
+                  To cancel or change your plan, visit your Shopify admin billing settings.
+                </Text>
+                <Button url="https://admin.shopify.com/settings/billing" external variant="plain">
+                  Open Shopify Billing Settings
+                </Button>
+              </BlockStack>
+            </Card>
+
+          </BlockStack>
         </Layout.Section>
 
-        {/* Usage-based charges */}
-        <Layout.Section>
+        {/* Right column */}
+        <Layout.Section variant="oneHalf">
           <Card padding="600">
-            <BlockStack gap="400">
+            <BlockStack gap="500">
               <InlineStack gap="200" blockAlign="center">
                 <Icon source={ChartVerticalIcon} />
-                <Text variant="headingMd" fontWeight="bold">Usage Charges This Period</Text>
+                <Text variant="headingMd" fontWeight="bold">Usage This Period</Text>
               </InlineStack>
 
-              <BlockStack gap="200">
-                <InlineStack align="space-between">
-                  <Text variant="bodySm" tone="subdued">Used</Text>
-                  <Text variant="bodySm" fontWeight="semibold">
-                    ${subscription.balanceUsed.toFixed(2)} / ${subscription.cappedAmount.toFixed(2)} cap
+              <Divider />
+
+              {/* Usage stats */}
+              <BlockStack gap="300">
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text variant="bodySm" tone="subdued">Usage charges</Text>
+                  <Text variant="headingMd" fontWeight="bold">
+                    ${subscription.balanceUsed.toFixed(2)}
                   </Text>
                 </InlineStack>
-                <Box background="bg-surface-secondary" borderRadius="100" minHeight="8px">
-                  <Box
-                    background={usagePct > 80 ? "bg-fill-critical" : "bg-fill-success"}
-                    borderRadius="100"
-                    minHeight="8px"
-                    style={{ width: `${usagePct}%` }}
-                  />
-                </Box>
-                <Text variant="bodySm" tone="subdued">
-                  $0.10 per order above 50 orders/day. Charges are added to your monthly invoice automatically.
-                </Text>
+                <InlineStack align="space-between" blockAlign="center">
+                  <Text variant="bodySm" tone="subdued">Monthly cap</Text>
+                  <Text variant="bodySm" fontWeight="semibold">
+                    ${subscription.cappedAmount.toFixed(2)}
+                  </Text>
+                </InlineStack>
+              </BlockStack>
+
+              {/* Progress bar */}
+              <BlockStack gap="200">
+                <ProgressBar
+                  progress={usagePct}
+                  tone={usagePct > 80 ? "critical" : "success"}
+                  size="medium"
+                />
+                <InlineStack align="space-between">
+                  <Text variant="bodySm" tone="subdued">${subscription.balanceUsed.toFixed(2)} used</Text>
+                  <Text variant="bodySm" tone="subdued">${subscription.cappedAmount.toFixed(2)} cap</Text>
+                </InlineStack>
+              </BlockStack>
+
+              <Divider />
+
+              {/* How it works */}
+              <BlockStack gap="200">
+                <Text variant="headingSm" fontWeight="semibold">How usage billing works</Text>
+                <BlockStack gap="100">
+                  <InlineStack gap="150" blockAlign="start">
+                    <Text tone="subdued">·</Text>
+                    <Text variant="bodySm" tone="subdued">50 orders/day included in your plan</Text>
+                  </InlineStack>
+                  <InlineStack gap="150" blockAlign="start">
+                    <Text tone="subdued">·</Text>
+                    <Text variant="bodySm" tone="subdued">$0.10 per order above 50/day</Text>
+                  </InlineStack>
+                  <InlineStack gap="150" blockAlign="start">
+                    <Text tone="subdued">·</Text>
+                    <Text variant="bodySm" tone="subdued">Charges added to monthly invoice automatically</Text>
+                  </InlineStack>
+                  <InlineStack gap="150" blockAlign="start">
+                    <Text tone="subdued">·</Text>
+                    <Text variant="bodySm" tone="subdued">Capped at ${subscription.cappedAmount.toFixed(0)}/month max</Text>
+                  </InlineStack>
+                </BlockStack>
               </BlockStack>
             </BlockStack>
           </Card>
         </Layout.Section>
 
-        {/* Manage */}
-        <Layout.Section>
-          <Card padding="600">
-            <BlockStack gap="300">
-              <Text variant="headingMd" fontWeight="bold">Manage Subscription</Text>
-              <Text tone="subdued" variant="bodySm">
-                To cancel or change your plan, visit your Shopify admin billing settings.
-              </Text>
-              <Button
-                url="https://admin.shopify.com/settings/billing"
-                external
-                variant="plain"
-              >
-                Open Shopify Billing Settings
-              </Button>
-            </BlockStack>
-          </Card>
-        </Layout.Section>
       </Layout>
     </Page>
   );
 }
+
+import { useRouteError } from "react-router";
+export function ErrorBoundary() { return boundary.error(useRouteError()); }
+export const headers = (h) => boundary.headers(h);

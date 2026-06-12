@@ -1,3 +1,7 @@
+import { boundary } from "@shopify/shopify-app-react-router/server";
+
+export const shouldRevalidate = () => false;
+
 import {
     Page,
     Card,
@@ -41,6 +45,7 @@ import {
 import { useCallback, useState, useMemo, useEffect } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { authenticate } from "../shopify.server";
+import { isDataRequest } from "../utils/auth.server";
 import { getStoredCoupons } from "./api.create_coupon-sample";
 import { useCurrency } from "../components/CurrencyContext";
 
@@ -353,6 +358,7 @@ export const action = async ({ request }) => {
 /* ─────────────────────────────────────────────────────────── */
 
 export const loader = async ({ request }) => {
+    if (isDataRequest(request)) return { coupons: [] };
     const { session } = await authenticate.admin(request);
     const coupons = await getStoredCoupons(session.shop);
     return { coupons };
@@ -1286,3 +1292,6 @@ export default function CreateDiscount() {
         </Frame>
     );
 }
+import { useRouteError } from "react-router";
+export function ErrorBoundary() { return boundary.error(useRouteError()); }
+export const headers = (h) => boundary.headers(h);

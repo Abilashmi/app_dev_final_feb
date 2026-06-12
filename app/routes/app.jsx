@@ -9,6 +9,9 @@ import { getShopCurrencySymbol } from "../utils/currency.server";
 import { CurrencyProvider } from "../components/CurrencyContext";
 import { PlanProvider } from "../components/PlanContext";
 
+// Only run the layout loader on full page loads, not client-side navigations
+export const shouldRevalidate = () => false;
+
 export const loader = async ({ request }) => {
     const { admin } = await authenticate.admin(request);
 
@@ -25,7 +28,7 @@ export const loader = async ({ request }) => {
     // Dev stores (partner_test) get free access — required for Shopify review
     const isDevStore = data.data?.shop?.plan?.partnerDevelopment === true;
     const subs = data.data?.currentAppInstallation?.activeSubscriptions || [];
-    const isPro = isDevStore || subs.some(s => s.status === "ACTIVE");
+    const isPro = isDevStore || subs.some(s => s.status === "ACTIVE" || s.status === "PENDING");
 
     const currencySymbol = await getShopCurrencySymbol(admin);
     // eslint-disable-next-line no-undef
@@ -38,10 +41,10 @@ export default function App() {
     const location = useLocation();
 
     useEffect(() => {
-        if (!isPro && location.pathname !== "/app/subscribe") {
+        if (!isPro && !isDevStore && location.pathname !== "/app/subscribe") {
             navigate("/app/subscribe");
         }
-    }, [isPro, location.pathname]);
+    }, [isPro, isDevStore, location.pathname]);
 
     return (
         <ShopifyAppProvider embedded apiKey={apiKey}>
@@ -53,6 +56,7 @@ export default function App() {
                             <s-link href="/app/productwidget">Productwidget</s-link>
                             <s-link href="/app/cartdrawer">Cartdrawer Editor</s-link>
                             {isDevStore && <s-link href="/app/plan">Plan</s-link>}
+                            {!isDevStore && <s-link href="/app/billing">Billing</s-link>}
                         </s-app-nav>
                         <Outlet context={{ currencySymbol }} />
                     </PlanProvider>

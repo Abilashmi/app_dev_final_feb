@@ -1,3 +1,6 @@
+import { boundary } from "@shopify/shopify-app-react-router/server";
+
+export const shouldRevalidate = () => false;
 
 import {
     Page,
@@ -18,6 +21,7 @@ import {
 import { Link, useLoaderData, useNavigate, useSubmit } from "react-router";
 import { useState, useCallback, useMemo } from "react";
 import { authenticate } from "../shopify.server";
+import { isDataRequest } from "../utils/auth.server";
 import {
     DiscountIcon,
     PlusIcon,
@@ -66,6 +70,7 @@ export const action = async ({ request }) => {
 };
 
 export const loader = async ({ request }) => {
+    if (isDataRequest(request)) return { coupons: [] };
     const { admin } = await authenticate.admin(request);
 
     // Fetch discounts with necessary fields including metafields for source tracking
@@ -460,3 +465,7 @@ export default function Coupons() {
         </Page>
     );
 }
+
+import { useRouteError } from "react-router";
+export function ErrorBoundary() { return boundary.error(useRouteError()); }
+export const headers = (h) => boundary.headers(h);

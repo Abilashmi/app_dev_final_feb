@@ -1,11 +1,16 @@
-import { redirect, useActionData, useNavigation, useSubmit } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
+import { useActionData, useLoaderData, useNavigation, useSubmit, useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import {
     Page, Card, BlockStack, InlineStack, Text, Button, Box, Badge, Divider, Banner, ButtonGroup
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
+import { isDataRequest } from "../utils/auth.server";
+
+export const shouldRevalidate = () => false;
 
 export async function loader({ request }) {
+    if (isDataRequest(request)) return { isSubscribed: false };
     const { admin } = await authenticate.admin(request);
     const res = await admin.graphql(`
         query {
@@ -16,10 +21,7 @@ export async function loader({ request }) {
     `);
     const data = await res.json();
     const subs = data.data?.currentAppInstallation?.activeSubscriptions || [];
-    if (subs.some(s => s.status === "ACTIVE")) {
-        throw redirect("/app");
-    }
-    return {};
+    return { isSubscribed: subs.some(s => s.status === "ACTIVE") };
 }
 
 export async function action({ request }) {
@@ -106,13 +108,19 @@ const PRO_FEATURES = [
 ];
 
 export default function SubscribePage() {
+    const { isSubscribed } = useLoaderData();
     const actionData = useActionData();
     const navigation = useNavigation();
     const submit = useSubmit();
+    const navigate = useNavigate();
     const [interval, setInterval] = useState("EVERY_30_DAYS");
 
     const isAnnual = interval === "ANNUAL";
     const isSubmitting = navigation.state === "submitting";
+
+    useEffect(() => {
+        if (isSubscribed) navigate("/app/billing");
+    }, [isSubscribed]);
 
     useEffect(() => {
         if (actionData?.confirmationUrl) {
@@ -196,3 +204,7 @@ export default function SubscribePage() {
         </Page>
     );
 }
+
+import { useRouteError } from "react-router";
+export function ErrorBoundary() { return boundary.error(useRouteError()); }
+export const headers = (h) => boundary.headers(h);
