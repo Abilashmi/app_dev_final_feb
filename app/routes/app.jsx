@@ -1,4 +1,5 @@
-import { Outlet, useLoaderData, useRouteError } from "react-router";
+import { Outlet, useLoaderData, useRouteError, useNavigate } from "react-router";
+import { useEffect } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider as ShopifyAppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as PolarisAppProvider } from "@shopify/polaris";
@@ -29,6 +30,13 @@ export const loader = async ({ request }) => {
 
 export default function App() {
     const { apiKey, currencySymbol, isPro } = useLoaderData();
+    const navigate = useNavigate();
+
+    useEffect(() => {
+        if (!isPro) {
+            navigate("/app/subscribe");
+        }
+    }, [isPro]);
 
     return (
         <ShopifyAppProvider embedded apiKey={apiKey}>

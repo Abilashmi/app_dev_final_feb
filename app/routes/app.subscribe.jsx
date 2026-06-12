@@ -28,6 +28,7 @@ export async function action({ request }) {
     const formData = await request.formData();
     const interval = formData.get("interval") === "ANNUAL" ? "ANNUAL" : "EVERY_30_DAYS";
     const price = interval === "ANNUAL" ? "290.00" : "29.00";
+    const appUrl = new URL(request.url).origin;
 
     const mutation = `
         mutation AppSubscriptionCreate(
@@ -69,7 +70,7 @@ export async function action({ request }) {
                 },
             },
         ],
-        returnUrl: "https://c6c6-2409-40f4-208e-58d6-b4bc-8653-1ae-d600.ngrok-free.app/app/billing",
+        returnUrl: `${appUrl}/app/billing`,
         trialDays: 14,
     };
 

@@ -1,210 +1,176 @@
-import React, { useState, useEffect } from "react";
-import { Page, Layout, Card, BlockStack, Text, Button, ProgressBar, Badge, Banner, IndexTable, Box, Icon, InlineStack } from "@shopify/polaris";
-import { AlertCircleIcon, CreditCardIcon, CheckCircleIcon, ChartVerticalIcon } from "@shopify/polaris-icons";
+import { useLoaderData } from "react-router";
+import { Page, Layout, Card, BlockStack, Text, Badge, Banner, IndexTable, Box, InlineStack, Button } from "@shopify/polaris";
+import { CheckCircleIcon, ChartVerticalIcon } from "@shopify/polaris-icons";
+import { Icon } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
+import { redirect } from "react-router";
 
 export async function loader({ request }) {
-  const { session } = await authenticate.admin(request);
-  if (!session) return { redirect: "/auth" };
-  return { shop: session.shop };
+  const { admin, session } = await authenticate.admin(request);
+  const shop = session.shop;
+
+  // Get active subscription from Shopify
+  const subRes = await admin.graphql(`
+    query {
+      currentAppInstallation {
+        activeSubscriptions {
+          id
+          name
+          status
+          trialDays
+          createdAt
+          currentPeriodEnd
+          lineItems {
+            id
+            plan {
+              pricingDetails {
+                __typename
+                ... on AppRecurringPricing {
+                  price { amount currencyCode }
+                  interval
+                }
+                ... on AppUsagePricing {
+                  terms
+                  cappedAmount { amount currencyCode }
+                  balanceUsed { amount currencyCode }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `);
+  const subData = await subRes.json();
+  const subs = subData.data?.currentAppInstallation?.activeSubscriptions || [];
+  const activeSub = subs.find(s => s.status === "ACTIVE" || s.status === "PENDING");
+
+  // No active subscription — redirect to subscribe
+  if (!activeSub) {
+    throw redirect("/app/subscribe");
+  }
+
+  const recurringLine = activeSub.lineItems?.find(
+    li => li.plan.pricingDetails.__typename === "AppRecurringPricing"
+  );
+  const usageLine = activeSub.lineItems?.find(
+    li => li.plan.pricingDetails.__typename === "AppUsagePricing"
+  );
+
+  const balanceUsed = parseFloat(usageLine?.plan?.pricingDetails?.balanceUsed?.amount || 0);
+  const cappedAmount = parseFloat(usageLine?.plan?.pricingDetails?.cappedAmount?.amount || 500);
+  const basePrice = recurringLine?.plan?.pricingDetails?.price?.amount || "29.00";
+  const interval = recurringLine?.plan?.pricingDetails?.interval || "EVERY_30_DAYS";
+
+  return {
+    shop,
+    subscription: {
+      id: activeSub.id,
+      status: activeSub.status,
+      name: activeSub.name,
+      currentPeriodEnd: activeSub.currentPeriodEnd,
+      basePrice,
+      interval,
+      balanceUsed,
+      cappedAmount,
+    },
+  };
 }
 
 export default function BillingDashboard() {
-  const [today, setToday] = useState(null);
-  const [charges, setCharges] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [chargeLoading, setChargeLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const { subscription } = useLoaderData();
 
-  useEffect(() => {
-    setLoading(true);
-    fetch("/api/billing/get-usage")
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) {
-          setToday(d.data.today);
-        } else {
-          setError(d.error || "Failed to load usage data");
-        }
-      })
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
+  const usagePct = subscription.cappedAmount > 0
+    ? Math.min((subscription.balanceUsed / subscription.cappedAmount) * 100, 100)
+    : 0;
 
-  useEffect(() => {
-    fetch("/api/billing/charges")
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) {
-          setCharges(d.data.history || []);
-        }
-      })
-      .catch(e => console.error("Failed to load charges:", e));
-  }, []);
+  const periodEnd = subscription.currentPeriodEnd
+    ? new Date(subscription.currentPeriodEnd).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+    : "—";
 
-  const handleCreateCharge = async () => {
-    setChargeLoading(true);
-    try {
-      const r = await fetch("/api/billing/trigger-charge", { method: "POST" });
-      const d = await r.json();
-      if (d.success) {
-        setError(null);
-        // Refresh data
-        setTimeout(() => location.reload(), 1500);
-      } else {
-        setError(d.error || "Failed to create charge");
-      }
-    } catch (e) {
-      setError(e.message);
-    }
-    setChargeLoading(false);
-  };
-
-  if (loading) {
-    return (
-      <Page title="Billing Dashboard">
-        <Card padding="600">
-          <Text>Loading billing data...</Text>
-        </Card>
-      </Page>
-    );
-  }
-
-  if (!today) {
-    return (
-      <Page title="Billing Dashboard">
-        <Card padding="600">
-          <Banner tone="critical">No usage data available</Banner>
-        </Card>
-      </Page>
-    );
-  }
-
-  const freeOrders = today.free_orders || 50;
-  const totalOrders = today.total_orders || 0;
-  const overageOrders = today.overage_orders || 0;
-  const pendingCharge = today.pending_charge || 0;
-  const percentUsed = totalOrders > 0 ? (totalOrders / freeOrders) * 100 : 0;
-  const hasOverage = overageOrders > 0;
+  const isAnnual = subscription.interval === "ANNUAL";
 
   return (
-    <Page title="Billing Dashboard">
+    <Page
+      title="Billing"
+      subtitle="Cart Ninja Pro subscription"
+    >
       <Layout>
         <Layout.Section>
-          {error && <Banner tone="critical">{error}</Banner>}
-
-          {/* Today's Usage Card */}
+          {/* Plan Summary */}
           <Card padding="600">
-            <BlockStack gap="500">
+            <BlockStack gap="400">
               <InlineStack align="space-between" blockAlign="center">
-                <Text variant="headingMd" fontWeight="bold">Today's Usage</Text>
-                <Badge tone="info">{new Date().toLocaleDateString()}</Badge>
+                <BlockStack gap="100">
+                  <Text variant="headingMd" fontWeight="bold">Cart Ninja Pro</Text>
+                  <Text variant="bodySm" tone="subdued">
+                    ${subscription.basePrice}/{isAnnual ? "year" : "month"} · renews {periodEnd}
+                  </Text>
+                </BlockStack>
+                <Badge tone={subscription.status === "ACTIVE" ? "success" : "attention"}>
+                  {subscription.status === "ACTIVE" ? "Active" : subscription.status}
+                </Badge>
               </InlineStack>
 
-              {/* Progress Bar */}
-              <BlockStack gap="200">
-                <InlineStack align="space-between" blockAlign="center">
-                  <Text variant="bodySm" tone="subdued">Orders: {totalOrders} / {freeOrders} (free)</Text>
-                  <Text variant="bodySm" tone="subdued">{percentUsed.toFixed(1)}%</Text>
+              <Box background="bg-surface-success-subdued" padding="300" borderRadius="150">
+                <InlineStack gap="200" blockAlign="center">
+                  <Icon source={CheckCircleIcon} tone="success" />
+                  <Text tone="success" variant="bodySm">
+                    All features unlocked · 50 orders/day included
+                  </Text>
                 </InlineStack>
-                <ProgressBar
-                  progress={Math.min(percentUsed / 100, 1)}
-                  tone={hasOverage ? "critical" : "success"}
-                  size="large"
-                />
-              </BlockStack>
-
-              {/* Overage Alert */}
-              {hasOverage && (
-                <Box padding="400" background="bg-surface-critical-subdued" borderRadius="200">
-                  <BlockStack gap="300">
-                    <InlineStack gap="200" blockAlign="start">
-                      <Icon source={AlertCircleIcon} tone="critical" />
-                      <BlockStack gap="100">
-                        <Text fontWeight="bold">Overage Charges</Text>
-                        <Text>{overageOrders} orders above limit × $0.10/order = <Text fontWeight="bold">${pendingCharge.toFixed(2)}</Text></Text>
-                      </BlockStack>
-                    </InlineStack>
-                    <Button
-                      onClick={handleCreateCharge}
-                      loading={chargeLoading}
-                      tone="critical"
-                      variant="primary"
-                      fullWidth
-                    >
-                      Record Usage Charge
-                    </Button>
-                  </BlockStack>
-                </Box>
-              )}
-
-              {!hasOverage && (
-                <Box padding="300" background="bg-surface-success-subdued" borderRadius="200">
-                  <InlineStack gap="200" blockAlign="center">
-                    <Icon source={CheckCircleIcon} tone="success" />
-                    <Text tone="success">All orders within free limit</Text>
-                  </InlineStack>
-                </Box>
-              )}
+              </Box>
             </BlockStack>
           </Card>
         </Layout.Section>
 
-        {/* Billing History */}
+        {/* Usage-based charges */}
         <Layout.Section>
           <Card padding="600">
             <BlockStack gap="400">
               <InlineStack gap="200" blockAlign="center">
                 <Icon source={ChartVerticalIcon} />
-                <Text variant="headingMd" fontWeight="bold">Billing History</Text>
+                <Text variant="headingMd" fontWeight="bold">Usage Charges This Period</Text>
               </InlineStack>
 
-              {charges.length === 0 ? (
-                <Box paddingBlockStart="400">
-                  <Text tone="subdued">No charges yet</Text>
+              <BlockStack gap="200">
+                <InlineStack align="space-between">
+                  <Text variant="bodySm" tone="subdued">Used</Text>
+                  <Text variant="bodySm" fontWeight="semibold">
+                    ${subscription.balanceUsed.toFixed(2)} / ${subscription.cappedAmount.toFixed(2)} cap
+                  </Text>
+                </InlineStack>
+                <Box background="bg-surface-secondary" borderRadius="100" minHeight="8px">
+                  <Box
+                    background={usagePct > 80 ? "bg-fill-critical" : "bg-fill-success"}
+                    borderRadius="100"
+                    minHeight="8px"
+                    style={{ width: `${usagePct}%` }}
+                  />
                 </Box>
-              ) : (
-                <IndexTable
-                  resourceName={{ singular: "charge", plural: "charges" }}
-                  itemCount={charges.length}
-                  selectable={false}
-                  headings={[
-                    { title: "Date" },
-                    { title: "Orders" },
-                    { title: "Amount" },
-                    { title: "Status" }
-                  ]}
-                >
-                  {charges.map((charge, idx) => (
-                    <IndexTable.Row key={idx} position={idx} id={charge.id?.toString()}>
-                      <IndexTable.Cell>{charge.date}</IndexTable.Cell>
-                      <IndexTable.Cell>{charge.overage_orders}</IndexTable.Cell>
-                      <IndexTable.Cell>${parseFloat(charge.charge_amount).toFixed(2)}</IndexTable.Cell>
-                      <IndexTable.Cell>
-                        <Badge
-                          tone={
-                            charge.status === "charged" ? "success" :
-                            charge.status === "failed" ? "critical" :
-                            "attention"
-                          }
-                        >
-                          {charge.status}
-                        </Badge>
-                      </IndexTable.Cell>
-                    </IndexTable.Row>
-                  ))}
-                </IndexTable>
-              )}
+                <Text variant="bodySm" tone="subdued">
+                  $0.10 per order above 50 orders/day. Charges are added to your monthly invoice automatically.
+                </Text>
+              </BlockStack>
             </BlockStack>
           </Card>
         </Layout.Section>
 
-        {/* Pricing Info */}
+        {/* Manage */}
         <Layout.Section>
           <Card padding="600">
             <BlockStack gap="300">
-              <Text variant="headingMd" fontWeight="bold">Usage-Based Billing</Text>
-              <Text tone="subdued">Your plan includes 50 completed orders per day. Each additional order is charged at $0.10. Usage charges are recorded automatically and added to your next monthly invoice — no separate approval needed.</Text>
+              <Text variant="headingMd" fontWeight="bold">Manage Subscription</Text>
+              <Text tone="subdued" variant="bodySm">
+                To cancel or change your plan, visit your Shopify admin billing settings.
+              </Text>
+              <Button
+                url="https://admin.shopify.com/settings/billing"
+                external
+                variant="plain"
+              >
+                Open Shopify Billing Settings
+              </Button>
             </BlockStack>
           </Card>
         </Layout.Section>
